@@ -1,126 +1,164 @@
+import * as THREE from 'three';
+
 export class Minimap {
     constructor(canvasElement, player, entities, worldSize) {
+        if (!canvasElement || !player || !entities || !worldSize) {
+            throw new Error("Minimap requires canvas, player, entities array, and worldSize.");
+        }
         this.canvas = canvasElement;
         this.ctx = this.canvas.getContext('2d');
         this.player = player;
-        this.entities = entities; // Array of all entities (NPCs, Animals)
-        this.worldSize = worldSize; // The total size of the game world (e.g., 1000)
+        this.entities = entities; // Reference to the main entities array
+        this.worldSize = worldSize;
 
         this.mapSize = this.canvas.width; // Assumes square canvas
         this.mapScale = this.mapSize / this.worldSize;
+        this.halfMapSize = this.mapSize / 2;
+        this.halfWorldSize = this.worldSize / 2;
 
         // Colors
-        this.bgColor = 'rgba(100, 100, 100, 0.5)';
+        this.bgColor = 'rgba(100, 100, 100, 0.6)'; // Slightly more opaque
         this.playerColor = 'yellow';
         this.npcColor = 'cyan';
-        this.animalColor = 'lime'; // Friendly animal color
-        this.hostileColor = 'red'; // Hostile animal color
-        this.dotSize = 3; // Size of dots on map
+        this.friendlyAnimalColor = 'lime';
+        this.neutralAnimalColor = 'white'; // e.g., Rabbit
+        this.hostileAnimalColor = 'red';
+        this.questNpcColor = '#FFD700'; // Gold color for quest NPCs
+
+        this.dotSize = 3; // Base size of dots on map
+        this.playerDotSize = 4;
+
+        // Pre-calculate for performance
+        this.playerTriangleSize = this.playerDotSize * 1.5;
+        this.playerTriangleBase = this.playerTriangleSize / 2;
+
+        // Reusable vectors
+        this._entityPos = new THREE.Vector3();
+        this._playerPos = new THREE.Vector3();
     }
 
     update() {
-        if (!this.ctx || !this.player) return;
+        if (!this.ctx || !this.player || this.player.isDead) {
+            // Clear canvas even if player is dead or missing
+            if (this.ctx) {
+                 this.ctx.fillStyle = this.bgColor;
+                 this.ctx.fillRect(0, 0, this.mapSize, this.mapSize);
+            }
+            return;
+        }
 
-        // Clear canvas
+        // Get player's current position and rotation
+        this.player.mesh.getWorldPosition(this._playerPos);
+        const playerRotationY = this.player.mesh.rotation.y; // Rotation around Y axis
+
+        // Calculate player's position on the map coordinate system (0 to mapSize)
+        const playerMapX = this.worldToMapX(this._playerPos.x);
+        const playerMapY = this.worldToMapZ(this._playerPos.z); // Use Z for map Y
+
+        // --- Clear and Prepare Canvas ---
         this.ctx.fillStyle = this.bgColor;
         this.ctx.fillRect(0, 0, this.mapSize, this.mapSize);
 
-        // Calculate center of map based on player position
-        const playerMapX = this.worldToMap(this.player.mesh.position.x);
-        const playerMapY = this.worldToMap(this.player.mesh.position.z); // Use Z for map Y
+        // --- Set up transformation matrix for centered & rotated map ---
+        this.ctx.save();
+        // 1. Translate origin to center of canvas
+        this.ctx.translate(this.halfMapSize, this.halfMapSize);
+        // 2. Rotate opposite to player's rotation
+        this.ctx.rotate(-playerRotationY);
+        // 3. Translate so player's map position is at the origin (before rotation)
+        // This effectively makes the player's world position the center of the map view
+        this.ctx.translate(-playerMapX, -playerMapY);
+
 
         // --- Draw Entities ---
+        // Iterate through the entities array (which should be kept up-to-date by Game.js)
         this.entities.forEach(entity => {
-             if (!entity || entity === this.player || !entity.mesh || entity.isDead) return; // Skip self, dead or invalid entities
+             // Skip self, dead, invalid entities, or entities without a mesh
+             if (!entity || entity === this.player || entity.isDead || !entity.mesh || !entity.mesh.parent) return;
 
-            const entityMapX = this.worldToMap(entity.mesh.position.x);
-            const entityMapY = this.worldToMap(entity.mesh.position.z);
+             entity.mesh.getWorldPosition(this._entityPos);
+             const entityMapX = this.worldToMapX(this._entityPos.x);
+             const entityMapY = this.worldToMapZ(this._entityPos.z);
 
-            let color = this.animalColor; // Default
+             let color = this.neutralAnimalColor; // Default
              let size = this.dotSize;
+             let draw = true;
 
-            if (entity.userData.isNPC) {
+             // Determine color and size based on entity type and state
+             if (entity.userData.isNPC) {
                 color = this.npcColor;
-                 size = this.dotSize + 1; // NPCs slightly larger
-            } else if (entity.userData.isAnimal) {
-                // Check animal type for color
-                if (entity.type === 'Wolf' && entity.state === 'attacking') {
-                    color = this.hostileColor;
-                } else if (entity.type === 'Wolf') {
-                     color = '#FFA500'; // Orange for non-aggro wolf
-                } else if (entity.type === 'Deer') {
-                    color = this.animalColor;
-                } else {
-                    color = 'white'; // Other animals (rabbits?)
-                }
-            } else {
-                 return; // Don't draw unknown entity types
-            }
+                // Check if NPC has an active/available quest (requires questLog access or flag)
+                // Example check (requires QuestLog reference or flag on NPC):
+                 if (entity.assignedQuestId && entity.questLog?.getQuestStatus(entity.assignedQuestId) === 'available') {
+                     color = this.questNpcColor; // Highlight available quests
+                 }
+                 else if (entity.assignedQuestId && entity.questLog?.getQuestStatus(entity.assignedQuestId) === 'active' && entity.questLog?.checkQuestCompletion(entity.assignedQuestId, entity.inventory)) {
+                     color = this.questNpcColor; // Highlight ready-to-complete quests
+                 }
 
-             // Draw dot for the entity
-             this.drawDot(entityMapX, entityMapY, color, size);
+                size = this.dotSize + 1; // NPCs slightly larger
+             } else if (entity.userData.isAnimal) {
+                // Check animal type and hostility state for color
+                if (entity.userData.isHostile) { // Check simple flag set by animal AI
+                    color = this.hostileAnimalColor;
+                } else if (entity.type === 'Deer') {
+                    color = this.friendlyAnimalColor;
+                } else if (entity.type === 'Rabbit') {
+                     color = this.neutralAnimalColor;
+                     size = this.dotSize - 1; // Rabbits smaller
+                } // Add other animal types here
+             } else {
+                 draw = false; // Don't draw unknown entity types
+             }
+
+             // Draw dot for the entity if valid
+             if (draw) {
+                this.drawDot(entityMapX, entityMapY, color, size);
+             }
         });
 
+        // --- Restore canvas state before drawing player ---
+        // All entities were drawn relative to the player's centered and rotated view
+        this.ctx.restore();
 
         // --- Draw Player ---
-        // Player is always in the center of the minimap
-        const centerX = this.mapSize / 2;
-        const centerY = this.mapSize / 2;
-
-         // Draw player dot (or triangle indicating direction)
-         // this.drawDot(centerX, centerY, this.playerColor, this.dotSize + 1);
-
-         // Draw player triangle
-         this.drawPlayerTriangle(centerX, centerY, this.player.mesh.rotation.y, this.playerColor, this.dotSize * 1.5);
-
-
-         // Optional: Rotate the *entire map* around the player instead of player being centered
-         // This requires drawing everything relative to the player center and applying a rotation transform
-         // ctx.save();
-         // ctx.translate(centerX, centerY);
-         // ctx.rotate(-this.player.mesh.rotation.y); // Rotate opposite to player rotation
-         // ctx.translate(-centerX, -centerY);
-         // ... draw all entities relative to playerMapX/Y offsets ...
-         // ... draw player marker fixed at center, pointing up ...
-         // ctx.restore();
+        // Player is always in the center of the canvas, pointing upwards due to rotation logic
+        this.drawPlayerTriangle(this.halfMapSize, this.halfMapSize, this.playerColor, this.playerTriangleSize);
     }
 
-    // Helper to convert world coords (X, Z) to map coords (X, Y)
-    worldToMap(worldCoord) {
-         // Centered coordinate system conversion
-         // World ranges from -worldSize/2 to +worldSize/2
-         // Map ranges from 0 to mapSize
-         return (worldCoord + this.worldSize / 2) * this.mapScale;
+    // Helper to convert world X to map X
+    worldToMapX(worldX) {
+         return (worldX + this.halfWorldSize) * this.mapScale;
+    }
+    // Helper to convert world Z to map Y
+    worldToMapZ(worldZ) {
+         // Z+ in world might be Map Y- or Y+, depending on desired orientation.
+         // Assuming World Z+ corresponds to Map Y+ (North up)
+         return (worldZ + this.halfWorldSize) * this.mapScale;
+         // If World Z+ should be Map Y- (North down):
+         // return this.mapSize - ((worldZ + this.halfWorldSize) * this.mapScale);
     }
 
-    drawDot(x, y, color, size) {
-        // Adjust position based on player offset for centered map
-        const playerMapX = this.worldToMap(this.player.mesh.position.x);
-        const playerMapY = this.worldToMap(this.player.mesh.position.z);
-        const drawX = x - playerMapX + this.mapSize / 2;
-        const drawY = y - playerMapY + this.mapSize / 2;
-
-        // Only draw if dot is within map bounds
-        if (drawX >= 0 && drawX <= this.mapSize && drawY >= 0 && drawY <= this.mapSize) {
-            this.ctx.fillStyle = color;
-            this.ctx.beginPath();
-            this.ctx.arc(drawX, drawY, size, 0, Math.PI * 2);
-            this.ctx.fill();
-        }
+    // Draws a dot at the specified map coordinates (already transformed)
+    drawDot(mapX, mapY, color, size) {
+        // No clipping check needed here as canvas transform handles it
+        this.ctx.fillStyle = color;
+        this.ctx.beginPath();
+        // Use rect for slightly better performance than arc?
+        // this.ctx.fillRect(mapX - size/2, mapY - size/2, size, size);
+        this.ctx.arc(mapX, mapY, size, 0, Math.PI * 2);
+        this.ctx.fill();
     }
 
-     drawPlayerTriangle(x, y, angle, color, size) {
-         this.ctx.save();
-         this.ctx.translate(x, y);
-         this.ctx.rotate(angle); // Rotate based on player's Y rotation
+     // Draws player triangle at the center of the canvas, always pointing "up" (forward)
+     drawPlayerTriangle(centerX, centerY, color, size) {
          this.ctx.fillStyle = color;
          this.ctx.beginPath();
-         // Draw triangle pointing "up" in local coords (which is forward after rotation)
-         this.ctx.moveTo(0, -size);       // Top point
-         this.ctx.lineTo(-size / 2, size / 2); // Bottom left
-         this.ctx.lineTo(size / 2, size / 2);  // Bottom right
+         // Draw triangle pointing "up"
+         this.ctx.moveTo(centerX, centerY - size * 0.6);       // Top point
+         this.ctx.lineTo(centerX - size / 2, centerY + size * 0.4); // Bottom left
+         this.ctx.lineTo(centerX + size / 2, centerY + size * 0.4);  // Bottom right
          this.ctx.closePath();
          this.ctx.fill();
-         this.ctx.restore();
      }
 }

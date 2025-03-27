@@ -1,9 +1,12 @@
-body {
+html, body {
     margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
     overflow: hidden; /* Prevent scrollbars */
-    background-color: #87CEEB; /* Pale blue sky */
-    font-family: 'Arial', sans-serif;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Cleaner font */
     color: #333;
+    background-color: #87CEEB; /* Pale blue sky (fallback) */
 }
 
 #game-container {
@@ -18,190 +21,314 @@ canvas {
     display: block; /* Remove extra space below canvas */
 }
 
+/* Hide UI when pointer locked, show otherwise */
+body:has(#game-container:focus-within) #ui-container {
+    /* Uncomment to hide UI during gameplay, but might hide necessary info */
+    /* opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease-in-out; */
+}
+body #ui-container {
+     opacity: 1;
+     pointer-events: all; /* Allow interaction with UI */
+     transition: opacity 0.3s ease-in-out;
+}
+
+
+/* --- UI Container --- */
+#ui-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Allow clicks through to canvas by default */
+    z-index: 10;
+}
+
+/* Allow pointer events on specific UI elements */
+#hud, #minimap-container, .ui-panel {
+    pointer-events: auto;
+}
+
+/* --- HUD --- */
 #hud {
     position: absolute;
-    top: 10px;
-    left: 10px;
-    z-index: 10;
+    top: 15px;
+    left: 15px;
     color: white;
-    text-shadow: 1px 1px 2px black;
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
+    user-select: none; /* Prevent text selection */
 }
 
 .stat-bars {
     display: flex;
     flex-direction: column;
+    gap: 6px; /* Spacing between bars */
 }
 
 .bar-container {
-    margin-bottom: 5px;
-    background-color: rgba(50, 50, 50, 0.7);
-    border-radius: 4px;
-    padding: 2px;
-    width: 150px;
+    background-color: rgba(30, 30, 30, 0.7);
+    border-radius: 5px;
+    padding: 3px;
+    width: 160px; /* Slightly wider */
     position: relative; /* For label positioning */
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
 }
 
 .bar {
-    height: 15px;
+    height: 16px;
     border-radius: 3px;
-    transition: width 0.2s ease-out;
+    transition: width 0.2s ease-out, background-color 0.3s ease;
+    box-shadow: inset 0 -1px 1px rgba(255,255,255,0.2);
 }
 
-#health-bar {
-    background-color: #4CAF50; /* Green */
+#health-bar { background-color: #4CAF50; /* Green */ }
+#stamina-bar { background-color: #FF69B4; /* Pink */ }
+
+/* Style for exhausted stamina bar */
+#stamina-bar.exhausted {
+    background-color: #777;
+    animation: pulse-grey 1.5s infinite ease-in-out;
+}
+@keyframes pulse-grey {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; }
+    100% { opacity: 0.7; }
 }
 
-#stamina-bar {
-    background-color: #FF69B4; /* Pink */
-}
 
 .bar-label {
     position: absolute;
-    top: 0;
-    left: 5px;
-    font-size: 10px;
-    line-height: 15px; /* Match bar height */
+    top: 1px; /* Adjust vertical alignment */
+    left: 6px;
+    font-size: 11px;
+    font-weight: bold;
+    line-height: 18px; /* Match bar height + padding */
     color: white;
-    text-shadow: 1px 1px 1px black;
-    pointer-events: none; /* Allow clicks through label */
+    text-shadow: 1px 1px 2px black;
+    pointer-events: none;
 }
 
-
 #interaction-prompt {
-    position: fixed;
+    position: absolute; /* Position relative to #ui-container */
     bottom: 20%;
     left: 50%;
     transform: translateX(-50%);
-    background-color: rgba(0, 0, 0, 0.6);
+    background-color: rgba(0, 0, 0, 0.7);
     color: white;
-    padding: 8px 15px;
-    border-radius: 5px;
-    font-size: 14px;
-    z-index: 10;
-    display: none; /* Hidden by default */
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-size: 15px;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+    /* display: none; Should be controlled by JS */
 }
 
+/* --- Minimap --- */
 #minimap-container {
     position: absolute;
-    top: 10px;
-    right: 10px;
-    border: 2px solid rgba(50, 50, 50, 0.7);
-    background-color: rgba(100, 100, 100, 0.5);
-    z-index: 10;
+    top: 15px;
+    right: 15px;
+    border: 2px solid rgba(50, 50, 50, 0.8);
+    border-radius: 4px; /* Slightly rounded corners */
+    background-color: rgba(100, 100, 100, 0.6);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
 }
 
 #minimap-canvas {
     display: block;
+    border-radius: 2px; /* Match container rounding */
 }
 
-#inventory-display, #journal-display {
+/* --- Panels (Inventory & Journal) --- */
+.ui-panel {
     position: absolute;
-    bottom: 10px; /* Changed from top to bottom for inventory */
+    background-color: rgba(235, 235, 235, 0.95); /* More opaque */
+    border: 1px solid #aaa;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    z-index: 20; /* Ensure panels are above HUD/Minimap */
+}
+
+#inventory-display {
+    /* Centered at bottom */
+    bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
-    width: 80%;
-    max-width: 600px;
-    background-color: rgba(240, 240, 240, 0.9);
-    border: 2px solid #ccc;
-    border-radius: 8px;
-    padding: 15px;
-    z-index: 20;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    width: 85%;
+    max-width: 700px;
+    max-height: 60vh; /* Limit height */
+    display: flex; /* Use flexbox for layout */
+    flex-direction: column;
 }
+
 #journal-display {
-     top: 50%; /* Center journal vertically */
+     /* Centered vertically and horizontally */
+     top: 50%;
+     left: 50%;
      transform: translate(-50%, -50%);
-     bottom: auto; /* Override bottom positioning */
-     max-height: 70vh;
-     overflow-y: auto;
+     width: 80%;
+     max-width: 650px;
+     max-height: 75vh; /* Allow more height */
+     display: flex; /* Use flexbox */
+     flex-direction: column;
 }
 
 
-#inventory-display h2, #journal-display h2 {
+.ui-panel h2 {
     margin-top: 0;
     text-align: center;
-    color: #555;
+    color: #444;
     border-bottom: 1px solid #ccc;
-    padding-bottom: 10px;
-    margin-bottom: 15px;
+    padding-bottom: 12px;
+    margin-bottom: 18px;
+    font-size: 1.3em;
+    user-select: none;
 }
 
+/* Inventory Slots */
 #inventory-slots {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(65px, 1fr)); /* Slightly larger slots */
+    gap: 12px;
+    overflow-y: auto; /* Allow scrolling if needed */
+    padding: 5px; /* Padding around grid */
+    flex-grow: 1; /* Allow grid to fill space */
 }
 
 .inventory-slot {
-    width: 60px;
-    height: 60px;
-    background-color: rgba(200, 200, 200, 0.8);
-    border: 1px solid #aaa;
-    border-radius: 4px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    font-size: 10px;
+    width: 65px;
+    height: 65px;
+    background-color: rgba(200, 200, 200, 0.9);
+    border: 1px solid #999;
+    border-radius: 5px;
     position: relative;
     cursor: pointer;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+    overflow: hidden; /* Hide potential overflow */
+    display: flex; /* Center icon */
+    justify-content: center;
+    align-items: center;
 }
 .inventory-slot:hover {
-    background-color: rgba(180, 180, 180, 0.9);
+    background-color: rgba(180, 180, 180, 1);
+    transform: scale(1.05); /* Slight zoom on hover */
+    border-color: #666;
 }
 
 .item-icon {
-    width: 32px;
-    height: 32px;
-    background-color: #bbb; /* Placeholder */
-    margin-bottom: 2px;
+    width: 40px; /* Larger icon */
+    height: 40px;
+    background-color: transparent; /* Use background image/color */
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    /* Placeholder visual */
+    border-radius: 3px;
+    box-shadow: inset 0 0 2px rgba(0,0,0,0.2);
+    visibility: hidden; /* Hide by default, shown when item exists */
 }
-.item-icon.wood { background-color: #8B4513; } /* Brown */
+.item-icon.wood { background-color: #8B4513; } /* Saddle Brown */
 .item-icon.stone { background-color: #808080; } /* Gray */
 .item-icon.herb { background-color: #90EE90; } /* Light Green */
-.item-icon.feather { background-color: #FFFFFF; } /* White */
-.item-icon.potion { background-color: #FF0000; } /* Red */
+.item-icon.feather { background-color: #FFFFFF; border: 1px solid #eee; } /* White */
+.item-icon.health_potion { background-color: #FF4500; } /* OrangeRed */
 .item-icon.gold { background-color: #FFD700; } /* Gold */
-.item-icon.bow { background-color: #A0522D; } /* Sienna */
+.item-icon.hunter_s_bow { background-color: #A0522D; /* Sienna */ width: 50px; height: 15px; } /* Specific shape */
+/* Add more item icons here */
 
 
 .item-count {
     position: absolute;
-    bottom: 2px;
-    right: 4px;
-    font-size: 12px;
+    bottom: 3px;
+    right: 5px;
+    font-size: 13px;
     font-weight: bold;
-    color: #333;
-    text-shadow: 1px 1px 1px white;
+    color: #f0f0f0; /* Light text */
+    text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.9);
+    background-color: rgba(0, 0, 0, 0.2); /* Slight background for readability */
+    padding: 0 3px;
+    border-radius: 2px;
 }
 
-#journal-entries ul {
+/* Journal Entries */
+.journal-section {
+    margin-bottom: 15px;
+    flex-shrink: 0; /* Prevent sections from shrinking too much */
+}
+.journal-section h3 {
+    margin-top: 0;
+    margin-bottom: 8px;
+    font-size: 1.1em;
+    color: #555;
+    border-bottom: 1px dotted #ccc;
+    padding-bottom: 5px;
+}
+#quest-log, #event-log {
     list-style: none;
     padding: 0;
+    margin: 0;
+    max-height: 25vh; /* Limit height of each list */
+    overflow-y: auto; /* Scroll individual lists */
+    border: 1px solid #ddd;
+    background-color: rgba(255, 255, 255, 0.6);
+    border-radius: 4px;
+    padding: 10px; /* Padding inside list */
 }
-#journal-entries li {
-    margin-bottom: 8px;
-    padding-bottom: 8px;
+
+#quest-log li, #event-log li {
+    margin-bottom: 10px;
+    padding-bottom: 10px;
     border-bottom: 1px dashed #ddd;
+    font-size: 0.95em;
+    line-height: 1.4;
 }
-#journal-entries li:last-child {
+#quest-log li:last-child, #event-log li:last-child {
     border-bottom: none;
+    margin-bottom: 0;
+}
+
+/* Quest Status Styling */
+li.quest-completed {
+    color: #555;
+    font-style: italic;
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+li.quest-failed {
+    color: #a00;
+    font-style: italic;
+    opacity: 0.8;
+}
+li.quest-available {
+    color: #005a9c; /* Dark blue for available */
+}
+li.quest-active strong {
+    color: #006400; /* Dark green for active title */
 }
 
 
+/* --- Utility --- */
 .hidden {
-    display: none;
+    display: none !important; /* Use important to override potential conflicts */
 }
 
-/* Simple crosshair */
+/* Simple crosshair - stays visible */
 body::after {
     content: '+';
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 20px;
-    color: rgba(255, 255, 255, 0.5);
-    pointer-events: none; /* Important */
-    z-index: 1;
+    font-size: 24px;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.5); /* Semi-transparent white */
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+    pointer-events: none; /* Important - allow clicks through */
+    z-index: 5; /* Below UI panels, above game */
+    user-select: none;
 }

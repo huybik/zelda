@@ -1,31 +1,50 @@
 import * as THREE from 'three';
 
+// Reusable vectors and quaternions
+const _targetPosition = new THREE.Vector3();
+const _offset = new THREE.Vector3();
+const _pitchRotation = new THREE.Quaternion();
+const _idealPosition = new THREE.Vector3();
+const _cameraDirection = new THREE.Vector3();
+const _finalPosition = new THREE.Vector3();
+const _idealLookat = new THREE.Vector3();
+
 export class ThirdPersonCamera {
     constructor(camera, target) {
+        if (!camera || !target) {
+            throw new Error("Camera and target mesh are required for ThirdPersonCamera.");
+        }
         this.camera = camera; // The THREE.PerspectiveCamera instance
         this.target = target; // The object the camera follows (player mesh)
 
-        this.currentPosition = new THREE.Vector3();
-        this.currentLookat = new THREE.Vector3();
-
-        // Camera position relative to target (behind and slightly above)
+        // Desired offset from target (behind and slightly above)
         this.idealOffset = new THREE.Vector3(0, 2.5, 5.0);
-        this.minOffsetDistance = 2.0; // Minimum distance to prevent clipping into player
-        this.maxOffsetDistance = 10.0; // Max zoom out (can be added later)
+        this.minOffsetDistance = 1.5; // Minimum distance to prevent clipping into player
+        this.maxOffsetDistance = 12.0; // Max zoom out
 
         // Camera rotation (Pitch) controlled by mouse Y
-        this.pitchAngle = 0.1; // Initial slight downward angle
-        this.minPitch = -Math.PI / 4; // Limit looking down too much
-        this.maxPitch = Math.PI / 3;   // Limit looking up too much
-        this.pitchSensitivity = 0.002;
+        this.pitchAngle = 0.15; // Initial slight downward angle
+        this.minPitch = -Math.PI / 3; // Limit looking down
+        this.maxPitch = Math.PI / 2.5; // Limit looking up
+        this.pitchSensitivity = 0.0025;
 
-        // Smoothing factor for camera movement
-        this.lerpFactorPosition = 0.1; // Controls how quickly the camera follows position
-        this.lerpFactorLookat = 0.15; // Controls how quickly the camera adjusts its look-at point
+        // Smoothing factor for camera movement (use powers for frame-rate independence)
+        // Lower base value means slower interpolation
+        this.lerpAlphaPosition = 0.05; // Controls how quickly the camera follows position
+        this.lerpAlphaLookat = 0.1;   // Controls how quickly the camera adjusts its look-at point
 
          // Collision detection for camera
          this.collisionRaycaster = new THREE.Raycaster();
-         this.collisionOffset = 0.5; // Keep camera slightly away from obstacles
+         this.collisionOffset = 0.3; // Keep camera slightly away from obstacles
+
+         // Initial position setup
+         this.currentPosition = new THREE.Vector3();
+         this.currentLookat = new THREE.Vector3();
+         this.target.getWorldPosition(this.currentLookat); // Start looking at target
+         this.currentLookat.y += 1.0; // Look slightly above base
+         this.update(0.016, []); // Initial update to set reasonable start position
+         this.camera.position.copy(this.currentPosition);
+         this.camera.lookAt(this.currentLookat);
     }
 
     // Called from Controls system when pointer is locked
@@ -38,62 +57,83 @@ export class ThirdPersonCamera {
 
 
     update(deltaTime, collidables = []) {
-        // 1. Calculate Ideal Camera Position
-        const targetPosition = this.target.position.clone();
-        // Apply the offset relative to the target's rotation
-        const offset = this.idealOffset.clone();
+        if (!this.target) return;
 
-         // Apply pitch rotation to the offset
-         const pitchRotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.pitchAngle);
-         offset.applyQuaternion(pitchRotation);
+        // 1. Calculate Target Position and Orientation
+        this.target.getWorldPosition(_targetPosition);
+        const targetQuaternion = this.target.quaternion; // Player's rotation
+
+        // 2. Calculate Ideal Camera Position based on Offset, Pitch, and Yaw
+        _offset.copy(this.idealOffset);
+
+         // Apply pitch rotation to the offset vector around the X-axis
+         _pitchRotation.setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.pitchAngle);
+         _offset.applyQuaternion(_pitchRotation);
 
         // Apply target's yaw rotation (Y-axis rotation) to the offset
-        offset.applyQuaternion(this.target.quaternion);
+        _offset.applyQuaternion(targetQuaternion);
 
-        let idealPosition = targetPosition.clone().add(offset);
+        // Calculate the ideal position in world space
+        _idealPosition.copy(_targetPosition).add(_offset);
 
-        // 2. Check for Camera Collision
-         const cameraDirection = idealPosition.clone().sub(targetPosition).normalize();
-         const cameraDistance = this.idealOffset.length(); // Original desired distance
-         this.collisionRaycaster.set(targetPosition, cameraDirection);
-         this.collisionRaycaster.far = cameraDistance + this.collisionOffset; // Check up to the ideal position plus buffer
+        // 3. Check for Camera Collision
+        // Raycast from the target towards the ideal camera position
+        _cameraDirection.copy(_idealPosition).sub(_targetPosition);
+        const idealDistance = _cameraDirection.length();
+        _cameraDirection.normalize();
 
-         // Find closest collision (ignore player itself)
-         const collisionCheckObjects = collidables.filter(obj => obj !== this.target && obj.userData.isCollidable);
+        // Set raycaster parameters
+        // Start ray slightly in front of target center to avoid hitting target itself initially
+        const rayOrigin = _targetPosition.clone().addScaledVector(_cameraDirection, 0.1);
+        this.collisionRaycaster.set(rayOrigin, _cameraDirection);
+        this.collisionRaycaster.far = Math.max(0, idealDistance - 0.1); // Check up to the ideal position minus start offset
+        this.collisionRaycaster.near = 0;
+
+         // Find closest collision (ignore player itself and non-collidable objects)
+         const collisionCheckObjects = collidables.filter(obj =>
+             obj !== this.target && obj.userData.isCollidable && !obj.userData.isPlayer // Ensure we don't check against the player mesh itself
+         );
          const intersects = this.collisionRaycaster.intersectObjects(collisionCheckObjects, true); // recursive check
 
-         let actualDistance = cameraDistance;
+         let actualDistance = idealDistance;
          if (intersects.length > 0) {
-             // Find the closest intersection point
-             let closestDistance = cameraDistance;
-             intersects.forEach(intersect => {
-                 // Make sure intersection is not *behind* the target relative to camera direction
-                  if (intersect.distance < closestDistance) {
-                      closestDistance = intersect.distance;
-                  }
-             });
-             // Adjust distance, ensuring a minimum gap
-             actualDistance = Math.max(this.minOffsetDistance, closestDistance - this.collisionOffset);
+             // Find the closest valid intersection point
+             let closestDistance = idealDistance;
+             for(const intersect of intersects) {
+                // Only consider intersections closer than the ideal distance
+                if (intersect.distance < closestDistance) {
+                    closestDistance = intersect.distance;
+                }
+             }
+             // Adjust distance, ensuring a minimum gap from target and collision point
+             actualDistance = Math.max(this.minOffsetDistance, closestDistance + 0.1 - this.collisionOffset); // Add back the 0.1 offset
          }
 
+         // Clamp distance if needed (e.g., for zoom functionality)
+         actualDistance = Math.min(this.maxOffsetDistance, actualDistance);
 
-         // 3. Calculate Final Camera Position using adjusted distance
-         const finalPosition = targetPosition.clone().add(cameraDirection.multiplyScalar(actualDistance));
+
+         // 4. Calculate Final Camera Position using adjusted distance
+         _finalPosition.copy(_targetPosition).addScaledVector(_cameraDirection, actualDistance);
 
 
-        // 4. Calculate Ideal Look-at Point (slightly above target's base)
+        // 5. Calculate Ideal Look-at Point (slightly above target's base)
         // This helps keep the target centered vertically in the frame
-        const idealLookat = targetPosition.clone();
-        idealLookat.y += 1.0; // Adjust this value based on player height/preference
+        _idealLookat.copy(_targetPosition);
+        // Adjust based on player height if available
+        const targetHeight = this.target.userData?.height || 1.8;
+        _idealLookat.y += targetHeight * 0.6; // Look at roughly chest height
 
-        // 5. Smoothly Interpolate (Lerp) Camera Position and Look-at
-        const posLerp = 1.0 - Math.pow(this.lerpFactorPosition, deltaTime); // Frame-rate independent lerp calculation
-        const lookLerp = 1.0 - Math.pow(this.lerpFactorLookat, deltaTime);
 
-        this.currentPosition.lerp(finalPosition, posLerp);
-        this.currentLookat.lerp(idealLookat, lookLerp);
+        // 6. Smoothly Interpolate (Lerp) Camera Position and Look-at
+        // Use frame-rate independent lerp: alpha = 1 - base^deltaTime
+        const posLerp = 1.0 - Math.pow(this.lerpAlphaPosition, deltaTime);
+        const lookLerp = 1.0 - Math.pow(this.lerpAlphaLookat, deltaTime);
 
-        // 6. Apply Position and Look-at to the actual camera
+        this.currentPosition.lerp(_finalPosition, posLerp);
+        this.currentLookat.lerp(_idealLookat, lookLerp);
+
+        // 7. Apply Position and Look-at to the actual camera
         this.camera.position.copy(this.currentPosition);
         this.camera.lookAt(this.currentLookat);
     }

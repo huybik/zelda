@@ -5,6 +5,9 @@ let nextEntityId = 0;
 
 export class Entity {
     constructor(scene, position, name = 'Entity') {
+        if (!scene || !position) {
+            throw new Error("Scene and position are required for Entity creation.");
+        }
         this.id = `${name}_${nextEntityId++}`;
         this.scene = scene;
         this.mesh = new THREE.Group(); // Use Group to allow easier transformations/additions
@@ -13,93 +16,124 @@ export class Entity {
         this.velocity = new THREE.Vector3();
         this.boundingBox = new THREE.Box3(); // Will be updated based on mesh
 
-        this.scene.add(this.mesh);
-
         // Common properties - subclasses can override or extend
         this.health = 100;
         this.maxHealth = 100;
         this.isDead = false;
 
-        // Flags for systems
+        // Flags for systems - ensure entityReference links back to 'this' instance
         this.userData = {
+            entityReference: this, // Link back to the class instance
             isEntity: true,
             isPlayer: false,
             isNPC: false,
             isAnimal: false,
             isCollidable: true, // Most entities are collidable
             isInteractable: false, // Overridden by specific types
-            entityReference: this, // Link back to the class instance
+            id: this.id, // Add ID here for easier lookup from mesh
         };
         this.mesh.userData = this.userData; // Make accessible via raycasting/collision checks
+        this.mesh.name = this.name; // Set the name of the group/mesh for debugging
+
+        this.scene.add(this.mesh);
     }
 
+    // Base update loop (intended to be overridden or extended)
     update(deltaTime, player, collidables) {
-        // Base update loop (movement based on velocity, basic physics)
-        // Apply velocity
-        this.mesh.position.addScaledVector(this.velocity, deltaTime);
+        // Apply velocity (optional base behavior)
+        // this.mesh.position.addScaledVector(this.velocity, deltaTime);
 
-        // Update bounding box after movement
-        this.updateBoundingBox();
-
-        // Subclasses will implement specific logic (AI, player controls, etc.)
+        // Update bounding box if entity moves (ensure subclasses call this if they move)
+        // this.updateBoundingBox();
     }
 
     updateBoundingBox() {
         // Ensure the bounding box is updated based on the current mesh state
-        // This might need adjustment depending on how complex the entity meshes become
-        if (this.mesh.children.length > 0) {
-             // If using a Group with multiple children, compute based on children
-             this.boundingBox.setFromObject(this.mesh, true); // true = recursive
-        } else if (this.mesh instanceof THREE.Mesh && this.mesh.geometry) {
-            // If it's a single mesh, compute based on its geometry
-            if (!this.mesh.geometry.boundingBox) {
-                this.mesh.geometry.computeBoundingBox();
-            }
-             this.boundingBox.copy(this.mesh.geometry.boundingBox).applyMatrix4(this.mesh.matrixWorld);
+        // This is crucial for accurate collision detection
+        if (this.mesh && this.mesh.parent) { // Ensure mesh is valid and in scene
+             // Compute based on the group and its children
+             // Set recursive flag to true only if necessary (complex nested models)
+             // If models are simple (direct children of this.mesh), false might be faster.
+             this.boundingBox.setFromObject(this.mesh, false); // Calculate based on direct children of the group
+
+             // If setFromObject doesn't work well (e.g., mesh origin issues),
+             // calculate manually from children's bounding boxes if needed.
         } else {
-             // Fallback for simple Group or placeholder
+             // Fallback for simple Group or placeholder, or if mesh is removed
              this.boundingBox.setFromCenterAndSize(this.mesh.position, new THREE.Vector3(1, 1, 1)); // Default size
         }
-         // Store on userData for physics system
-         this.mesh.userData.boundingBox = this.boundingBox;
+        // Ensure the userData reference is updated for the physics system
+        if (this.mesh) {
+            this.mesh.userData.boundingBox = this.boundingBox;
+        }
     }
 
     setPosition(position) {
-        this.mesh.position.copy(position);
-        this.updateBoundingBox();
-    }
-
-    lookAt(targetPosition) {
-        this.mesh.lookAt(targetPosition);
-    }
-
-    takeDamage(amount) {
-        if (this.isDead) return;
-        this.health = Math.max(0, this.health - amount);
-        console.log(`${this.name} took ${amount} damage. Health: ${this.health}`);
-        if (this.health <= 0) {
-            this.die();
+        if (this.mesh) {
+            this.mesh.position.copy(position);
+            this.updateBoundingBox();
         }
     }
 
+    lookAt(targetPosition) {
+        if (this.mesh) {
+            this.mesh.lookAt(targetPosition);
+        }
+    }
+
+    takeDamage(amount) {
+        if (this.isDead || amount <= 0) return;
+
+        this.health = Math.max(0, this.health - amount);
+        console.log(`${this.name} took ${amount} damage. Health: ${this.health}/${this.maxHealth}`);
+
+        if (this.health <= 0) {
+            this.die();
+        }
+        // TODO: Trigger damage animation or visual feedback
+    }
+
     heal(amount) {
-        if (this.isDead) return;
+        if (this.isDead || amount <= 0) return;
+
         this.health = Math.min(this.maxHealth, this.health + amount);
-         console.log(`${this.name} healed ${amount}. Health: ${this.health}`);
+        console.log(`${this.name} healed ${amount}. Health: ${this.health}/${this.maxHealth}`);
+        // TODO: Trigger heal visual feedback
     }
 
 
     die() {
         if (this.isDead) return;
-        console.log(`${this.name} died.`);
+        console.log(`${this.name} has died.`);
         this.isDead = true;
         this.velocity.set(0, 0, 0); // Stop movement
-        // Could trigger death animation, remove from scene after delay, etc.
-        // For simplicity, we might just mark as dead and handle respawn/removal elsewhere
+        this.health = 0;
+        // Subclasses should override for specific death behaviors (animations, drops etc.)
+        // Removal from scene/game arrays is typically handled by the Game class or an entity manager
     }
 
     destroy() {
-        this.scene.remove(this.mesh);
-        // TODO: Remove from relevant arrays (entities, collidables, interactables) in the Game class
+        // Remove mesh from scene
+        if (this.mesh && this.mesh.parent) {
+            // Dispose geometries and materials to free GPU memory
+             this.mesh.traverse((child) => {
+                if (child instanceof THREE.Mesh) {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        // If material is an array
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach(mat => mat.dispose());
+                        } else {
+                            child.material.dispose();
+                        }
+                    }
+                }
+             });
+            this.scene.remove(this.mesh);
+        }
+        this.mesh = null; // Remove reference
+        this.scene = null; // Remove reference
+        // TODO: Ensure this entity is removed from all relevant arrays (entities, collidables, interactables) in the Game class. This usually requires notifying the Game class.
+        console.log(`${this.name} destroyed.`);
     }
 }
