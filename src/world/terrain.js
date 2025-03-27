@@ -24,7 +24,7 @@ export function createTerrain(size, segments = 100) {
     geometry.computeVertexNormals(); // Recalculate normals for correct lighting after height changes
 
     const material = new THREE.MeshLambertMaterial({
-        color: 0x90ee90, // Light green for grass
+        color: 0x88B04B, // Slightly different green - was 0x90ee90
         // map: texture, // Add texture later if desired
         // side: THREE.DoubleSide, // Usually not needed for terrain floor
         // wireframe: false // Uncomment for debugging geometry
@@ -54,15 +54,15 @@ export function createTerrain(size, segments = 100) {
  */
 function applyNoiseToGeometry(geometry) {
     const vertices = geometry.attributes.position.array;
-    // --- REDUCED noise strength for flatter terrain ---
-    const noiseStrength = 6;   // Reduced Max height variation (was 12)
-    const noiseScale = 0.015;  // How "zoomed in" the noise pattern is (lower = larger features)
+    // --- FURTHER REDUCED noise strength for EVEN flatter terrain ---
+    const noiseStrength = 2.5; // Reduced Max height variation significantly (was 6, originally 12)
+    const noiseScale = 0.02;  // Slightly larger features (was 0.015)
     const numVertices = geometry.attributes.position.count;
 
-    // Parameters for different noise layers (optional, adds detail) - reduced proportionally
-    const noiseStrength2 = 1.5; // Reduced (was 3)
+    // Parameters for different noise layers (optional, adds detail) - reduced significantly
+    const noiseStrength2 = 0.5; // Reduced (was 1.5)
     const noiseScale2 = 0.08;
-    const noiseStrength3 = 0.3; // Reduced (was 0.5)
+    const noiseStrength3 = 0.1; // Reduced (was 0.3)
     const noiseScale3 = 0.3;
 
 
@@ -78,14 +78,17 @@ function applyNoiseToGeometry(geometry) {
         z += simplex.noise(x * noiseScale3, y * noiseScale3) * noiseStrength3;
 
         // Optional: Flatten center area slightly for village placement
+        // Keep the flattening effect relative to the reduced noise.
         const distanceToCenter = Math.sqrt(x*x + y*y);
-        const flattenRadius = 100; // Slightly larger radius for flattened center (was 80)
+        const flattenRadius = 120; // Even larger radius for flattened center (was 100)
         if (distanceToCenter < flattenRadius) {
-            // Use smoothstep for a gradual flattening effect towards the center
             const flattenFactor = 1.0 - Math.smoothstep(0, flattenRadius, distanceToCenter);
-            // Interpolate towards a more flattened height (e.g., 20% of original noise height)
-            z = THREE.MathUtils.lerp(z, z * 0.2, flattenFactor);
+            // Interpolate towards almost completely flat (e.g., 5% of original noise height)
+            z = THREE.MathUtils.lerp(z, z * 0.05, flattenFactor);
         }
+
+        // Clamp minimum height to prevent holes below zero (optional, if noise goes too negative)
+        // z = Math.max(z, -0.5); // Example clamp
 
 
         vertices[index + 2] = z; // Apply height to the Z coordinate of the PlaneGeometry (becomes Y after rotation)
@@ -96,7 +99,6 @@ function applyNoiseToGeometry(geometry) {
 }
 
 // Helper for smoothstep function (used in optional flattening)
-// Ensure it's available (it was already here, but good to confirm)
 if (!Math.smoothstep) {
     Math.smoothstep = function(edge0, edge1, x) {
       x = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));

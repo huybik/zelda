@@ -13,8 +13,8 @@ export class Controls {
 
         // Movement state passed to player
         this.moveState = {
-            forward: 0, // -1, 0, 1
-            right: 0,   // -1, 0, 1
+            forward: 0, // -1 (S), 0, 1 (W)
+            right: 0,   // -1 (A), 0, 1 (D)
             jump: false, // Set true only on keydown for one frame
             sprint: false,
             interact: false, // Set true only on keydown for one frame
@@ -30,7 +30,7 @@ export class Controls {
         this.onMouseDown = this.onMouseDown.bind(this);
         this.onMouseUp = this.onMouseUp.bind(this);
         this.onMouseMove = this.onMouseMove.bind(this);
-        this.onClick = this.onClick.bind(this);
+        this.onClick = this.onClick.bind(this); // Click listener to initiate lock
         this.onPointerLockChange = this.onPointerLockChange.bind(this);
         this.onPointerLockError = this.onPointerLockError.bind(this);
 
@@ -45,9 +45,10 @@ export class Controls {
         document.addEventListener('mouseup', this.onMouseUp, false);
         document.addEventListener('mousemove', this.onMouseMove, false);
 
-        // Request Pointer Lock on click
+        // Request Pointer Lock on click of the DOM element (usually the canvas container)
         this.domElement.addEventListener('click', this.onClick, false);
 
+        // Listen for pointer lock status changes
         document.addEventListener('pointerlockchange', this.onPointerLockChange, false);
         document.addEventListener('pointerlockerror', this.onPointerLockError, false);
     }
@@ -70,22 +71,35 @@ export class Controls {
 
      // Requests pointer lock if not already locked
      lockPointer() {
-         if (!this.isPointerLocked) {
+         // Check if pointer lock is supported and not already active
+         if ('requestPointerLock' in this.domElement && document.pointerLockElement !== this.domElement) {
+            console.log("Requesting pointer lock...");
             this.domElement.requestPointerLock();
          }
      }
 
+     // Releases pointer lock if currently active
+     unlockPointer() {
+        if (document.pointerLockElement === this.domElement) {
+            console.log("Exiting pointer lock...");
+            document.exitPointerLock();
+        }
+     }
+
+
     onKeyDown(event) {
+        // Allow key presses even if pointer isn't locked (e.g., for UI toggles)
         const keyCode = event.code;
         if (this.keys[keyCode]) return; // Prevent firing multiple times if key is held
 
         this.keys[keyCode] = true;
 
-         // Trigger specific keydown listeners if registered
+         // Trigger specific keydown listeners if registered (e.g., I, J, E)
          if (this.keyDownListeners[keyCode]) {
+             // Execute callback, which might open UI and release pointer lock
              this.keyDownListeners[keyCode].forEach(cb => cb());
              // Optionally prevent default browser behavior for registered keys like 'I', 'J'
-             // event.preventDefault();
+             // event.preventDefault(); // Use with caution, might block expected browser actions
          }
 
         // Update move state flags that should only trigger once per press
@@ -96,7 +110,7 @@ export class Controls {
              this.moveState.interact = true; // Set interact flag for interaction system
         }
 
-        // Update continuous move state (WASD, Shift)
+        // Update continuous move state (WASD, Shift) - needed for player movement
         this.updateContinuousMoveState();
     }
 
@@ -107,21 +121,19 @@ export class Controls {
         // Update continuous move state (WASD, Shift)
         this.updateContinuousMoveState();
 
-        // Reset single-frame flags (handled by consumers, but ensure they are false if key is up)
-        // if (keyCode === 'Space') this.moveState.jump = false; // Player consumes this
-        // if (keyCode === 'KeyE') this.moveState.interact = false; // InteractionSystem consumes this
+        // Note: Single-frame flags (jump, interact) are consumed by their systems
     }
 
     onMouseDown(event) {
          this.mouse.buttons[event.button] = true;
-         // Trigger mouse click listeners
+         // Trigger mouse click listeners (e.g., for UI interactions)
          if (this.mouseClickListeners[event.button]) {
              this.mouseClickListeners[event.button].forEach(cb => cb(event));
          }
-        // Prevent default text selection if interacting with game window
-        if (document.pointerLockElement === this.domElement || event.target === this.domElement) {
+         // Prevent default text selection if interacting with game window (maybe redundant with lock)
+         if (this.isPointerLocked || event.target === this.domElement) {
              // event.preventDefault(); // Can interfere with UI inputs if not careful
-        }
+         }
     }
 
      onMouseUp(event) {
@@ -130,6 +142,7 @@ export class Controls {
 
 
     onMouseMove(event) {
+        // Only process mouse movement for camera/player rotation if pointer is locked
         if (this.isPointerLocked) {
             // Accumulate deltas, will be processed in update()
             this.mouse.dx += event.movementX || 0;
@@ -141,22 +154,25 @@ export class Controls {
         }
     }
 
-    // Handle click on the game canvas
+    // Handle click on the game canvas (or the specified domElement)
     onClick(event) {
         // If pointer is not locked, lock it.
-        // If pointer IS locked, this click might be for an in-game action (handled by mouse down listeners).
-        if (!this.isPointerLocked) {
+        // Assumes the game is in a state where pointer lock should be active (e.g., not paused with UI open).
+        if (!this.isPointerLocked && !window.game?.isPaused) { // Check game pause state via global ref (or pass game ref)
             this.lockPointer();
         }
+        // If pointer IS locked, this click might be for an in-game action (handled by mouse down listeners, e.g., attack).
     }
 
     onPointerLockChange() {
         if (document.pointerLockElement === this.domElement) {
             console.log('Pointer Locked');
             this.isPointerLocked = true;
-            // Reset accumulated deltas when lock is acquired
+            // Reset accumulated deltas when lock is acquired to prevent sudden jump
             this.mouse.dx = 0;
             this.mouse.dy = 0;
+            // Hide cursor (browser usually handles this, but can force with CSS if needed)
+            // this.domElement.style.cursor = 'none';
         } else {
             console.log('Pointer Unlocked');
             this.isPointerLocked = false;
@@ -167,32 +183,44 @@ export class Controls {
              // Reset deltas
              this.mouse.dx = 0;
              this.mouse.dy = 0;
+             // Show cursor
+             // this.domElement.style.cursor = 'default';
+
+            // If unlock was unintentional (e.g., Alt+Tab), Game's pause logic might handle it.
+            // If unlock was due to UI opening (Escape, I, J), Game.setPauseState already handled it.
         }
     }
 
     onPointerLockError() {
-        console.error('Pointer Lock Error. Make sure the document has focus.');
-        this.isPointerLocked = false;
+        console.error('Pointer Lock Error. Make sure the document has focus and is interacted with.');
+        this.isPointerLocked = false; // Ensure state is correct on error
     }
 
     // Updates state based on currently held keys (WASD, Shift)
     updateContinuousMoveState() {
+        // W = forward (+1), S = backward (-1)
         this.moveState.forward = (this.keys['KeyW'] || this.keys['ArrowUp'] ? 1 : 0) - (this.keys['KeyS'] || this.keys['ArrowDown'] ? 1 : 0);
+        // D = right (+1), A = left (-1)
         this.moveState.right = (this.keys['KeyD'] || this.keys['ArrowRight'] ? 1 : 0) - (this.keys['KeyA'] || this.keys['ArrowLeft'] ? 1 : 0);
         this.moveState.sprint = this.keys['ShiftLeft'] || this.keys['ShiftRight'] || false;
     }
 
     // Called once per frame in the game loop
     update(deltaTime) {
-        // Rotate player based on accumulated mouse delta X
+        // Rotate player mesh around Y-axis based on accumulated mouse delta X
+        // This happens ONLY when pointer lock is active.
         if (this.isPointerLocked && this.player && Math.abs(this.mouse.dx) > 0) {
             const yawDelta = -this.mouse.dx * this.playerRotationSensitivity;
+            // Applying rotation directly to the player mesh.
+            // The camera follows the player mesh's orientation.
             this.player.mesh.rotateY(yawDelta);
         }
 
         // Update camera pitch based on accumulated mouse delta Y (handled by ThirdPersonCamera)
+        // This also happens ONLY when pointer lock is active.
         if (this.isPointerLocked && this.cameraController && Math.abs(this.mouse.dy) > 0) {
-            this.cameraController.handleMouseInput(this.mouse.dx, this.mouse.dy); // Pass raw delta
+            // Pass raw delta Y for camera pitch control
+            this.cameraController.handleMouseInput(this.mouse.dx, this.mouse.dy);
         }
 
 
@@ -232,9 +260,8 @@ export class Controls {
         document.removeEventListener('pointerlockerror', this.onPointerLockError);
 
         // Attempt to exit pointer lock if active
-        if (document.pointerLockElement === this.domElement) {
-            document.exitPointerLock();
-        }
+        this.unlockPointer(); // Use the helper method
+
         console.log("Controls disposed.");
     }
 }

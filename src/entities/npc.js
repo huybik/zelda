@@ -6,7 +6,7 @@ const _playerPos = new THREE.Vector3();
 const _targetLookAt = new THREE.Vector3();
 const _targetDirection = new THREE.Vector3();
 const _targetQuaternion = new THREE.Quaternion();
-const _forward = new THREE.Vector3(0,0,1); // Assuming default forward is +Z
+const _forward = new THREE.Vector3(0,0,-1); // Assuming default forward is +Z
 
 export class NPC extends Entity {
     constructor(scene, position, name, accessoryType = 'none', questLog, inventory) {

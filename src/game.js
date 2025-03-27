@@ -61,26 +61,27 @@ class Game {
         // Renderer setup
         this.renderer = new THREE.WebGLRenderer({
              antialias: true,
-             powerPreference: "high-performance" // Request high performance GPU if available
+             powerPreference: "high-performance"
              });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows are generally nicer
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        // Attach renderer's DOM element (canvas) to the container div
         document.getElementById('game-container').appendChild(this.renderer.domElement);
 
         // Scene setup
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x87CEEB); // Pastel blue sky
-        this.scene.fog = new THREE.Fog(0x87CEEB, 150, 600); // Adjust fog distance
+        this.scene.fog = new THREE.Fog(0x87CEEB, 150, 600);
 
         // Camera setup
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
 
         // Core Systems
-        this.inventory = new Inventory(24); // Slightly larger inventory
-        this.questLog = new QuestLog(); // Initialize with empty definitions initially
-        this.eventLog = new EventLog(75); // Keep more log entries
+        this.inventory = new Inventory(24);
+        this.questLog = new QuestLog();
+        this.eventLog = new EventLog(75);
 
         // Lighting
         setupLighting(this.scene);
@@ -88,50 +89,49 @@ class Game {
         // World - Terrain and Boundaries first
         const terrain = createTerrain(WORLD_SIZE, TERRAIN_SEGMENTS);
         this.scene.add(terrain);
-        this.collidableObjects.push(terrain); // Add terrain for ground collision checks
+        this.collidableObjects.push(terrain);
 
         createWorldBoundary(this.scene, WORLD_SIZE, this.collidableObjects);
 
         // Player (requires scene)
-        const playerSpawnPos = new THREE.Vector3(0, 1, 5); // Near village center
-        playerSpawnPos.y = createTerrain(1,1).geometry ? // Quick way to get approx height
-                             terrain.geometry.parameters.height/2 + 1 : playerSpawnPos.y; // TODO get real height
-        playerSpawnPos.y = 5; // Hacky override
+        const playerSpawnPos = new THREE.Vector3(0, 0, 5); // Near village center, Y determined later
+        // Place player at correct terrain height + small offset
+        playerSpawnPos.y = getTerrainHeight(playerSpawnPos.x, playerSpawnPos.z) + 0.5;
         this.player = new Player(this.scene, playerSpawnPos);
         this.entities.push(this.player);
         this.collidableObjects.push(this.player.mesh); // Player collides with others
-        this.player.setJournal(this.questLog, this.eventLog); // Give player access to logs
+        this.player.setJournal(this.questLog, this.eventLog);
 
         // Camera Controller (requires camera, player mesh)
         this.thirdPersonCamera = new ThirdPersonCamera(this.camera, this.player.mesh);
 
-        // Controls (requires player, camera controller, DOM element)
+        // Controls (requires player, camera controller, renderer's DOM element)
         this.controls = new Controls(this.player, this.thirdPersonCamera, this.renderer.domElement);
 
         // Physics (requires player, collidables array)
         this.physics = new Physics(this.player, this.collidableObjects);
 
-        // Populate Environment (requires scene and core systems/arrays)
-        // This adds NPCs, Animals, Trees, Rocks, etc. to the respective arrays
+        // Populate Environment (adds NPCs, Animals, Trees, Rocks, etc.)
         populateEnvironment(this.scene, WORLD_SIZE, this.collidableObjects, this.interactableObjects, this.entities, this.questLog, this.inventory, this.eventLog);
 
-        // Interaction System (requires player, camera, interactables array, controls, inventory, eventLog)
-        // Pass the interactableObjects array which now contains entities AND static interactables
+        // Interaction System
         this.interactionSystem = new InteractionSystem(this.player, this.camera, this.interactableObjects, this.controls, this.inventory, this.eventLog);
 
-        // UI (requires player, entities, inventory, logs etc.)
+        // UI
         this.hud = new HUD(this.player);
         this.minimap = new Minimap(document.getElementById('minimap-canvas'), this.player, this.entities, WORLD_SIZE);
         this.inventoryDisplay = new InventoryDisplay(this.inventory);
-        // Pass inventory to JournalDisplay for quest progress checks
         this.journalDisplay = new JournalDisplay(this.questLog, this.eventLog, this.inventory);
 
 
         // Initial Log Message
-        this.eventLog.addEntry("Welcome to the Low-Poly Wilderness! (I=Inventory, J=Journal, E=Interact)");
+        this.eventLog.addEntry("Welcome! Click game window to lock controls. (I=Inventory, J=Journal, E=Interact, Esc=Unlock/Close UI)");
 
         // Bind controls for UI toggling etc.
         this.setupUIControls();
+
+        // Prompt user to click to start/lock controls (optional)
+        // Could display a temporary message until first click
 
         console.log("Game initialization complete.");
     }
@@ -155,14 +155,17 @@ class Game {
         this.controls.addKeyDownListener('Escape', () => {
             if (this.inventoryDisplay.isOpen) {
                 this.inventoryDisplay.hide();
-                this.setPauseState(false);
+                this.setPauseState(false); // Unpause
             } else if (this.journalDisplay.isOpen) {
                 this.journalDisplay.hide();
-                this.setPauseState(false);
+                this.setPauseState(false); // Unpause
             } else {
-                 // Optional: Open main menu or exit pointer lock
-                 if (document.pointerLockElement) document.exitPointerLock();
-                 // this.setPauseState(true); // Pause for menu?
+                 // If no UI is open, Escape unlocks the pointer
+                 if (this.controls.isPointerLocked) {
+                     this.controls.unlockPointer(); // Explicitly unlock
+                     // Optionally pause the game when pointer is manually unlocked
+                     // this.setPauseState(true);
+                 }
             }
         });
 
@@ -176,7 +179,6 @@ class Game {
     }
 
     handleInventoryClick(event) {
-        // Check if inventory is open (using the getter)
         if (!this.inventoryDisplay.isOpen) return;
 
         const slotElement = event.target.closest('.inventory-slot');
@@ -186,12 +188,9 @@ class Game {
 
             if (item) {
                 console.log(`Clicked on item: ${item.name} in slot ${index}`);
-
-                // Simple item usage logic (example: Health Potion)
                 if (item.name === 'Health Potion') {
                     if (this.player.health < this.player.maxHealth) {
-                        this.player.heal(25); // Heal amount
-                        // Remove *one* potion from the clicked stack
+                        this.player.heal(25);
                         if (this.inventory.removeItemByIndex(index, 1)) {
                             this.eventLog.addEntry(`Used a Health Potion. Ahh, refreshing!`);
                         }
@@ -201,7 +200,6 @@ class Game {
                 } else {
                      this.eventLog.addEntry(`You examine the ${item.name}.`);
                 }
-                // Prevent interaction system or other listeners from processing this click
                  event.stopPropagation();
             }
         }
@@ -209,18 +207,21 @@ class Game {
 
 
     setPauseState(paused) {
-        if (this.isPaused === paused) return; // No change
+        if (this.isPaused === paused) return;
         this.isPaused = paused;
         console.log(`Game ${paused ? 'paused' : 'resumed'}.`);
-        // TODO: Add actual pause logic (stop entity updates, animations, physics?)
-        // For now, it primarily affects UI opening/closing pointer lock.
-        if (this.isPaused && document.pointerLockElement) {
-             document.exitPointerLock(); // Release pointer lock when paused by UI
-        } else if (!this.isPaused && !document.pointerLockElement && !this.inventoryDisplay.isOpen && !this.journalDisplay.isOpen) {
-             // Only re-lock if pause ended AND no UI is open
-             this.controls.lockPointer();
-        }
 
+        // Handle pointer lock based on pause state
+        if (this.isPaused) {
+            // If game is paused (usually by opening UI), release pointer lock
+            this.controls.unlockPointer();
+        } else {
+            // If game is resumed AND no UI panels are open, re-acquire pointer lock
+            if (!this.inventoryDisplay.isOpen && !this.journalDisplay.isOpen) {
+                this.controls.lockPointer();
+            }
+        }
+        // Actual pausing of game logic (entity updates, physics) happens in the update loop
     }
 
     start() {
@@ -229,71 +230,64 @@ class Game {
             return;
         }
         console.log("Starting game loop...");
+        // Start the animation loop
         this.renderer.setAnimationLoop(() => this.update());
     }
 
     update() {
-        if (!this.player || !this.renderer || !this.scene || !this.camera) return; // Guard against missing core components
+        if (!this.player || !this.renderer || !this.scene || !this.camera) return;
 
-        const deltaTime = Math.min(this.clock.getDelta(), 0.05); // Get delta time, clamp to prevent large jumps
+        const deltaTime = Math.min(this.clock.getDelta(), 0.05);
 
-        // Update controls state regardless of pause (reads input)
+        // Update controls state (reads input, updates mouse deltas if locked)
+        // This runs even if paused, so UI keys work. Mouse rotation is applied inside controls.update if locked.
         this.controls.update(deltaTime);
 
         // --- Game Logic Updates (Skip if Paused) ---
         if (!this.isPaused) {
 
             // Update player (movement, stamina, animation)
-            // Player update needs the *raw* moveState from controls
+            // Player uses moveState from controls and handles its own physics (gravity, ground check)
             this.player.update(deltaTime, this.controls.moveState, this.collidableObjects);
 
-            // Update physics (collision response) AFTER player tries to move
+            // Update physics (collision response between player and other objects)
+            // Run AFTER player has moved and updated its bounding box.
             this.physics.update(deltaTime);
 
             // Update other entities (NPCs, Animals, animated objects)
             this.entities.forEach(entity => {
-                // Skip player, dead entities, or entities without an update method
                 if (entity === this.player || entity.isDead || typeof entity.update !== 'function') return;
-
                 try {
-                    // Pass necessary info like player position for AI, delta time, collidables
                     entity.update(deltaTime, this.player, this.collidableObjects);
                 } catch (error) {
                     console.error(`Error updating entity ${entity.name || entity.id}:`, error);
-                    // Optional: Mark entity for removal or disable updates
                 }
             });
 
-            // Handle interactions (detect targets, process interaction key press)
+            // Handle interactions
             this.interactionSystem.update(deltaTime);
 
             // Update camera position AFTER player and physics updates
             this.thirdPersonCamera.update(deltaTime, this.collidableObjects);
 
-            // Check for player death AFTER all updates that could cause damage
+            // Check for player death
             if (this.player.isDead) {
                 this.respawnPlayer();
-                // Skip rendering this frame after respawn? Optional.
-                // return;
+                // return; // Skip rendering this frame after respawn?
             }
         } // End if (!isPaused)
 
 
-        // --- UI Updates (Update even when paused to show correct state) ---
+        // --- UI Updates (Update even when paused) ---
         this.hud.update();
         this.minimap.update();
-        // Inventory and Journal displays update themselves internally when shown or data changes
-        // No explicit update call needed here unless force refresh is required.
-        // this.inventoryDisplay.updateDisplay(); // Not needed if using onChange
-        // this.journalDisplay.updateDisplay(); // Not needed if using onChange
-
+        // Inventory/Journal update via callbacks or when opened.
 
         // Render the scene
         try {
             this.renderer.render(this.scene, this.camera);
         } catch (error) {
             console.error("Error during rendering:", error);
-            // Handle rendering errors, e.g., stop the loop?
         }
     }
 
@@ -301,58 +295,25 @@ class Game {
         console.log("Player died. Respawning...");
         this.eventLog.addEntry("You blacked out and woke up back near the village...");
 
-        // --- Penalties (Example) ---
-        // 1. Lose some gold
         const goldCount = this.inventory.countItem('gold');
-        const goldPenalty = Math.min(10, Math.floor(goldCount * 0.1)); // Lose 10% or 10 gold, whichever is less
+        const goldPenalty = Math.min(10, Math.floor(goldCount * 0.1));
         if (goldPenalty > 0) {
              this.inventory.removeItem('gold', goldPenalty);
              this.eventLog.addEntry(`You lost ${goldPenalty} gold.`);
         }
-        // 2. TODO: Maybe drop some non-quest items? More complex.
 
-        // Respawn player at a safe location
-        const respawnPos = new THREE.Vector3(0, 5, 10); // Village spawn point
-        respawnPos.y = getTerrainHeight(respawnPos.x, respawnPos.z) + 0.5; // Place slightly above ground
+        const respawnPos = new THREE.Vector3(0, 0, 10); // Village spawn point
+        respawnPos.y = getTerrainHeight(respawnPos.x, respawnPos.z) + 0.5;
         this.player.respawn(respawnPos);
 
-        // Reset relevant states
-        this.setPauseState(false); // Ensure game isn't paused after respawn
-        this.hud.update(); // Update HUD immediately after respawn
-        // Reset any ongoing interaction
+        // Ensure game is unpaused and controls might need re-locking
+        this.setPauseState(false);
+        // Hud updates automatically in the loop
+
         if (this.interactionSystem.activeGather) {
             this.interactionSystem.cancelGatherAction();
         }
-        // Reset camera? (Should follow player automatically)
      }
-
-     // --- Entity Management (Example TODO) ---
-     // requestEntityRemoval(entityId, delay = 0) {
-     //    setTimeout(() => {
-     //       const entity = this.entities.find(e => e.id === entityId);
-     //       if (entity) {
-     //           this.removeEntity(entity);
-     //       }
-     //    }, delay);
-     // }
-
-     // removeEntity(entity) {
-     //     if (!entity) return;
-     //     console.log(`Removing entity: ${entity.name || entity.id}`);
-     //     // Remove from all relevant arrays
-     //     this.entities = this.entities.filter(e => e !== entity);
-     //     this.collidableObjects = this.collidableObjects.filter(o => o !== entity.mesh);
-     //     this.interactableObjects = this.interactableObjects.filter(i => i !== entity);
-     //
-     //     // Call entity's destroy method for scene removal and resource cleanup
-     //     if (typeof entity.destroy === 'function') {
-     //         entity.destroy();
-     //     } else if (entity.mesh && entity.mesh.parent) {
-     //         // Basic removal if no destroy method
-     //         entity.mesh.parent.remove(entity.mesh);
-     //     }
-     // }
-
 
     onWindowResize() {
         if (this.camera && this.renderer) {
@@ -363,11 +324,10 @@ class Game {
         }
     }
 
-    // Clean up resources on exit
     dispose() {
         console.log("Disposing game...");
         if (this.renderer) {
-            this.renderer.setAnimationLoop(null); // Stop game loop
+            this.renderer.setAnimationLoop(null);
             if(this.renderer.domElement.parentNode) {
                 this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
             }
@@ -377,34 +337,36 @@ class Game {
         if(this.inventoryDisplay) this.inventoryDisplay.dispose();
         if(this.journalDisplay) this.journalDisplay.dispose();
 
-        // Dispose Three.js resources in the scene
         if (this.scene) {
              this.scene.traverse((object) => {
+                if (!object) return;
                 if (object.geometry) object.geometry.dispose();
                 if (object.material) {
                     if (Array.isArray(object.material)) {
-                        object.material.forEach(material => material.dispose());
-                    } else {
+                        object.material.forEach(material => material?.dispose());
+                    } else if (object.material.dispose) {
                         object.material.dispose();
                     }
                 }
              });
         }
-
-        // Clear arrays
         this.entities = [];
         this.collidableObjects = [];
         this.interactableObjects = [];
-
-        window.game = null; // Clear global reference
+        window.game = null;
         console.log("Game disposed.");
     }
 }
 
-// Helper function to get terrain height (duplicate from environment, maybe move to utils?)
+// Helper function to get terrain height
 function getTerrainHeight(x, z) {
-     const terrain = window.game?.scene?.getObjectByName("Terrain"); // Access via global game ref if needed here
-     if (!terrain || !terrain.geometry) return 0;
+     // Use window.game carefully, might not be fully initialized when first called during init
+     const game = window.game;
+     const terrain = game?.scene?.getObjectByName("Terrain");
+     if (!terrain || !terrain.geometry) return 0; // Default height if terrain not ready
+
+     // Raycast down to find precise terrain height
+     // Reuse a single raycaster instance if possible, or create locally
      const raycaster = new THREE.Raycaster(new THREE.Vector3(x, 100, z), new THREE.Vector3(0, -1, 0), 0, 200);
      const intersects = raycaster.intersectObject(terrain);
      return intersects.length > 0 ? intersects[0].point.y : 0;

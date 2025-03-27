@@ -1,12 +1,14 @@
+///player.js
+
 import * as THREE from 'three';
 import { Entity } from './entity.js';
 
 const PLAYER_HEIGHT = 1.8;
 const PLAYER_RADIUS = 0.4;
-const _forward = new THREE.Vector3();
-const _right = new THREE.Vector3();
-const _moveDirection = new THREE.Vector3();
-const _moveVelocity = new THREE.Vector3();
+const _forward = new THREE.Vector3(); // Player's local forward vector in world space
+const _right = new THREE.Vector3();   // Player's local right vector in world space
+const _moveDirection = new THREE.Vector3(); // Input direction (from WASD) relative to player
+const _moveVelocity = new THREE.Vector3(); // Calculated world-space velocity vector for the frame
 const _groundCheckOrigin = new THREE.Vector3();
 const _groundCheckDirection = new THREE.Vector3(0, -1, 0);
 
@@ -17,7 +19,7 @@ export class Player extends Entity {
 
         this.userData.isPlayer = true;
         this.userData.isCollidable = true;
-        this.userData.isInteractable = false; // Player itself isn't interactable via 'E'
+        this.userData.isInteractable = false;
 
         this.maxHealth = 100;
         this.health = this.maxHealth;
@@ -25,34 +27,34 @@ export class Player extends Entity {
         this.stamina = this.maxStamina;
         this.walkSpeed = 4.0;
         this.runSpeed = 8.0;
-        this.jumpForce = 8.0; // Initial upward velocity on jump
-        this.staminaDrainRate = 15; // Per second while sprinting
-        this.staminaRegenRate = 10; // Per second while not sprinting/exhausted
+        this.jumpForce = 8.0;
+        this.staminaDrainRate = 15;
+        this.staminaRegenRate = 10;
         this.staminaJumpCost = 10;
-        this.canJump = false; // Determined by ground check
+        this.canJump = false;
         this.isSprinting = false;
-        this.isExhausted = false; // Flag when stamina is fully depleted
-        this.exhaustionThreshold = 20; // Stamina must reach this value to recover from exhaustion
+        this.isExhausted = false;
+        this.exhaustionThreshold = 20;
 
         // Movement state (updated by Controls system)
         this.moveState = {
-            forward: 0, // -1, 0, 1
-            right: 0,   // -1, 0, 1
-            jump: false, // Will be set to true briefly by Controls
+            forward: 0, // -1 (S), 0, 1 (W)
+            right: 0,   // -1 (A), 0, 1 (D)
+            jump: false,
             sprint: false,
         };
 
         // Physics related
-        this.gravity = -25; // Acceleration due to gravity
+        this.gravity = -25;
         this.isOnGround = false;
-        this.groundCheckDistance = 0.15; // How far below the player base to check for ground
-        this.lastVelocityY = 0; // To detect landing
+        this.groundCheckDistance = 0.15;
+        this.lastVelocityY = 0;
 
         // Player Model (Simple Blocky Humanoid)
         this.createModel();
-        this.updateBoundingBox(); // Initial bounding box calculation
+        this.updateBoundingBox();
 
-        // References to game systems needed by player
+        // References
         this.questLog = null;
         this.eventLog = null;
     }
@@ -64,79 +66,59 @@ export class Player extends Entity {
 
 
     createModel() {
-        const bodyMat = new THREE.MeshLambertMaterial({ color: 0x0077ff }); // Blue body
-        const headMat = new THREE.MeshLambertMaterial({ color: 0xffdab9 }); // Beige head
-        const limbMat = bodyMat; // Same color limbs for simplicity
+        const bodyMat = new THREE.MeshLambertMaterial({ color: 0x0077ff });
+        const headMat = new THREE.MeshLambertMaterial({ color: 0xffdab9 });
+        const limbMat = bodyMat;
 
-        // --- Define limb dimensions FIRST ---
         const limbRadius = 0.15;
         const armLength = 0.8;
-        const legLength = 0.9; // Total leg length
+        const legLength = 0.9;
 
-        // Body
         const bodyHeight = 1.0;
         const bodyGeo = new THREE.BoxGeometry(0.8, bodyHeight, 0.5);
         const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
-        // Adjust position so model 'feet' are near Y=0 origin of the Player group/mesh
-        // NOW legLength is defined before use
-        bodyMesh.position.y = legLength / 2 + bodyHeight / 2; // Relative to group origin
+        bodyMesh.position.y = legLength / 2 + bodyHeight / 2;
         bodyMesh.castShadow = true;
-        bodyMesh.receiveShadow = true; // Player can receive shadows
+        bodyMesh.receiveShadow = true;
         this.mesh.add(bodyMesh);
 
-        // Head
         const headRadius = 0.3;
         const headGeo = new THREE.SphereGeometry(headRadius, 16, 16);
         const headMesh = new THREE.Mesh(headGeo, headMat);
-        // Position head relative to body top (bodyMesh.position.y is center)
         headMesh.position.y = bodyMesh.position.y + bodyHeight / 2 + headRadius;
         headMesh.castShadow = true;
         this.mesh.add(headMesh);
 
-        // Simple Limbs (Cylinders)
-
-        // Left Arm
         const leftArmGeo = new THREE.CylinderGeometry(limbRadius, limbRadius*0.9, armLength, 8);
         this.leftArm = new THREE.Mesh(leftArmGeo, limbMat);
-        // Position arm relative to body center, slightly forward
         this.leftArm.position.set(-0.5, bodyMesh.position.y + 0.2, 0.1);
-        // Set origin to shoulder - Translate geometry *before* adding to parent mesh
         leftArmGeo.translate(0, -armLength / 2, 0);
         this.leftArm.castShadow = true;
         this.mesh.add(this.leftArm);
 
-        // Right Arm
         const rightArmGeo = new THREE.CylinderGeometry(limbRadius, limbRadius*0.9, armLength, 8);
         this.rightArm = new THREE.Mesh(rightArmGeo, limbMat);
         this.rightArm.position.set(0.5, bodyMesh.position.y + 0.2, 0.1);
-        // Set origin to shoulder
         rightArmGeo.translate(0, -armLength / 2, 0);
         this.rightArm.castShadow = true;
         this.mesh.add(this.rightArm);
 
-        // Left Leg
         const leftLegGeo = new THREE.CylinderGeometry(limbRadius, limbRadius * 1.1, legLength, 8);
         this.leftLeg = new THREE.Mesh(leftLegGeo, limbMat);
-        // Position leg relative to body bottom
         this.leftLeg.position.set(-0.2, bodyMesh.position.y - bodyHeight/2, 0);
-        // Set origin to hip
         leftLegGeo.translate(0, -legLength / 2, 0);
         this.leftLeg.castShadow = true;
         this.mesh.add(this.leftLeg);
 
-        // Right Leg
         const rightLegGeo = new THREE.CylinderGeometry(limbRadius, limbRadius * 1.1, legLength, 8);
         this.rightLeg = new THREE.Mesh(rightLegGeo, limbMat);
         this.rightLeg.position.set(0.2, bodyMesh.position.y - bodyHeight/2, 0);
-        // Set origin to hip
         rightLegGeo.translate(0, -legLength / 2, 0);
         this.rightLeg.castShadow = true;
         this.mesh.add(this.rightLeg);
 
-         // Set player height reference for physics/camera
-         // Ensure PLAYER_HEIGHT roughly matches model visual height from origin (feet)
-         this.mesh.userData.height = PLAYER_HEIGHT; // Based on constant
-         this.mesh.userData.radius = PLAYER_RADIUS;
+        this.mesh.userData.height = PLAYER_HEIGHT;
+        this.mesh.userData.radius = PLAYER_RADIUS;
     }
 
      // Overrides base Entity update
@@ -145,185 +127,159 @@ export class Player extends Entity {
 
          this.moveState = moveState; // Update movement intention from controls
 
-         const previousY = this.mesh.position.y; // Store position before updates
+         const previousY = this.mesh.position.y;
          const wasOnGround = this.isOnGround;
 
          this.handleStamina(deltaTime);
-         this.handleMovement(deltaTime); // Calculates horizontal velocity based on input/state
+         // Calculates desired world-space velocity based on input and player rotation
+         this.handleMovement(deltaTime);
 
          // --- Physics Update Order ---
-         // 1. Apply Gravity acceleration to velocity.y
          this.applyGravity(deltaTime);
-
-         // 2. Apply calculated velocity to position
-         // Only apply X/Z velocity initially. Y velocity application moved after ground check.
          this.mesh.position.x += this.velocity.x * deltaTime;
-         // this.mesh.position.y += this.velocity.y * deltaTime; // Moved below
          this.mesh.position.z += this.velocity.z * deltaTime;
-
-         // 3. Check for ground collision at the *new* XZ position, *before* applying Y velocity
-         // This allows snapping to ground before potentially falling through
+         // Ground check AFTER XZ movement, BEFORE Y movement
          this.checkGround(collidables);
-
-         // 4. Apply Y velocity *after* ground check and potential snapping
-         // If snapped, velocity.y should be 0. If airborne, gravity has affected velocity.y.
          this.mesh.position.y += this.velocity.y * deltaTime;
-
-         // 5. Final ground check/clamp (optional but can prevent sinking in edge cases)
-         // Let's rely on the updated checkGround for now.
-
          // --- End Physics Update Order ---
 
-
-         // Detect landing after fall/jump
          if (this.isOnGround && !wasOnGround && this.lastVelocityY < -1.0) {
              this.handleFallDamage(Math.abs(this.lastVelocityY));
          }
-         this.lastVelocityY = this.velocity.y; // Store velocity for next frame's landing check
+         this.lastVelocityY = this.velocity.y;
 
-         // Collision response with other objects is handled by the Physics system *after* this update,
-         // potentially adjusting the mesh position again.
-
-         // Apply simple walking animation
          this.animateMovement(deltaTime);
-
-         // Update bounding box *after* all position changes for this frame
-         // Physics system will use this updated box for push-out checks.
          this.updateBoundingBox();
 
-         // Reset jump request only after checking it in handleMovement
-         this.moveState.jump = false;
+         this.moveState.jump = false; // Consume jump state here after player update logic
     }
 
 
     handleStamina(deltaTime) {
         const isMoving = this.moveState.forward !== 0 || this.moveState.right !== 0;
-        // Can sprint only if moving, not exhausted, and has *some* stamina
         this.isSprinting = this.moveState.sprint && isMoving && !this.isExhausted && this.stamina > 0;
 
         if (this.isSprinting) {
             this.stamina -= this.staminaDrainRate * deltaTime;
             if (this.stamina <= 0) {
                 this.stamina = 0;
-                this.isExhausted = true; // Become exhausted
-                this.isSprinting = false; // Stop sprinting
+                this.isExhausted = true;
+                this.isSprinting = false;
                  if(this.eventLog) this.eventLog.addEntry("You are exhausted!");
             }
         } else {
-             // If exhausted, regen slowly until threshold is met
              if(this.isExhausted) {
-                 this.stamina += (this.staminaRegenRate / 2) * deltaTime; // Slower regen while exhausted
+                 this.stamina += (this.staminaRegenRate / 2) * deltaTime;
                  if (this.stamina >= this.exhaustionThreshold) {
-                     this.isExhausted = false; // Recover from exhaustion
+                     this.isExhausted = false;
                      if(this.eventLog) this.eventLog.addEntry("You feel recovered.");
                  }
              } else {
-                 // Normal regeneration if not sprinting and not exhausted
                  this.stamina += this.staminaRegenRate * deltaTime;
              }
-             this.stamina = Math.min(this.stamina, this.maxStamina); // Clamp stamina
+             this.stamina = Math.min(this.stamina, this.maxStamina);
         }
     }
 
 
+    /**
+     * Calculates the world-space velocity vector based on player input (moveState)
+     * and the player mesh's current rotation (controlled by mouse yaw in Controls).
+     */
     handleMovement(deltaTime) {
         const currentSpeed = this.isSprinting ? this.runSpeed : this.walkSpeed;
-        _moveDirection.set(this.moveState.right, 0, this.moveState.forward); // Use Z for forward
-        _moveDirection.normalize(); // Ensure consistent speed regardless of diagonal movement
 
-        // --- Calculate world-space movement vector based on player orientation ---
-        _forward.set(0, 0, 1).applyQuaternion(this.mesh.quaternion); // Player's forward
-        _right.set(1, 0, 0).applyQuaternion(this.mesh.quaternion);   // Player's right
+        // Get player's current world-space orientation vectors
+        // Forward vector (local -Z axis rotated into world space)
+        // ** FIX: Use (0, 0, -1) for forward, assuming model's front faces -Z **
+        _forward.set(0, 0, -1).applyQuaternion(this.mesh.quaternion);
+        // Right vector (local X axis rotated into world space)
+        _right.set(1, 0, 0).applyQuaternion(this.mesh.quaternion);
 
-        _moveVelocity.set(0,0,0); // Reset velocity calculation vector
-        _moveVelocity.addScaledVector(_forward, _moveDirection.z); // Apply forward/backward movement
-        _moveVelocity.addScaledVector(_right, _moveDirection.x);   // Apply strafe movement
+        // Get input direction relative to player (W=1, S=-1 -> Z) (D=1, A=-1 -> X)
+        _moveDirection.set(this.moveState.right, 0, this.moveState.forward);
+        // Normalize _moveDirection to prevent faster diagonal movement
+        _moveDirection.normalize();
 
-        // Apply speed if moving
-        if (_moveDirection.lengthSq() > 0) { // Only apply speed if there's input
+        // Calculate world-space movement velocity
+        _moveVelocity.set(0,0,0); // Reset calculation vector
+
+        // Add movement along player's forward/backward axis
+        // _moveDirection.z is 1 for W, -1 for S. _forward now points visually forward.
+        _moveVelocity.addScaledVector(_forward, _moveDirection.z);
+
+        // Add movement along player's right/left axis
+        // _moveDirection.x is 1 for D, -1 for A
+        _moveVelocity.addScaledVector(_right, _moveDirection.x);
+
+        // Apply speed if there was any input
+        // Normalize the final velocity vector before scaling by speed
+        if (_moveDirection.lengthSq() > 0) { // Check if there was input (W/A/S/D)
             _moveVelocity.normalize().multiplyScalar(currentSpeed);
+        } else {
+            _moveVelocity.set(0,0,0); // Ensure velocity is zero if no input
         }
 
-        // Update actual velocity (only X and Z components)
+        // Update the entity's actual velocity X and Z components
         this.velocity.x = _moveVelocity.x;
         this.velocity.z = _moveVelocity.z;
 
-        // Handle Jump - check if jump key was pressed *this frame*
+        // Handle Jump
         if (this.moveState.jump && this.canJump && this.stamina >= this.staminaJumpCost) {
              this.velocity.y = this.jumpForce;
              this.stamina -= this.staminaJumpCost;
-             this.canJump = false; // Prevent double jump until grounded again
-             this.isOnGround = false; // Player leaves the ground
-             if(this.isExhausted && this.stamina <= 0) { // Check if jump made player exhausted
+             this.canJump = false;
+             this.isOnGround = false;
+             if(this.isExhausted && this.stamina <= 0) {
                  if(this.eventLog) this.eventLog.addEntry("You are exhausted!");
              }
         }
-        // Note: this.moveState.jump is reset in the main update loop after processing
+        // Note: this.moveState.jump is reset at the end of the main update loop
     }
 
     applyGravity(deltaTime) {
-        // Apply gravity acceleration if not on ground OR if moving upwards (jumping)
         if (!this.isOnGround || this.velocity.y > 0) {
             this.velocity.y += this.gravity * deltaTime;
         }
-        // Do not zero out velocity.y here; checkGround handles that on landing.
     }
 
-    /**
-     * Checks for ground below the player and updates physics state.
-     * Snaps player to ground if necessary.
-     * This is called *before* vertical velocity is applied for the frame.
-     */
     checkGround(collidables) {
-        // Raycast origin slightly above the player's base (feet position Y=0 in local coords)
         _groundCheckOrigin.copy(this.mesh.position);
-        _groundCheckOrigin.y += 0.1; // Start ray just above the base
-
-        // Cast ray down a short distance + allowed step height
-        const rayLength = 0.2 + this.groundCheckDistance; // Total check distance downwards (~0.35m)
-
+        _groundCheckOrigin.y += 0.1; // Start ray slightly above player base
+        const rayLength = 0.1 + this.groundCheckDistance; // Adjusted to match origin offset
         const raycaster = new THREE.Raycaster(_groundCheckOrigin, _groundCheckDirection, 0, rayLength);
-
-        // --- Check against collidable objects, prioritizing terrain ---
         const checkAgainst = collidables.filter(obj => obj !== this.mesh && obj.userData.isCollidable);
-        const intersects = raycaster.intersectObjects(checkAgainst, true); // Recursive check
+        const intersects = raycaster.intersectObjects(checkAgainst, true);
 
         let foundGround = false;
-        let groundY = -Infinity; // Track the highest ground point found
-
+        let groundY = -Infinity;
         if (intersects.length > 0) {
-            // Find the highest intersection point within the ray length
+            // Find the highest intersection point that's meaningfully below the ray origin
             for (const intersect of intersects) {
-                // Ensure we didn't hit something inside the player model start offset
-                if(intersect.distance > 0.01) {
+                // Check distance to avoid floating point issues with ground directly under origin
+                if (intersect.distance > 0.01) {
                     groundY = Math.max(groundY, intersect.point.y);
-                    foundGround = true; // Mark ground found if any valid hit
+                    foundGround = true;
                 }
             }
         }
 
-        // --- Process Ground Detection ---
         if (foundGround) {
             const playerBaseY = this.mesh.position.y;
-
-            // If the player's base is below or very close to the highest detected ground point
-            if (playerBaseY <= groundY + this.groundCheckDistance) {
-                // Snap player base exactly to the ground
+            // Snap to ground if player is very close to or slightly below the detected ground level
+            // and falling or standing still vertically.
+            if (playerBaseY <= groundY + this.groundCheckDistance && this.velocity.y <= 0) {
                 this.mesh.position.y = groundY;
-                // Stop downward velocity ONLY if currently moving down or not moving vertically
-                if (this.velocity.y <= 0) {
-                    this.velocity.y = 0;
-                }
-                // Update state: We are now grounded
+                this.velocity.y = 0;
                 this.isOnGround = true;
                 this.canJump = true;
             } else {
-                // Ground is detected below, but we are too high above it to be considered 'on' it yet.
+                // Player is above ground (e.g., jumping up, falling but still high)
                 this.isOnGround = false;
                 this.canJump = false;
             }
         } else {
-            // No ground detected within the ray length.
+            // No ground detected within range
             this.isOnGround = false;
             this.canJump = false;
         }
@@ -331,9 +287,8 @@ export class Player extends Entity {
 
 
     handleFallDamage(fallSpeed) {
-        const damageThreshold = 10.0; // Speed below which no damage occurs
-        const damageFactor = 4.0;     // How much damage per unit speed above threshold
-
+        const damageThreshold = 10.0;
+        const damageFactor = 4.0;
         if (fallSpeed > damageThreshold) {
             const damage = Math.round((fallSpeed - damageThreshold) * damageFactor);
             if(damage > 0) {
@@ -344,27 +299,20 @@ export class Player extends Entity {
     }
 
     animateMovement(deltaTime) {
-        // Simple arm/leg swing based on movement speed
         const speedRatio = new THREE.Vector3(this.velocity.x, 0, this.velocity.z).length() / (this.isSprinting ? this.runSpeed : this.walkSpeed);
-        const bobFrequency = this.isSprinting ? 14 : 8; // Faster swing when running
-        const bobAmplitude = 0.8; // Max swing angle in radians
+        const bobFrequency = this.isSprinting ? 14 : 8;
+        const bobAmplitude = 0.8;
 
-        if (speedRatio > 0.1) { // Only animate when moving significantly
-            const time = performance.now() * 0.001; // Use global time
+        if (speedRatio > 0.1 && this.isOnGround) { // Only animate legs/arms when moving on ground
+            const time = performance.now() * 0.001;
             const phase = time * bobFrequency;
-
-            // Oscillate arms and legs using sine wave
-            const angle = Math.sin(phase) * bobAmplitude * speedRatio; // Scale swing by speed
-
-            // Apply rotation relative to their origin (shoulder/hip)
+            const angle = Math.sin(phase) * bobAmplitude * speedRatio;
             if (this.rightArm) this.rightArm.rotation.x = angle;
             if (this.leftArm) this.leftArm.rotation.x = -angle;
-            if (this.rightLeg) this.rightLeg.rotation.x = -angle * 0.8; // Legs swing less than arms
+            if (this.rightLeg) this.rightLeg.rotation.x = -angle * 0.8;
             if (this.leftLeg) this.leftLeg.rotation.x = angle * 0.8;
-
         } else {
-            // Return to resting position smoothly using lerp
-             const restLerpFactor = 1.0 - Math.pow(0.01, deltaTime); // Adjust 0.01 for return speed
+             const restLerpFactor = 1.0 - Math.pow(0.01, deltaTime); // Smooth return to rest
              if (this.rightArm) this.rightArm.rotation.x = THREE.MathUtils.lerp(this.rightArm.rotation.x, 0, restLerpFactor);
              if (this.leftArm) this.leftArm.rotation.x = THREE.MathUtils.lerp(this.leftArm.rotation.x, 0, restLerpFactor);
              if (this.rightLeg) this.rightLeg.rotation.x = THREE.MathUtils.lerp(this.rightLeg.rotation.x, 0, restLerpFactor);
@@ -372,38 +320,35 @@ export class Player extends Entity {
         }
     }
 
-    // Override die for player specific logic
     die() {
         if(this.isDead) return;
-        super.die(); // Sets isDead flag, stops velocity
+        super.die();
         console.log("Player has died.");
         if(this.eventLog) this.eventLog.addEntry("You have died!");
-        // The Game class update loop will detect isDead and trigger respawn
+        // Consider adding logic to disable controls or trigger respawn sequence
     }
 
      respawn(position) {
         this.setPosition(position);
-        this.health = this.maxHealth * 0.75; // Respawn with 75% health
+        this.health = this.maxHealth * 0.75;
         this.stamina = this.maxStamina;
         this.velocity.set(0, 0, 0);
         this.isDead = false;
         this.isExhausted = false;
-        this.isOnGround = false; // Force ground check on respawn
-        this.canJump = false;
+        this.isOnGround = false; // Reset ground state
+        this.canJump = false;    // Reset jump state
         this.lastVelocityY = 0;
         console.log("Player respawned.");
         if(this.eventLog) this.eventLog.addEntry("You feel slightly disoriented but alive.");
+        this.updateBoundingBox(); // Ensure bounding box is correct at new position
     }
 
-    // Override updateBoundingBox for player specifically
     updateBoundingBox() {
-        // Use a simplified capsule/box approximation for the player collision
-        // Ensure the center reflects the model's position relative to the group origin
+        // Center the bounding box based on the mesh position and defined height/radius
         const center = this.mesh.position.clone();
-        center.y += PLAYER_HEIGHT / 2; // Center the box vertically based on feet origin at Y=0
+        center.y += PLAYER_HEIGHT / 2; // Assuming mesh position is at the base
         const size = new THREE.Vector3(PLAYER_RADIUS * 2, PLAYER_HEIGHT, PLAYER_RADIUS * 2);
         this.boundingBox.setFromCenterAndSize(center, size);
-        // Ensure the userData reference is updated for the physics system
-        this.mesh.userData.boundingBox = this.boundingBox;
+        this.mesh.userData.boundingBox = this.boundingBox; // Keep reference accessible if needed elsewhere
     }
 }
