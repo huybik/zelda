@@ -46,7 +46,7 @@ export class Controls {
         document.addEventListener('mousemove', this.onMouseMove, false);
 
         // Request Pointer Lock on click of the DOM element (usually the canvas container)
-        this.domElement.addEventListener('click', this.onClick, false);
+        document.addEventListener('click', this.onClick, false);
 
         // Listen for pointer lock status changes
         document.addEventListener('pointerlockchange', this.onPointerLockChange, false);
