@@ -21,7 +21,7 @@ export class Animal extends Entity {
         this.worldSize = worldSize; // To know boundaries for wandering
         this.isOnGround = false; // Physics state
         this.groundCheckTimer = Math.random(); // Initialize timer randomly to stagger checks
-        this.groundCheckInterval = 0.2 + Math.random() * 0.2; // Check every 0.2-0.4 seconds
+        this.groundCheckInterval = 0.15 + Math.random() * 0.1; // Check more frequently (0.15-0.25s)
 
         // Behavior states
         this.state = 'wandering'; // 'wandering', 'fleeing', 'idle', 'attacking' (for wolf)
@@ -58,7 +58,7 @@ export class Animal extends Entity {
                  this.attackDamage = 8;
                  this.attackCooldown = 2.0; // Seconds between attacks
                  this.lastAttackTime = -Infinity; // Initialize to allow immediate attack if relevant
-                 this.userData.isHostile = true; // Flag for minimap or other systems
+                 this.userData.isHostile = false; // Start non-hostile until player detected
                  break;
              case 'Rabbit':
                   this.userData.isInteractable = false;
@@ -84,7 +84,7 @@ export class Animal extends Entity {
 
         let bodyGeo, headGeo, bodyHeight, bodyDepth, headDepth = 0.4; // Defaults
         const limbRadius = 0.1;
-        const limbLength = 0.6;
+        const limbLength = 0.6; // Assuming legs are this long
 
         switch (this.type) {
             case 'Deer':
@@ -110,8 +110,8 @@ export class Animal extends Entity {
                 tailMesh.position.set(0, 0.1, -bodyDepth/2 - 0.05); // Attach to back of body (use variable)
                 tailMesh.rotation.x = -0.5;
                 tailMesh.castShadow = true;
-                this.mesh.add(tailMesh); // Add tail directly to group
-                break;
+                // Add tail relative to body position later
+                break; // Tail added after main body
 
             case 'Rabbit':
                  bodyColor = 0xF5F5DC; // Beige
@@ -135,7 +135,8 @@ export class Animal extends Entity {
 
         // Body
         const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
-        bodyMesh.position.y = limbLength + bodyHeight / 2; // Body sits on top of legs
+        // Position body so its bottom is at limbLength height from the group origin (Y=0)
+        bodyMesh.position.y = limbLength + bodyHeight / 2;
         bodyMesh.castShadow = true;
         bodyMesh.receiveShadow = true; // Animals can receive shadows too
         this.mesh.add(bodyMesh);
@@ -150,7 +151,19 @@ export class Animal extends Entity {
         this.mesh.add(headMesh);
         this.headMesh = headMesh; // Store reference for head bobbing
         // Store original local position relative to the group for animation reset
-        this.headMesh.userData.originalY = headMesh.position.y;
+        headMesh.userData.originalY = headMesh.position.y; // Use headMesh ref
+
+
+        // Add Wolf Tail relative to body position
+        if (this.type === 'Wolf') {
+            const tailMesh = this.mesh.children.find(c => c.geometry instanceof THREE.BoxGeometry && c.geometry.parameters.width === 0.1); // Find the previously created tail
+            if (tailMesh) {
+                tailMesh.position.y += bodyMesh.position.y; // Adjust Y based on body position
+                tailMesh.position.z += bodyMesh.position.z; // Adjust Z based on body position
+                // Re-add? No, it should already be in the group. Just adjust its position.
+            }
+        }
+
 
         // Add type-specific parts *after* head is created and added to group
          if (this.type === 'Deer') {
@@ -160,8 +173,7 @@ export class Animal extends Entity {
              const antlerR = new THREE.Mesh(antlerGeo, antlerMat);
              antlerL.castShadow = true;
              antlerR.castShadow = true;
-             // Position relative to head mesh's local position
-             // Note: Adding these directly to this.mesh means their position includes the head's offset
+             // Position relative to head mesh's local position within the group
              antlerL.position.set(-0.15, 0.2, -0.2).add(headMesh.position);
              antlerR.position.set(0.15, 0.2, -0.2).add(headMesh.position);
              antlerL.rotation.z = 0.5;
@@ -175,7 +187,8 @@ export class Animal extends Entity {
              const earR = new THREE.Mesh(earGeo, earMat);
              earL.castShadow = true;
              earR.castShadow = true;
-             earL.position.set(-0.05, 0.15, -0.05).add(headMesh.position); // Use head position as origin
+             // Position relative to head mesh's local position within the group
+             earL.position.set(-0.05, 0.15, -0.05).add(headMesh.position);
              earR.position.set(0.05, 0.15, -0.05).add(headMesh.position);
              earL.rotation.z = 0.2;
              earR.rotation.z = -0.2;
@@ -185,22 +198,28 @@ export class Animal extends Entity {
 
 
         // Legs (Simple Cylinders/Boxes)
+        // Position legs relative to body corners and extending downwards
+        const legOffsetX = bodyGeo.parameters.width / 2 - limbRadius;
+        const legOffsetZ = bodyGeo.parameters.depth / 2 - limbRadius;
         const legPositions = [
-            new THREE.Vector3(bodyGeo.parameters.width / 2 - limbRadius, limbLength / 2, bodyDepth / 2 - limbRadius), // Front Right
-            new THREE.Vector3(-bodyGeo.parameters.width / 2 + limbRadius, limbLength / 2, bodyDepth / 2 - limbRadius), // Front Left
-            new THREE.Vector3(bodyGeo.parameters.width / 2 - limbRadius, limbLength / 2, -bodyDepth / 2 + limbRadius), // Back Right
-            new THREE.Vector3(-bodyGeo.parameters.width / 2 + limbRadius, limbLength / 2, -bodyDepth / 2 + limbRadius) // Back Left
+            new THREE.Vector3(legOffsetX, bodyMesh.position.y - bodyHeight / 2, legOffsetZ), // Front Right Hip
+            new THREE.Vector3(-legOffsetX, bodyMesh.position.y - bodyHeight / 2, legOffsetZ), // Front Left Hip
+            new THREE.Vector3(legOffsetX, bodyMesh.position.y - bodyHeight / 2, -legOffsetZ), // Back Right Hip
+            new THREE.Vector3(-legOffsetX, bodyMesh.position.y - bodyHeight / 2, -legOffsetZ) // Back Left Hip
         ];
 
         legPositions.forEach(pos => {
             const legGeo = new THREE.CylinderGeometry(limbRadius, limbRadius * 0.9, limbLength, 6);
+            // Translate geometry so origin is at the TOP (hip)
+            legGeo.translate(0, -limbLength / 2, 0);
             const legMesh = new THREE.Mesh(legGeo, limbMat);
-            legMesh.position.copy(pos);
+            legMesh.position.copy(pos); // Position the top of the leg at the hip position
             legMesh.castShadow = true;
             this.mesh.add(legMesh);
         });
 
-        this.mesh.userData.height = limbLength + bodyHeight; // Approx height for bounding box
+        // Total height approx from ground (Y=0) to top of head
+        this.mesh.userData.height = limbLength + bodyHeight + headMesh.geometry.parameters.radius * 2;
         this.mesh.userData.width = bodyGeo.parameters.width;
         this.mesh.userData.depth = bodyGeo.parameters.depth;
     }
@@ -235,16 +254,13 @@ export class Animal extends Entity {
     update(deltaTime, player, collidables) {
         if (this.isDead) return;
 
-        // Basic entity update (not much in base class currently)
-        // super.update(deltaTime);
-
         const distanceToPlayer = this.mesh.position.distanceTo(player.mesh.position);
         if(this.stateTimer > 0) this.stateTimer -= deltaTime;
 
          // --- State Machine Logic ---
          switch (this.state) {
              case 'idle':
-                 this.velocity.set(0, 0, 0);
+                 this.velocity.set(0, this.velocity.y, 0); // Keep Y velocity for gravity
                  // Transition conditions
                  if (this.stateTimer <= 0) {
                       this.findNewWanderTarget();
@@ -270,7 +286,8 @@ export class Animal extends Entity {
                      if (Math.random() < 0.3) { // 30% chance to go idle
                          this.state = 'idle';
                          this.stateTimer = 2 + Math.random() * 3; // Idle for 2-5 seconds
-                         this.velocity.set(0,0,0);
+                         this.velocity.x = 0;
+                         this.velocity.z = 0;
                      } else {
                           this.findNewWanderTarget();
                           // Update direction towards new target immediately
@@ -280,12 +297,14 @@ export class Animal extends Entity {
                      _direction.normalize();
                  }
 
-                 // Only move if state is still wandering after potential target update
+                 // Only set horizontal velocity if state is still wandering after potential target update
                  if(this.state === 'wandering') {
-                    this.velocity.set(_direction.x * this.speed, this.velocity.y, _direction.z * this.speed);
+                    this.velocity.x = _direction.x * this.speed;
+                    this.velocity.z = _direction.z * this.speed;
                      // Look in the direction of movement if moving significantly
                      if (_direction.lengthSq() > 0.01) {
                          _lookTarget.copy(this.mesh.position).add(_direction);
+                         _lookTarget.y = this.mesh.position.y; // Look horizontally
                          this.mesh.lookAt(_lookTarget);
                      }
                  }
@@ -304,11 +323,19 @@ export class Animal extends Entity {
                  // Run away from the player
                  _fleeDirection.copy(this.mesh.position).sub(player.mesh.position);
                  _fleeDirection.y = 0;
-                 _fleeDirection.normalize();
-                 this.velocity.set(_fleeDirection.x * this.speed * 1.5, this.velocity.y, _fleeDirection.z * this.speed * 1.5); // Flee faster
+                 if (_fleeDirection.lengthSq() > 0.001) { // Avoid normalize(0,0,0)
+                    _fleeDirection.normalize();
+                    this.velocity.x = _fleeDirection.x * this.speed * 1.5; // Flee faster
+                    this.velocity.z = _fleeDirection.z * this.speed * 1.5;
 
-                 _fleeLookTarget.copy(this.mesh.position).add(_fleeDirection);
-                 this.mesh.lookAt(_fleeLookTarget);
+                    _fleeLookTarget.copy(this.mesh.position).add(_fleeDirection);
+                    _fleeLookTarget.y = this.mesh.position.y; // Look horizontally
+                    this.mesh.lookAt(_fleeLookTarget);
+                 } else {
+                    // If player is exactly at animal position, maybe move randomly?
+                    this.velocity.x = (Math.random() - 0.5) * this.speed;
+                    this.velocity.z = (Math.random() - 0.5) * this.speed;
+                 }
 
                  // If player is far enough away, return to wandering
                  if (distanceToPlayer > 20) {
@@ -323,7 +350,8 @@ export class Animal extends Entity {
                       this.state = 'idle';
                       this.userData.isHostile = false; // No longer hostile when idle
                       this.stateTimer = 1.0 + Math.random();
-                      this.velocity.set(0,0,0);
+                      this.velocity.x = 0;
+                      this.velocity.z = 0;
                       break;
                  }
 
@@ -340,10 +368,12 @@ export class Animal extends Entity {
                  if (distanceToAttackTarget > this.attackRange) {
                      // Move towards player
                      _attackDirection.normalize();
-                     this.velocity.set(_attackDirection.x * this.speed, this.velocity.y, _attackDirection.z * this.speed);
+                     this.velocity.x = _attackDirection.x * this.speed;
+                     this.velocity.z = _attackDirection.z * this.speed;
                  } else {
                      // Close enough to attack
-                     this.velocity.set(0, 0, 0); // Stop moving to attack
+                     this.velocity.x = 0; // Stop moving to attack
+                     this.velocity.z = 0;
                      // Use performance.now() for time, more reliable than potentially missing scene.userData.gameTime
                      const time = performance.now() / 1000;
                      if (time > this.lastAttackTime + this.attackCooldown) {
@@ -358,14 +388,17 @@ export class Animal extends Entity {
                  break;
          }
 
-        // --- Apply movement and gravity ---
-        this.applyGravity(deltaTime, collidables);
+        // --- Apply gravity and check ground ---
+        this.applyGravityAndGroundCheck(deltaTime, collidables);
+
+        // --- Apply final velocity ---
         this.mesh.position.addScaledVector(this.velocity, deltaTime);
 
         // --- Keep within world bounds ---
         const halfSize = this.worldSize / 2 - 1; // Stay 1 unit from edge
         this.mesh.position.x = THREE.MathUtils.clamp(this.mesh.position.x, -halfSize, halfSize);
         this.mesh.position.z = THREE.MathUtils.clamp(this.mesh.position.z, -halfSize, halfSize);
+        // Y position is handled by ground check/clamp
 
         // --- Animation ---
         this.animate(deltaTime);
@@ -373,47 +406,79 @@ export class Animal extends Entity {
         this.updateBoundingBox(); // Update bounds after movement
     }
 
-    applyGravity(deltaTime, collidables) {
-        // Update timer
+
+    /**
+     * Applies gravity and performs ground checking/snapping.
+     * Modifies velocity.y and potentially mesh.position.y.
+     */
+    applyGravityAndGroundCheck(deltaTime, collidables) {
+        // --- Apply Gravity ---
+        // Apply gravity if airborne or moving upwards
+        if (!this.isOnGround || this.velocity.y > 0) {
+            this.velocity.y += -15 * deltaTime; // Gravity constant (adjust as needed)
+        }
+
+        // --- Ground Check (Scheduled) ---
         this.groundCheckTimer -= deltaTime;
-        let performGroundCheck = this.groundCheckTimer <= 0;
+        if (this.groundCheckTimer <= 0) {
+            this.groundCheckTimer = this.groundCheckInterval; // Reset timer
 
-        if (!this.isOnGround || performGroundCheck) {
-            // Apply gravity if airborne or checking this frame
-            this.velocity.y += -15 * deltaTime; // Gravity constant
+            // Raycast origin slightly above feet (assuming origin Y=0 is feet level)
+            _origin.copy(this.mesh.position).add(new THREE.Vector3(0, 0.1, 0)); // Ray origin 10cm above base
+            const raycaster = new THREE.Raycaster(_origin, _rayDirection, 0, 0.5); // Short ray down (0.5m)
 
-            if (performGroundCheck) {
-                this.groundCheckTimer = this.groundCheckInterval; // Reset timer
+            // Check against terrain and other collidables
+            const checkAgainst = collidables.filter(obj => obj !== this.mesh && obj.userData.isCollidable);
+            const intersects = raycaster.intersectObjects(checkAgainst, true); // Recursive check
 
-                // Raycast origin slightly above feet
-                _origin.copy(this.mesh.position).add(new THREE.Vector3(0, 0.2, 0)); // Ray origin closer to feet
-                const raycaster = new THREE.Raycaster(_origin, _rayDirection, 0, 0.5); // Short ray down (0.5m)
+            let foundGround = false;
+            let groundY = -Infinity;
 
-                // Check against terrain and other collidables
-                const checkAgainst = collidables.filter(obj => obj !== this.mesh && obj.userData.isCollidable);
-                const intersects = raycaster.intersectObjects(checkAgainst, true); // Recursive check
+            if (intersects.length > 0) {
+                 // Find highest valid intersection point
+                 for (const intersect of intersects) {
+                     if (intersect.distance > 0.01) { // Ignore self-intersections
+                        groundY = Math.max(groundY, intersect.point.y);
+                        foundGround = true;
+                     }
+                 }
+            }
 
-                if (intersects.length > 0) {
-                    const groundY = intersects[0].point.y;
-                    // Snap or smoothly adjust Y position if very close or below ground
-                    if (this.mesh.position.y <= groundY + 0.1) {
-                        this.mesh.position.y = groundY;
+            // --- Process Ground Detection ---
+            if (foundGround) {
+                const snapThreshold = 0.2; // How close to ground to snap
+                // If entity base is below or within threshold of ground
+                if (this.mesh.position.y <= groundY + snapThreshold) {
+                    this.mesh.position.y = groundY; // Snap to ground
+                    // Only zero out downward velocity if landing or resting
+                    if(this.velocity.y <= 0) {
                         this.velocity.y = 0;
-                        this.isOnGround = true;
-                    } else {
-                         this.isOnGround = false; // Still falling
                     }
+                    this.isOnGround = true;
                 } else {
-                    // In air
+                    // Ground detected, but too far below
                     this.isOnGround = false;
                 }
+            } else {
+                // No ground detected
+                this.isOnGround = false;
             }
         }
-         // Simple ground clamp if we know we were on ground last check and haven't jumped/fallen
-          else if (this.isOnGround && this.velocity.y <= 0) {
-               this.velocity.y = 0;
-          }
+        // --- End Scheduled Ground Check ---
+
+        // Safety clamp: If despite checks, we end up slightly below ground after velocity application, force snap
+        // This check runs every frame, unlike the raycast.
+        // We need a reliable groundY reference. Use the last known one? Risky.
+        // Alternative: Rely on the physics system push-out? Player physics does that.
+        // Let's trust the periodic raycast and snapping for now. If issues persist, add a constant safety clamp here.
+        /*
+        if (this.isOnGround && this.mesh.position.y < some_reliable_ground_y) {
+            this.mesh.position.y = some_reliable_ground_y;
+            if (this.velocity.y < 0) this.velocity.y = 0;
+        }
+        */
     }
+
 
     findNewWanderTarget() {
         const wanderDistance = 10 + Math.random() * 15; // 10m to 25m
@@ -441,11 +506,17 @@ export class Animal extends Entity {
              // Adjust head Y position based on sine wave
              const headBobY = Math.sin(time * bobFrequency) * bobAmplitude;
              // Make sure original Y is defined
-             if (this.headMesh.userData.originalY === undefined) {
+             if (this.headMesh.userData.originalY === undefined && this.headMesh.parent) {
+                  // If missing, recalculate from current local position
+                  // This assumes the headMesh is directly added to this.mesh (the group)
                   this.headMesh.userData.originalY = this.headMesh.position.y;
              }
-             // Apply bobbing relative to the original local Y position
-             this.headMesh.position.y = this.headMesh.userData.originalY + headBobY;
+
+             // Apply bobbing relative to the original local Y position IF originalY is defined
+             if (this.headMesh.userData.originalY !== undefined) {
+                this.headMesh.position.y = this.headMesh.userData.originalY + headBobY;
+             }
+
 
             // TODO: Could add leg animations similar to player if needed
         } else if (this.headMesh && this.headMesh.userData.originalY !== undefined) {
@@ -470,6 +541,8 @@ export class Animal extends Entity {
              if (this.mesh) { // Check if mesh still exists
                  this.mesh.rotation.z = Math.PI / 2 * (Math.random() > 0.5 ? 1 : -1);
                  this.mesh.rotation.x = (Math.random() - 0.5) * 0.5;
+                 // Ensure Y position is maintained after rotation if it was grounded
+                 this.applyGravityAndGroundCheck(0.1, []); // Force ground check after rotation? Risky.
              }
          }, 100); // Apply rotation shortly after death
 
@@ -482,13 +555,14 @@ export class Animal extends Entity {
 
      // Override updateBoundingBox for animal specific size
      updateBoundingBox() {
-         const height = this.mesh.userData.height || 1.0;
          // Use dimensions stored during creation if available
+         const height = this.mesh.userData.height || 1.0;
          const width = this.mesh.userData.width || ((this.type === 'Deer' || this.type === 'Wolf') ? 1.2 : 0.5);
          const depth = this.mesh.userData.depth || ((this.type === 'Deer' || this.type === 'Wolf') ? 0.6 : 0.4);
 
+         // Center the box vertically based on group origin (Y=0) and calculated height
          const center = this.mesh.position.clone();
-         center.y += height / 2; // Center the box vertically
+         center.y += height / 2; // Assuming model base is at Y=0 relative to group
          const size = new THREE.Vector3(width, height, depth);
          this.boundingBox.setFromCenterAndSize(center, size);
          // Store on userData for physics system

@@ -45,7 +45,7 @@ export class Player extends Entity {
         // Physics related
         this.gravity = -25; // Acceleration due to gravity
         this.isOnGround = false;
-        this.groundCheckDistance = 0.15; // How far below the player base to check for ground (increased slightly)
+        this.groundCheckDistance = 0.15; // How far below the player base to check for ground
         this.lastVelocityY = 0; // To detect landing
 
         // Player Model (Simple Blocky Humanoid)
@@ -68,11 +68,18 @@ export class Player extends Entity {
         const headMat = new THREE.MeshLambertMaterial({ color: 0xffdab9 }); // Beige head
         const limbMat = bodyMat; // Same color limbs for simplicity
 
+        // --- Define limb dimensions FIRST ---
+        const limbRadius = 0.15;
+        const armLength = 0.8;
+        const legLength = 0.9; // Total leg length
+
         // Body
         const bodyHeight = 1.0;
         const bodyGeo = new THREE.BoxGeometry(0.8, bodyHeight, 0.5);
         const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
-        bodyMesh.position.y = 0.7 + (bodyHeight / 2) - 0.5; // Adjust position based on actual height if needed, aiming for feet at 0
+        // Adjust position so model 'feet' are near Y=0 origin of the Player group/mesh
+        // NOW legLength is defined before use
+        bodyMesh.position.y = legLength / 2 + bodyHeight / 2; // Relative to group origin
         bodyMesh.castShadow = true;
         bodyMesh.receiveShadow = true; // Player can receive shadows
         this.mesh.add(bodyMesh);
@@ -86,17 +93,15 @@ export class Player extends Entity {
         headMesh.castShadow = true;
         this.mesh.add(headMesh);
 
-        // Simple Limbs (Cylinders) - could be animated later
-        const limbRadius = 0.15;
-        const armLength = 0.8;
-        const legLength = 0.9; // Total leg length
+        // Simple Limbs (Cylinders)
 
         // Left Arm
         const leftArmGeo = new THREE.CylinderGeometry(limbRadius, limbRadius*0.9, armLength, 8);
         this.leftArm = new THREE.Mesh(leftArmGeo, limbMat);
         // Position arm relative to body center, slightly forward
         this.leftArm.position.set(-0.5, bodyMesh.position.y + 0.2, 0.1);
-        this.leftArm.geometry.translate(0, -armLength / 2, 0); // Set origin to shoulder
+        // Set origin to shoulder - Translate geometry *before* adding to parent mesh
+        leftArmGeo.translate(0, -armLength / 2, 0);
         this.leftArm.castShadow = true;
         this.mesh.add(this.leftArm);
 
@@ -104,7 +109,8 @@ export class Player extends Entity {
         const rightArmGeo = new THREE.CylinderGeometry(limbRadius, limbRadius*0.9, armLength, 8);
         this.rightArm = new THREE.Mesh(rightArmGeo, limbMat);
         this.rightArm.position.set(0.5, bodyMesh.position.y + 0.2, 0.1);
-        this.rightArm.geometry.translate(0, -armLength / 2, 0); // Set origin to shoulder
+        // Set origin to shoulder
+        rightArmGeo.translate(0, -armLength / 2, 0);
         this.rightArm.castShadow = true;
         this.mesh.add(this.rightArm);
 
@@ -113,7 +119,8 @@ export class Player extends Entity {
         this.leftLeg = new THREE.Mesh(leftLegGeo, limbMat);
         // Position leg relative to body bottom
         this.leftLeg.position.set(-0.2, bodyMesh.position.y - bodyHeight/2, 0);
-        this.leftLeg.geometry.translate(0, -legLength / 2, 0); // Set origin to hip
+        // Set origin to hip
+        leftLegGeo.translate(0, -legLength / 2, 0);
         this.leftLeg.castShadow = true;
         this.mesh.add(this.leftLeg);
 
@@ -121,7 +128,8 @@ export class Player extends Entity {
         const rightLegGeo = new THREE.CylinderGeometry(limbRadius, limbRadius * 1.1, legLength, 8);
         this.rightLeg = new THREE.Mesh(rightLegGeo, limbMat);
         this.rightLeg.position.set(0.2, bodyMesh.position.y - bodyHeight/2, 0);
-        this.rightLeg.geometry.translate(0, -legLength / 2, 0); // Set origin to hip
+        // Set origin to hip
+        rightLegGeo.translate(0, -legLength / 2, 0);
         this.rightLeg.castShadow = true;
         this.mesh.add(this.rightLeg);
 
@@ -142,15 +150,30 @@ export class Player extends Entity {
 
          this.handleStamina(deltaTime);
          this.handleMovement(deltaTime); // Calculates horizontal velocity based on input/state
-         this.applyGravity(deltaTime); // Modifies vertical velocity
 
-         // Apply calculated velocity to position
+         // --- Physics Update Order ---
+         // 1. Apply Gravity acceleration to velocity.y
+         this.applyGravity(deltaTime);
+
+         // 2. Apply calculated velocity to position
+         // Only apply X/Z velocity initially. Y velocity application moved after ground check.
          this.mesh.position.x += this.velocity.x * deltaTime;
-         this.mesh.position.y += this.velocity.y * deltaTime;
+         // this.mesh.position.y += this.velocity.y * deltaTime; // Moved below
          this.mesh.position.z += this.velocity.z * deltaTime;
 
-         // Check ground *after* potential vertical movement
+         // 3. Check for ground collision at the *new* XZ position, *before* applying Y velocity
+         // This allows snapping to ground before potentially falling through
          this.checkGround(collidables);
+
+         // 4. Apply Y velocity *after* ground check and potential snapping
+         // If snapped, velocity.y should be 0. If airborne, gravity has affected velocity.y.
+         this.mesh.position.y += this.velocity.y * deltaTime;
+
+         // 5. Final ground check/clamp (optional but can prevent sinking in edge cases)
+         // Let's rely on the updated checkGround for now.
+
+         // --- End Physics Update Order ---
+
 
          // Detect landing after fall/jump
          if (this.isOnGround && !wasOnGround && this.lastVelocityY < -1.0) {
@@ -158,16 +181,14 @@ export class Player extends Entity {
          }
          this.lastVelocityY = this.velocity.y; // Store velocity for next frame's landing check
 
-         // Collision response is handled by the Physics system *after* this update,
+         // Collision response with other objects is handled by the Physics system *after* this update,
          // potentially adjusting the mesh position again.
 
          // Apply simple walking animation
          this.animateMovement(deltaTime);
 
          // Update bounding box *after* all position changes for this frame
-         // (including potential physics push-out in the next step of the game loop)
-         // It's often better to update BB *before* collision checks in the physics system.
-         // Let's update it here, assuming physics system uses this updated box.
+         // Physics system will use this updated box for push-out checks.
          this.updateBoundingBox();
 
          // Reset jump request only after checking it in handleMovement
@@ -218,8 +239,10 @@ export class Player extends Entity {
         _moveVelocity.addScaledVector(_forward, _moveDirection.z); // Apply forward/backward movement
         _moveVelocity.addScaledVector(_right, _moveDirection.x);   // Apply strafe movement
 
-        // Apply speed
-        _moveVelocity.normalize().multiplyScalar(currentSpeed);
+        // Apply speed if moving
+        if (_moveDirection.lengthSq() > 0) { // Only apply speed if there's input
+            _moveVelocity.normalize().multiplyScalar(currentSpeed);
+        }
 
         // Update actual velocity (only X and Z components)
         this.velocity.x = _moveVelocity.x;
@@ -239,58 +262,73 @@ export class Player extends Entity {
     }
 
     applyGravity(deltaTime) {
-        // Apply gravity acceleration if not on ground
-        if (!this.isOnGround) {
+        // Apply gravity acceleration if not on ground OR if moving upwards (jumping)
+        if (!this.isOnGround || this.velocity.y > 0) {
             this.velocity.y += this.gravity * deltaTime;
         }
-        // Prevent accumulating downward velocity when grounded (unless jumping)
-        // Velocity might be slightly negative due to ground check snapping, allow small tolerance
-        if (this.isOnGround && this.velocity.y < 0) {
-            this.velocity.y = 0;
+        // Do not zero out velocity.y here; checkGround handles that on landing.
+    }
+
+    /**
+     * Checks for ground below the player and updates physics state.
+     * Snaps player to ground if necessary.
+     * This is called *before* vertical velocity is applied for the frame.
+     */
+    checkGround(collidables) {
+        // Raycast origin slightly above the player's base (feet position Y=0 in local coords)
+        _groundCheckOrigin.copy(this.mesh.position);
+        _groundCheckOrigin.y += 0.1; // Start ray just above the base
+
+        // Cast ray down a short distance + allowed step height
+        const rayLength = 0.2 + this.groundCheckDistance; // Total check distance downwards (~0.35m)
+
+        const raycaster = new THREE.Raycaster(_groundCheckOrigin, _groundCheckDirection, 0, rayLength);
+
+        // --- Check against collidable objects, prioritizing terrain ---
+        const checkAgainst = collidables.filter(obj => obj !== this.mesh && obj.userData.isCollidable);
+        const intersects = raycaster.intersectObjects(checkAgainst, true); // Recursive check
+
+        let foundGround = false;
+        let groundY = -Infinity; // Track the highest ground point found
+
+        if (intersects.length > 0) {
+            // Find the highest intersection point within the ray length
+            for (const intersect of intersects) {
+                // Ensure we didn't hit something inside the player model start offset
+                if(intersect.distance > 0.01) {
+                    groundY = Math.max(groundY, intersect.point.y);
+                    foundGround = true; // Mark ground found if any valid hit
+                }
+            }
+        }
+
+        // --- Process Ground Detection ---
+        if (foundGround) {
+            const playerBaseY = this.mesh.position.y;
+
+            // If the player's base is below or very close to the highest detected ground point
+            if (playerBaseY <= groundY + this.groundCheckDistance) {
+                // Snap player base exactly to the ground
+                this.mesh.position.y = groundY;
+                // Stop downward velocity ONLY if currently moving down or not moving vertically
+                if (this.velocity.y <= 0) {
+                    this.velocity.y = 0;
+                }
+                // Update state: We are now grounded
+                this.isOnGround = true;
+                this.canJump = true;
+            } else {
+                // Ground is detected below, but we are too high above it to be considered 'on' it yet.
+                this.isOnGround = false;
+                this.canJump = false;
+            }
+        } else {
+            // No ground detected within the ray length.
+            this.isOnGround = false;
+            this.canJump = false;
         }
     }
 
-
-    checkGround(collidables) {
-     // Raycast origin slightly above the player's base (feet position)
-     _groundCheckOrigin.copy(this.mesh.position);
-     _groundCheckOrigin.y += 0.1; // Start ray just above the base
-
-     // Cast ray down a short distance + allowed step height
-     const rayLength = 0.2 + this.groundCheckDistance;
-
-     const raycaster = new THREE.Raycaster(_groundCheckOrigin, _groundCheckDirection, 0, rayLength);
-
-     const checkAgainst = collidables.filter(obj => obj !== this.mesh && obj.userData.isCollidable);
-     const intersects = raycaster.intersectObjects(checkAgainst, true); // Recursive check
-
-     let foundGround = false;
-     if (intersects.length > 0) {
-         const groundY = intersects[0].point.y;
-         const playerBaseY = this.mesh.position.y;
-
-         // Check if the intersection point is within the acceptable distance below the player's base
-         if (playerBaseY >= groundY && playerBaseY < groundY + this.groundCheckDistance) {
-             foundGround = true;
-             if (!this.isOnGround) { // Only snap/adjust velocity on first contact
-                 this.mesh.position.y = groundY; // Snap player base exactly to ground
-                 // Stop downward velocity only if landing or resting
-                 if (this.velocity.y <= 0) {
-                     this.velocity.y = 0;
-                 }
-                 // console.log(`Landed! Snapped to Y: ${groundY.toFixed(2)}`);
-             }
-             this.isOnGround = true;
-             this.canJump = true; // Allow jumping only when grounded
-         }
-     }
-
-    // If no ground detected within check distance, ensure flags are false
-    if (!foundGround) {
-        this.isOnGround = false;
-        this.canJump = false;
-    }
-}
 
     handleFallDamage(fallSpeed) {
         const damageThreshold = 10.0; // Speed below which no damage occurs
@@ -360,8 +398,9 @@ export class Player extends Entity {
     // Override updateBoundingBox for player specifically
     updateBoundingBox() {
         // Use a simplified capsule/box approximation for the player collision
+        // Ensure the center reflects the model's position relative to the group origin
         const center = this.mesh.position.clone();
-        center.y += PLAYER_HEIGHT / 2; // Center the box vertically based on feet origin
+        center.y += PLAYER_HEIGHT / 2; // Center the box vertically based on feet origin at Y=0
         const size = new THREE.Vector3(PLAYER_RADIUS * 2, PLAYER_HEIGHT, PLAYER_RADIUS * 2);
         this.boundingBox.setFromCenterAndSize(center, size);
         // Ensure the userData reference is updated for the physics system
