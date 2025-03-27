@@ -1,0 +1,29 @@
+{
+  "name": "zelda",
+  "version": "1.0.0",
+  "main": "index.js",
+   "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+    
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/huybik/zelda.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/huybik/zelda/issues"
+  },
+  "homepage": "https://github.com/huybik/zelda#readme",
+  "description": "",
+  "devDependencies": {
+    "three": "^0.174.0",
+    "vite": "^6.2.3"
+  }
+}
