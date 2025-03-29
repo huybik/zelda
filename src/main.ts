@@ -807,7 +807,7 @@ export class Inventory {
 
         this.itemMaxStack = {
             'default': 64, 'wood': 99, 'stone': 99, 'herb': 30, 'feather': 50,
-            'Health Potion': 10, 'gold': Infinity, 'Hunter\'s Bow': 1
+            'Health Potion': 10, 'gold': Infinity
         };
     }
 
@@ -1345,8 +1345,6 @@ export class InteractionSystem {
         else if (interactionType === 'gather' && targetInstance.userData.resource) {
             this.startGatherAction(targetInstance);
             result = { type: 'gather_start' };
-        } else if (interactionType === 'open' && targetInstance.userData.loot) {
-             result = this.handleOpenAction(targetInstance);
         } else {
             console.warn(`Unknown interaction type or missing interact method for ${targetName}:`, interactionType);
             result = { type: 'message', message: "You look at the object." };
@@ -1394,9 +1392,6 @@ export class InteractionSystem {
             case 'item_retrieved':
                  promptDuration = null;
                 break;
-            case 'open_result':
-                 if (result.message) promptText = result.message; promptDuration = 3000;
-                 break;
             case 'error':
                 if (result.message) {
                     this.eventLog?.addEntry(`Error: ${result.message}`); promptText = result.message;
@@ -1488,49 +1483,6 @@ export class InteractionSystem {
         this.activeGather = null;
         this.hidePrompt();
     }
-
-     private handleOpenAction(targetInstance: any): InteractionResult | null {
-         if (!targetInstance || !targetInstance.userData || typeof targetInstance.open !== 'function') {
-             console.warn("Invalid target for open action.");
-             return { type: 'error', message: "Cannot open this." };
-         }
-
-         if (targetInstance.userData.isOpen) {
-              console.log("Chest is already open.");
-              this.eventLog?.addEntry("The chest is empty.");
-              return { type: 'message', message: "The chest is empty." };
-         }
-
-         console.log("Opening chest...");
-         this.eventLog?.addEntry("You open the chest...");
-
-         if (!targetInstance.open()) {
-            return { type: 'error', message: "Cannot open chest right now." };
-         }
-
-         const loot = targetInstance.userData.loot as Record<string, number> | undefined;
-         let lootMessages: string[] = [];
-         let itemsFound = false;
-
-         if (loot) {
-             Object.entries(loot).forEach(([itemName, amount]) => {
-                 if (amount > 0 && this.inventory.addItem(itemName, amount)) {
-                     lootMessages.push(`Found ${amount} ${itemName}`);
-                     itemsFound = true;
-                 } else if (amount > 0) {
-                     lootMessages.push(`Found ${amount} ${itemName}, but inventory is full!`);
-                     itemsFound = true;
-                 }
-             });
-             targetInstance.userData.loot = {};
-         }
-
-         const finalMessage = itemsFound ? lootMessages.join('. ') : "The chest is empty.";
-         this.eventLog?.addEntry(finalMessage + ".");
-
-         return { type: 'open_result', message: finalMessage };
-     }
-
 
     private showPrompt(text: string, duration: number | null = null): void {
         if (!this.interactionPromptElement) return;
@@ -2110,12 +2062,6 @@ const treeTrunkMat = new THREE.MeshLambertMaterial({ color: Colors.PASTEL_BROWN 
 const treeFoliageMat = new THREE.MeshLambertMaterial({ color: Colors.PASTEL_GREEN });
 const rockMat = new THREE.MeshLambertMaterial({ color: Colors.PASTEL_GRAY });
 const herbMat = new THREE.MeshLambertMaterial({ color: Colors.FOREST_GREEN });
-const cabinWallMat = new THREE.MeshLambertMaterial({ color: Colors.PASTEL_BROWN });
-const cabinRoofMat = new THREE.MeshLambertMaterial({ color: Colors.PASTEL_ROOF });
-const windmillBaseMat = new THREE.MeshLambertMaterial({ color: Colors.PASTEL_GRAY });
-const windmillBladeMat = new THREE.MeshLambertMaterial({ color: Colors.PASTEL_BROWN });
-const chestMat = new THREE.MeshLambertMaterial({ color: Colors.SADDLE_BROWN });
-const bowMat = new THREE.MeshLambertMaterial({ color: Colors.SIENNA });
 
 
 function createTree(position: THREE.Vector3): THREE.Group {
@@ -2194,154 +2140,6 @@ function createHerb(position: THREE.Vector3): THREE.Group {
     return herbGroup;
 }
 
-function createCabin(position: THREE.Vector3, rotationY: number = 0): THREE.Group {
-    const cabinGroup = new THREE.Group();
-    cabinGroup.name = "Cabin";
-    const wallHeight = 3, wallWidth = 5, wallDepth = 4;
-
-    const wallGeo = new THREE.BoxGeometry(wallWidth, wallHeight, wallDepth);
-    const wallMesh = new THREE.Mesh(wallGeo, cabinWallMat);
-    wallMesh.position.y = wallHeight / 2;
-    wallMesh.castShadow = true; wallMesh.receiveShadow = true;
-    cabinGroup.add(wallMesh);
-
-    const roofHeight = 1.5;
-    const roofGeo = new THREE.ConeGeometry(Math.max(wallWidth, wallDepth) * 0.7, roofHeight, 4);
-    const roofMesh = new THREE.Mesh(roofGeo, cabinRoofMat);
-    roofMesh.position.y = wallHeight + roofHeight / 2;
-    roofMesh.rotation.y = Math.PI / 4;
-    roofMesh.castShadow = true;
-    cabinGroup.add(roofMesh);
-
-    cabinGroup.position.copy(position).setY(0);
-    cabinGroup.rotation.y = rotationY;
-
-    cabinGroup.userData = {
-        ...cabinGroup.userData,
-        isCollidable: true, isInteractable: false, entityReference: cabinGroup,
-        boundingBox: new THREE.Box3().setFromObject(cabinGroup).expandByScalar(0.05)
-    };
-    return cabinGroup;
-}
-
-class Windmill extends THREE.Group {
-    public bladeAssembly: THREE.Group;
-
-    constructor(position: THREE.Vector3) {
-        super();
-        this.name = "Windmill";
-        const baseHeight = 8, baseRadiusTop = 1.5, baseRadiusBottom = 2.5;
-        const bladeLength = 5, bladeWidth = 0.5, bladeDepth = 0.1;
-
-        const baseGeo = new THREE.CylinderGeometry(baseRadiusTop, baseRadiusBottom, baseHeight, 12);
-        const baseMesh = new THREE.Mesh(baseGeo, windmillBaseMat);
-        baseMesh.position.y = baseHeight / 2;
-        baseMesh.castShadow = true; baseMesh.receiveShadow = true;
-        this.add(baseMesh);
-
-        this.bladeAssembly = new THREE.Group();
-        this.bladeAssembly.position.set(0, baseHeight, baseRadiusTop * 0.8);
-        this.add(this.bladeAssembly);
-
-        for (let i = 0; i < 4; i++) {
-            const bladeGeo = new THREE.BoxGeometry(bladeWidth, bladeLength, bladeDepth);
-            bladeGeo.translate(0, bladeLength / 2, 0);
-            const bladeMesh = new THREE.Mesh(bladeGeo, windmillBladeMat);
-            bladeMesh.castShadow = true;
-            bladeMesh.rotation.z = (i * Math.PI) / 2;
-            this.bladeAssembly.add(bladeMesh);
-        }
-
-        this.position.copy(position).setY(0);
-
-        this.userData = {
-            isCollidable: true, isInteractable: false, entityReference: this,
-            boundingBox: new THREE.Box3().setFromObject(baseMesh).expandByScalar(0.1)
-        };
-    }
-
-    public update(deltaTime: number): void {
-        this.bladeAssembly.rotation.z += 0.5 * deltaTime;
-    }
-}
-
-class Chest extends THREE.Group {
-    public lid: THREE.Group;
-    private isOpen: boolean;
-    private openAngle: number;
-    private closedAngle: number;
-    private targetAngle: number;
-    private isAnimating: boolean;
-    public loot: Record<string, number>;
-
-    constructor(position: THREE.Vector3, lootData: Record<string, number> = { gold: 10 }) {
-        super();
-        this.name = "Chest";
-        const baseSize = 0.8, lidHeight = 0.2, baseHeight = baseSize * 0.6;
-
-        const baseGeo = new THREE.BoxGeometry(baseSize, baseHeight, baseSize * 0.5);
-        const baseMesh = new THREE.Mesh(baseGeo, chestMat);
-        baseMesh.position.y = baseHeight / 2;
-        baseMesh.castShadow = true; baseMesh.receiveShadow = true;
-        this.add(baseMesh);
-
-        this.lid = new THREE.Group();
-        this.lid.position.set(0, baseHeight, -baseSize * 0.25);
-        this.add(this.lid);
-
-        const lidGeo = new THREE.BoxGeometry(baseSize, lidHeight, baseSize * 0.5);
-        const lidMesh = new THREE.Mesh(lidGeo, chestMat);
-        lidMesh.position.y = lidHeight / 2;
-        lidMesh.castShadow = true;
-        this.lid.add(lidMesh);
-
-        this.isOpen = false;
-        this.openAngle = -Math.PI / 1.5;
-        this.closedAngle = 0;
-        this.targetAngle = 0;
-        this.isAnimating = false;
-        this.loot = { ...lootData };
-
-        this.position.copy(position).setY(0);
-
-        this.userData = {
-            isCollidable: true, isInteractable: true, interactionType: 'open',
-            prompt: "Press E to open Chest", entityReference: this,
-            boundingBox: new THREE.Box3().setFromObject(this), isOpen: this.isOpen, loot: this.loot
-        };
-    }
-
-    public update(deltaTime: number): void {
-        if (!this.isAnimating) return;
-        const lerpFactor = 1.0 - Math.pow(0.05, deltaTime);
-        this.lid.rotation.x = THREE.MathUtils.lerp(this.lid.rotation.x, this.targetAngle, lerpFactor);
-
-        if (Math.abs(this.lid.rotation.x - this.targetAngle) < 0.01) {
-            this.lid.rotation.x = this.targetAngle;
-            this.isAnimating = false;
-        }
-    }
-
-    public open(): boolean {
-        if (this.isOpen || this.isAnimating) return false;
-        this.isOpen = true;
-        this.targetAngle = this.openAngle;
-        this.isAnimating = true;
-        this.userData.isOpen = true;
-        this.userData.isInteractable = false;
-        this.userData.prompt = "Empty Chest";
-        return true;
-    }
-
-    public close(): void {
-        if (!this.isOpen || this.isAnimating) return;
-        this.isOpen = false;
-        this.targetAngle = this.closedAngle;
-        this.isAnimating = true;
-        this.userData.isOpen = false;
-    }
-}
-
 
 export function populateEnvironment(
     scene: THREE.Scene, worldSize: number, collidableObjects: THREE.Object3D[],
@@ -2360,19 +2158,6 @@ export function populateEnvironment(
     };
 
     const villageCenter = new THREE.Vector3(5, 0, 10);
-    const cabinPositions = [
-        villageCenter.clone().add(new THREE.Vector3(-10, 0, 0)),
-        villageCenter.clone().add(new THREE.Vector3(8, 0, -5)),
-        villageCenter.clone().add(new THREE.Vector3(-5, 0, 10)),
-    ];
-    const cabinRotations = [Math.PI / 16, -Math.PI / 8, Math.PI / 2];
-
-    cabinPositions.forEach((pos, i) => {
-        const cabin = createCabin(pos, cabinRotations[i]);
-        cabin.position.y = getTerrainHeight(pos.x, pos.z);
-        scene.add(cabin);
-        collidableObjects.push(cabin);
-    });
 
     const addNpc = (pos: THREE.Vector3, name: string, accessory: 'none' | 'straw_hat' | 'cap'): NPC => {
         const npc = new NPC(scene, pos, name, accessory, inventory);
@@ -2408,41 +2193,6 @@ export function populateEnvironment(
     addObject(createTree, 150, 25 * 25);
     addObject(createRock, 80, 20 * 20, randomFloat(1, 2.5));
     addObject(createHerb, 60, 10 * 10);
-
-    const windmillPos = new THREE.Vector3(-halfSize * 0.6, 0, -halfSize * 0.2);
-    const windmill = new Windmill(windmillPos);
-    windmill.position.y = getTerrainHeight(windmillPos.x, windmillPos.z);
-    scene.add(windmill);
-    collidableObjects.push(windmill);
-    entities.push(windmill);
-
-    const caveAreaCenter = new THREE.Vector3(halfSize * 0.7, 0, halfSize * 0.6);
-    const bowPos = caveAreaCenter.clone().add(new THREE.Vector3(3, 0, 2));
-    bowPos.y = getTerrainHeight(bowPos.x, bowPos.z) + 0.1;
-    const huntersBowItem = new InteractableObject(
-        'hunters_bow_item', bowPos, 'retrieve', 'Hunter\'s Bow', 'Press E to pick up Bow', scene
-    );
-    const bowGeo = new THREE.BoxGeometry(0.1, 1.2, 0.1);
-    huntersBowItem.mesh = new THREE.Mesh(bowGeo, bowMat);
-    huntersBowItem.mesh.position.copy(huntersBowItem.position).add(new THREE.Vector3(0, 0.6, 0));
-    huntersBowItem.mesh.rotation.z = Math.PI / 2.5;
-    huntersBowItem.mesh.rotation.x = Math.PI / 8;
-    huntersBowItem.mesh.castShadow = true;
-    huntersBowItem.mesh.userData = huntersBowItem.userData;
-    scene.add(huntersBowItem.mesh);
-    interactableObjects.push(huntersBowItem);
-
-    const addChest = (pos: THREE.Vector3, loot: Record<string, number>) => {
-        const chest = new Chest(pos, loot);
-        chest.position.y = getTerrainHeight(pos.x, pos.z);
-        scene.add(chest);
-        collidableObjects.push(chest);
-        interactableObjects.push(chest);
-        entities.push(chest);
-    };
-    addChest(villageCenter.clone().add(new THREE.Vector3(3, 0, 15)), { gold: 15, 'Health Potion': 1 });
-    addChest(new THREE.Vector3(halfSize * 0.6 + 5, 0, -halfSize * 0.6 + 15), { wood: 5, stone: 3, herb: 2 });
-
 
     console.log("Environment populated.");
     console.log("Total Collidables:", collidableObjects.length);
@@ -3211,4 +2961,3 @@ if (checkWebGL()) {
 } else {
     console.error("WebGL check failed. Game cannot start.");
 }
-
