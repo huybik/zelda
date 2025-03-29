@@ -1,5 +1,4 @@
 // File: /src/systems/controls.ts
-// Optimization: Minor cleanup, consolidated movement state update.
 
 import * as THREE from 'three';
 import { Player } from '../entities/player';

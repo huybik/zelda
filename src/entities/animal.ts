@@ -1,6 +1,5 @@
 // File: /src/entities/animal.ts
-// Optimization: Refactored model creation using config objects and helper functions.
-// Reduced repetition in setupTypeSpecifics and createModel. Simplified interaction logic slightly.
+
 
 import * as THREE from 'three';
 import { Entity } from './entity';
@@ -43,15 +42,15 @@ export class Animal extends Entity {
     public state: AnimalState;
     private stateTimer: number;
     private wanderTarget: THREE.Vector3;
-    public speed: number;
+    public speed: number; // Already declared in Entity? No, let's keep it specific here if needed.
     private headMesh?: THREE.Object3D;
 
-    // Behavior Config
-    private detectionRange?: number;
-    private attackRange?: number;
-    private attackDamage?: number;
-    private attackCooldown?: number;
-    private lastAttackTime?: number;
+    // Behavior Config - FIX: Declare properties
+    public detectionRange?: number;
+    public attackRange?: number;
+    public attackDamage?: number;
+    public attackCooldown?: number;
+    public lastAttackTime?: number;
 
     private static animalConfigs: Record<AnimalType, AnimalConfig> = {
         Deer: {
@@ -121,12 +120,12 @@ export class Animal extends Entity {
         this.groundCheckTimer = Math.random();
         this.groundCheckInterval = 0.15 + Math.random() * 0.1;
         this.wanderTarget = new THREE.Vector3();
-        
-        
 
         this.setupFromConfig();
-        this.createModel();
-        this.updateBoundingBox();
+        this.createModel(); // Ensures mesh is created before bounding box
+        if (this.mesh) { // FIX: Check mesh exists before using it
+            this.updateBoundingBox();
+        }
         this.findNewWanderTarget();
     }
 
@@ -134,7 +133,11 @@ export class Animal extends Entity {
         const config = Animal.animalConfigs[this.type];
         if (!config) {
             console.error(`No config found for animal type: ${this.type}`);
-            return; // Use defaults from Entity constructor?
+            // Fallback to some defaults?
+            this.speed = 1.0; this.health = 20; this.maxHealth = 20;
+            this.userData.isCollidable = true; this.state = 'idle';
+            this.stateTimer = 0;
+            return;
         }
 
         this.speed = config.speed;
@@ -149,6 +152,7 @@ export class Animal extends Entity {
             this.userData.prompt = config.interaction.prompt;
         }
         if (config.hostile) {
+            // FIX: Assign to declared properties
             this.detectionRange = config.hostile.detection;
             this.attackRange = config.hostile.attackRange;
             this.attackDamage = config.hostile.damage;
@@ -160,6 +164,8 @@ export class Animal extends Entity {
 
     private createModel(): void {
         const config = Animal.animalConfigs[this.type];
+        if (!config) return; // Should have been handled by setupFromConfig, but check anyway
+
         const bodyCfg = config.body;
         const headCfg = config.head;
         const limbLength = config.limbLength ?? 0.6;
@@ -176,18 +182,22 @@ export class Animal extends Entity {
         const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
         bodyMesh.position.y = limbLength + bodyCfg.h / 2;
         bodyMesh.castShadow = true; bodyMesh.receiveShadow = true;
-        this.mesh.add(bodyMesh);
+        this.mesh?.add(bodyMesh); // FIX: Use optional chaining or check this.mesh
 
         // Head
         const headMesh = new THREE.Mesh(headGeo, headMat);
         headMesh.position.set(0, bodyMesh.position.y + bodyCfg.h / 2, bodyCfg.d / 2 + headCfg.d / 2);
         headMesh.castShadow = true;
-        this.mesh.add(headMesh);
+        this.mesh?.add(headMesh); // FIX: Use optional chaining or check this.mesh
         this.headMesh = headMesh;
-        this.headMesh.userData.originalY = headMesh.position.y;
+        if (this.headMesh) { // FIX: Check headMesh exists before accessing userData
+             this.headMesh.userData.originalY = headMesh.position.y;
+        }
 
         // Type-specific parts
-        config.addParts?.(this.mesh, bodyMesh, headMesh, config);
+        if (this.mesh) { // FIX: Ensure mesh exists before passing
+            config.addParts?.(this.mesh, bodyMesh, headMesh, config);
+        }
 
         // Legs
         const legPositions = [
@@ -201,7 +211,7 @@ export class Animal extends Entity {
             legGeo.translate(0, -limbLength / 2, 0);
             const legMesh = new THREE.Mesh(legGeo, limbMat);
             legMesh.position.copy(pos); legMesh.castShadow = true;
-            this.mesh.add(legMesh);
+            this.mesh?.add(legMesh); // FIX: Use optional chaining or check this.mesh
         });
 
         this.userData.height = limbLength + bodyCfg.h + headCfg.h;
@@ -212,10 +222,12 @@ export class Animal extends Entity {
         if (this.isDead || this.type !== 'Deer' || !this.userData.isInteractable) return null;
 
         console.log("Petting deer...");
-        player.eventLog?.addEntry("You gently pet the deer.");
+        player.eventLog?.addEntry("You gently pet the deer."); // FIX: Optional chaining
         this.state = 'idle';
         this.stateTimer = 2.0 + Math.random() * 2;
-        this.lookAt(player.mesh.position);
+        if (player.mesh) { // FIX: Check player mesh exists
+            this.lookAt(player.mesh.position);
+        }
 
         const gotFeather = Math.random() < 0.3;
         return {
@@ -225,21 +237,38 @@ export class Animal extends Entity {
         };
     }
 
-    override update(deltaTime: number, player: Player, collidables: THREE.Object3D[]): void {
-        if (this.isDead || this.state === 'dead') return;
+    // FIX: Update signature to match base class
+    override update(deltaTime: number, _player?: Entity | undefined, _collidables?: THREE.Object3D[]): void {
+        if (this.isDead || this.state === 'dead' || !this.mesh) return; // FIX: Add mesh check
 
-        const distanceToPlayerSq = this.mesh.position.distanceToSquared(player.mesh.position);
-        if (this.stateTimer > 0) this.stateTimer -= deltaTime;
+        // FIX: Ensure player is Player and mesh exists
+        if (!(_player instanceof Player) || !_player.mesh) {
+             // Decide behavior if no valid player provided - maybe just wander?
+             // For now, we mostly proceed with state logic, but player-dependent actions fail gracefully
+             // If player is essential, return early:
+             // return;
+             this.updateState(deltaTime, null, Infinity); // Pass null player, infinite distance
+        } else {
+            const player = _player; // We now know it's a Player
+            const distanceToPlayerSq = this.mesh.position.distanceToSquared(player.mesh.position);
+            if (this.stateTimer > 0) this.stateTimer -= deltaTime;
+            this.updateState(deltaTime, player, distanceToPlayerSq);
+        }
 
-        this.updateState(deltaTime, player, distanceToPlayerSq);
+        const collidables = _collidables ?? []; // Use default empty array if undefined
+
         this.applyGravityAndGroundCheck(deltaTime, collidables);
         this.mesh.position.addScaledVector(this.velocity, deltaTime);
         this.clampToWorldBounds();
-        this.animate(deltaTime);
-        this.updateBoundingBox();
+        this.animate(deltaTime); // Pass deltaTime
+        this.updateBoundingBox(); // Assumes mesh exists due to initial check
     }
 
-    private updateState(deltaTime: number, player: Player, distanceToPlayerSq: number): void {
+
+    // FIX: Accept potentially null player
+    private updateState(deltaTime: number, player: Player | null, distanceToPlayerSq: number): void {
+         if (!this.mesh) return; // Should not happen if called from update, but safe check
+
         switch (this.state) {
             case 'idle':
                 this.velocity.x = 0; this.velocity.z = 0;
@@ -247,7 +276,7 @@ export class Animal extends Entity {
                     this.findNewWanderTarget();
                     this.state = 'wandering';
                 } else {
-                    this.checkProximityTriggers(player, distanceToPlayerSq);
+                    if (player) this.checkProximityTriggers(player, distanceToPlayerSq);
                 }
                 break;
 
@@ -272,10 +301,15 @@ export class Animal extends Entity {
                     this.velocity.z = _direction.z * this.speed;
                     if (_direction.lengthSq() > 0.01) this.lookAt(this.mesh.position.clone().add(_direction));
                 }
-                this.checkProximityTriggers(player, distanceToPlayerSq);
+                 if (player) this.checkProximityTriggers(player, distanceToPlayerSq);
                 break;
 
             case 'fleeing':
+                if (!player || !player.mesh) { // Cannot flee from nothing
+                    this.state = 'wandering';
+                    this.findNewWanderTarget();
+                    break;
+                }
                 _fleeDirection.copy(this.mesh.position).sub(player.mesh.position).setY(0);
                 if (_fleeDirection.lengthSq() > 0.001) {
                     _fleeDirection.normalize();
@@ -293,6 +327,11 @@ export class Animal extends Entity {
                 break;
 
             case 'attacking':
+                if (!player || !player.mesh) { // Cannot attack nothing
+                    this.state = 'wandering';
+                    this.findNewWanderTarget();
+                    break;
+                }
                 if (!this.detectionRange || !this.attackRange || !this.attackDamage || !this.attackCooldown || this.lastAttackTime === undefined) {
                     this.state = 'idle'; break; // Revert if config missing
                 }
@@ -315,7 +354,7 @@ export class Animal extends Entity {
                     if (time > this.lastAttackTime + this.attackCooldown) {
                         console.log("Wolf attacks!");
                         player.takeDamage(this.attackDamage);
-                        player.eventLog?.addEntry(`The wolf bites you! (-${this.attackDamage} HP)`);
+                        player.eventLog?.addEntry(`The wolf bites you! (-${this.attackDamage} HP)`); // FIX: Optional chaining
                         this.lastAttackTime = time;
                     }
                 }
@@ -323,23 +362,29 @@ export class Animal extends Entity {
         }
     }
 
+    // FIX: check player exists
     private checkProximityTriggers(player: Player, distanceSq: number): void {
+        if (!player || !player.mesh) return;
+
         if (this.type === 'Wolf' && this.detectionRange && distanceSq < this.detectionRange ** 2) {
             this.state = 'attacking'; this.userData.isHostile = true;
-            player.eventLog?.addEntry("A wolf growls nearby!");
+            player.eventLog?.addEntry("A wolf growls nearby!"); // FIX: Optional chaining
         } else if ((this.type === 'Deer' || this.type === 'Rabbit') && distanceSq < 100) { // 10 units
             this.state = 'fleeing';
         }
     }
 
     private applyGravityAndGroundCheck(deltaTime: number, collidables: THREE.Object3D[]): void {
+        if (!this.mesh) return; // FIX: Check mesh exists
+
         if (!this.isOnGround || this.velocity.y > 0) this.velocity.y -= 15 * deltaTime;
 
         this.groundCheckTimer -= deltaTime;
         if (this.groundCheckTimer <= 0) {
             this.groundCheckTimer = this.groundCheckInterval;
-            _origin.copy(this.mesh.position).y += 0.1;
+            _origin.copy(this.mesh.position).y += 0.1; // Use current position
             const raycaster = new THREE.Raycaster(_origin, _rayDirection, 0, 0.5);
+            // FIX: Ensure mesh exists before filtering self out
             const checkAgainst = collidables.filter(obj => obj !== this.mesh && obj?.userData?.isCollidable);
             const intersects = raycaster.intersectObjects(checkAgainst, true);
 
@@ -352,7 +397,8 @@ export class Animal extends Entity {
                 return false;
             });
 
-            if (foundGround && this.mesh.position.y <= groundY + 0.2) {
+            // FIX: check mesh exists before accessing position
+            if (this.mesh && foundGround && this.mesh.position.y <= groundY + 0.2) {
                 if (!this.isOnGround) { // Landed
                     this.mesh.position.y = groundY;
                     if (this.velocity.y < 0) this.velocity.y = 0;
@@ -366,36 +412,41 @@ export class Animal extends Entity {
     }
 
     private clampToWorldBounds(): void {
+         if (!this.mesh) return; // FIX: Check mesh exists
         const limit = this.worldSize / 2 - 1;
         this.mesh.position.x = THREE.MathUtils.clamp(this.mesh.position.x, -limit, limit);
         this.mesh.position.z = THREE.MathUtils.clamp(this.mesh.position.z, -limit, limit);
     }
 
     private findNewWanderTarget(): void {
+         if (!this.mesh) return; // FIX: Check mesh exists
         const wanderDistance = 10 + Math.random() * 15;
         const angle = Math.random() * Math.PI * 2;
-        _tempVec.set(Math.cos(angle) * wanderDistance, 0, Math.sin(angle) * wanderDistance).add(this.mesh.position);
+        _tempVec.set(Math.cos(angle) * wanderDistance, 0, Math.sin(angle) * wanderDistance).add(this.mesh.position); // Use current position
         const limit = this.worldSize / 2 - 5;
         this.wanderTarget.set(
             THREE.MathUtils.clamp(_tempVec.x, -limit, limit),
-            this.mesh.position.y,
+            this.mesh.position.y, // Use current y
             THREE.MathUtils.clamp(_tempVec.z, -limit, limit)
         );
         this.stateTimer = 5 + Math.random() * 5;
     }
 
-    private animate(deltaTime: number): void {
+    // FIX: Remove unused deltaTime parameter (or use it if intended differently)
+    private animate(_deltaTime: number): void {
+        // FIX: Check headMesh exists before accessing properties
         if (!this.headMesh) return;
         const horizontalSpeed = Math.sqrt(this.velocity.x ** 2 + this.velocity.z ** 2);
-        const originalY = this.headMesh.userData.originalY ?? this.headMesh.position.y;
+        // FIX: Ensure originalY is read only if headMesh and userData exist
+        const originalY = this.headMesh.userData?.originalY ?? this.headMesh.position.y;
 
         if (horizontalSpeed > 0.1 && this.isOnGround) {
             const bobFrequency = 8; const bobAmplitude = 0.03;
-            const time = performance.now() * 0.001;
+            const time = performance.now() * 0.001; // Doesn't use deltaTime
             this.headMesh.position.y = originalY + Math.sin(time * bobFrequency) * bobAmplitude;
         } else {
-            // Lerp head back smoothly
-            this.headMesh.position.y = THREE.MathUtils.lerp(this.headMesh.position.y, originalY, 10 * deltaTime);
+            // Lerp head back smoothly using deltaTime
+            this.headMesh.position.y = THREE.MathUtils.lerp(this.headMesh.position.y, originalY, 10 * _deltaTime); // Use passed deltaTime
         }
     }
 
@@ -405,7 +456,8 @@ export class Animal extends Entity {
         console.log(`${this.name} died.`);
         this.state = 'dead'; this.userData.isHostile = false;
         setTimeout(() => {
-            if (this.mesh) { // Check existence
+            // FIX: Check mesh exists before rotating
+            if (this.mesh) {
                 this.mesh.rotation.z = Math.PI / 2 * (Math.random() > 0.5 ? 1 : -1);
                 this.mesh.rotation.x = (Math.random() - 0.5) * 0.5;
             }
@@ -413,11 +465,12 @@ export class Animal extends Entity {
     }
 
     override updateBoundingBox(): void {
+        // FIX: Check mesh exists before accessing properties
         if (!this.mesh) return;
         const height = this.userData.height ?? 1.0;
         const width = this.userData.width ?? 0.8;
         const depth = this.userData.depth ?? 0.6;
-        const center = this.mesh.position.clone().add(new THREE.Vector3(0, height / 2, 0));
+        const center = this.mesh.position.clone().add(new THREE.Vector3(0, height / 2, 0)); // Use current position
         this.boundingBox.setFromCenterAndSize(center, new THREE.Vector3(width, height, depth));
         this.userData.boundingBox = this.boundingBox;
     }

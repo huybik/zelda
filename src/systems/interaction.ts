@@ -1,5 +1,4 @@
 // File: /src/systems/interaction.ts
-// Optimization: Simplified InteractableObject, streamlined target finding, condensed result handling.
 
 import * as THREE from 'three';
 import { Player } from '../entities/player';

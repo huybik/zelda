@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-// Removed unused imports like Player/Inventory if only types are needed
 
 // --- Entity ---
 export interface EntityUserData {

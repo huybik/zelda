@@ -1,5 +1,5 @@
 // File: /src/entities/player.ts
-// Optimization: Minor cleanup, slight simplification in checkGround.
+// FIX: Corrected update signature, removed unused deltaTime, added mesh null checks
 
 import * as THREE from 'three';
 import { Entity } from './entity';
@@ -22,7 +22,7 @@ export class Player extends Entity {
     public staminaDrainRate: number; public staminaRegenRate: number; public staminaJumpCost: number;
 
     public canJump: boolean; public isSprinting: boolean; public isExhausted: boolean;
-    public exhaustionThreshold: number; public moveState: MoveState;
+    public exhaustionThreshold: number; public moveState: MoveState; // Keep moveState as property
 
     private gravity: number; public isOnGround: boolean;
     private groundCheckDistance: number; private lastVelocityY: number;
@@ -43,13 +43,16 @@ export class Player extends Entity {
 
         this.canJump = false; this.isSprinting = false; this.isExhausted = false;
         this.exhaustionThreshold = 20;
+        // Initialize moveState - it will be updated externally (e.g., by Controls)
         this.moveState = { forward: 0, right: 0, jump: false, sprint: false, interact: false };
 
         this.gravity = -25; this.isOnGround = false;
         this.groundCheckDistance = 0.15; this.lastVelocityY = 0;
 
         this.createModel();
-        this.updateBoundingBox();
+        if (this.mesh) { // FIX: Check mesh exists
+             this.updateBoundingBox();
+        }
     }
 
     public setJournal(questLog: QuestLog, eventLog: EventLog): void {
@@ -57,6 +60,8 @@ export class Player extends Entity {
     }
 
     private createModel(): void {
+        if (!this.mesh) return; // Should not happen
+
         const bodyMat = new THREE.MeshLambertMaterial({ color: 0x0077ff });
         const headMat = new THREE.MeshLambertMaterial({ color: 0xffdab9 });
         const limbMat = bodyMat;
@@ -81,12 +86,14 @@ export class Player extends Entity {
             const length = isArm ? armLength : legLength;
             const geo = new THREE.CylinderGeometry(limbRadius, limbRadius * (isArm ? 0.9 : 1.1), length, 8);
             geo.translate(0, -length / 2, 0); // Pivot at top
-            const mesh = new THREE.Mesh(geo, limbMat);
+            const limbMesh = new THREE.Mesh(geo, limbMat);
             const offsetY = isArm ? bodyMesh.position.y + bodyHeight * 0.4 : bodyMesh.position.y - bodyHeight / 2;
             const offsetX = (isArm ? 0.5 : 0.2) * (isLeft ? -1 : 1);
-            mesh.position.set(offsetX, offsetY, 0);
-            mesh.castShadow = true; this.mesh.add(mesh);
-            return mesh;
+            limbMesh.position.set(offsetX, offsetY, 0);
+            limbMesh.castShadow = true;
+            // FIX: Ensure mesh exists before adding limb
+            this.mesh?.add(limbMesh);
+            return limbMesh;
         };
 
         this.leftArm = addLimb(true, true); this.rightArm = addLimb(true, false);
@@ -95,9 +102,12 @@ export class Player extends Entity {
         this.userData.height = PLAYER_HEIGHT; this.userData.radius = PLAYER_RADIUS;
     }
 
-    override update(deltaTime: number, moveState: MoveState, collidables: THREE.Object3D[]): void {
-        if (this.isDead) return;
-        this.moveState = moveState;
+    // FIX: Signature matches base Entity.update. Access moveState via this.moveState.
+    override update(deltaTime: number, _player?: Entity | undefined, _collidables?: THREE.Object3D[]): void {
+        if (this.isDead || !this.mesh) return; // FIX: Check mesh exists
+
+        // Use internal moveState, ignore _player param
+        const collidables = _collidables ?? []; // Handle optional collidables
         const wasOnGround = this.isOnGround;
 
         this.handleStamina(deltaTime);
@@ -107,8 +117,12 @@ export class Player extends Entity {
         // Apply velocity & check ground
         this.mesh.position.x += this.velocity.x * deltaTime;
         this.mesh.position.z += this.velocity.z * deltaTime;
-        this.checkGround(collidables);
-        this.mesh.position.y += this.velocity.y * deltaTime;
+        this.checkGround(collidables); // Pass resolved collidables
+        // FIX: Check mesh still exists after potential collision resolution/destruction? (Unlikely here)
+        if (this.mesh) {
+             this.mesh.position.y += this.velocity.y * deltaTime;
+        }
+
 
         // Fall Damage
         if (this.isOnGround && !wasOnGround && this.lastVelocityY < -1.0) {
@@ -116,11 +130,12 @@ export class Player extends Entity {
         }
         this.lastVelocityY = this.velocity.y;
 
-        this.animateMovement(deltaTime);
-        this.updateBoundingBox();
+        this.animateMovement(deltaTime); // Pass deltaTime
+        this.updateBoundingBox(); // Assumes mesh exists
     }
 
     private handleStamina(deltaTime: number): void {
+        // Uses this.moveState
         const isMoving = this.moveState.forward !== 0 || this.moveState.right !== 0;
         this.isSprinting = this.moveState.sprint && isMoving && !this.isExhausted && this.stamina > 0;
 
@@ -140,6 +155,9 @@ export class Player extends Entity {
     }
 
     private handleMovement(deltaTime: number): void {
+        if (!this.mesh) return; // FIX: Check mesh exists
+
+        // Uses this.moveState
         const currentSpeed = this.isSprinting ? this.runSpeed : this.walkSpeed;
         _forward.set(0, 0, -1).applyQuaternion(this.mesh.quaternion);
         _right.set(1, 0, 0).applyQuaternion(this.mesh.quaternion);
@@ -153,11 +171,12 @@ export class Player extends Entity {
 
         this.velocity.x = _moveVelocity.x; this.velocity.z = _moveVelocity.z;
 
-        // Jump
+        // Jump (uses this.moveState.jump)
         if (this.moveState.jump && this.canJump && this.stamina >= this.staminaJumpCost) {
             this.velocity.y = this.jumpForce;
             this.stamina -= this.staminaJumpCost;
             this.canJump = false; this.isOnGround = false;
+            this.moveState.jump = false; // Consume jump flag
             if (this.stamina <= 0 && !this.isExhausted) { // Check exhaustion post-jump
                 this.isExhausted = true; this.eventLog?.addEntry("You are exhausted!");
             }
@@ -173,9 +192,12 @@ export class Player extends Entity {
     }
 
     private checkGround(collidables: THREE.Object3D[]): void {
-        _groundCheckOrigin.copy(this.mesh.position).y += 0.1;
+         if (!this.mesh) return; // FIX: Check mesh exists
+
+        _groundCheckOrigin.copy(this.mesh.position).y += 0.1; // Use current position
         const rayLength = 0.1 + this.groundCheckDistance;
         const raycaster = new THREE.Raycaster(_groundCheckOrigin, _groundCheckDirection, 0, rayLength);
+        // FIX: Check mesh exists before filtering self out
         const checkAgainst = collidables.filter(obj => obj !== this.mesh && obj?.userData?.isCollidable);
         const intersects = raycaster.intersectObjects(checkAgainst, true);
 
@@ -188,7 +210,8 @@ export class Player extends Entity {
             return false;
         });
 
-        if (foundGround && this.mesh.position.y <= groundY + rayLength + 0.05) { // Check against groundY + raycast reach
+        // FIX: Check mesh exists before accessing position
+        if (this.mesh && foundGround && this.mesh.position.y <= groundY + rayLength + 0.05) { // Check against groundY + raycast reach
             if (this.velocity.y <= 0) { // Allow landing or staying grounded
                  this.mesh.position.y = groundY; // Snap
                  this.velocity.y = 0;
@@ -215,16 +238,17 @@ export class Player extends Entity {
         }
     }
 
-    private animateMovement(deltaTime: number): void {
+    private animateMovement(deltaTime: number): void { // FIX: Use deltaTime parameter
         const horizontalSpeed = Math.sqrt(this.velocity.x ** 2 + this.velocity.z ** 2);
         const maxSpeed = this.isSprinting ? this.runSpeed : this.walkSpeed;
         const speedRatio = maxSpeed > 0 ? THREE.MathUtils.clamp(horizontalSpeed / maxSpeed, 0, 1) : 0;
         const bobFrequency = this.isSprinting ? 14 : 8;
         const bobAmplitude = 0.8; // Radians
-        const restLerpFactor = 1.0 - Math.pow(0.01, deltaTime);
+        // FIX: Use deltaTime for frame-rate independent lerp factor
+        const restLerpFactor = 1.0 - Math.pow(0.01, deltaTime); // Example: lerp 99% of the way in 1 second
 
         if (speedRatio > 0.1 && this.isOnGround) {
-            const phase = performance.now() * 0.001 * bobFrequency;
+            const phase = performance.now() * 0.001 * bobFrequency; // Phase based on absolute time
             const angle = Math.sin(phase) * bobAmplitude * speedRatio;
             if (this.rightArm) this.rightArm.rotation.x = angle;
             if (this.leftArm) this.leftArm.rotation.x = -angle;
@@ -232,7 +256,7 @@ export class Player extends Entity {
             if (this.leftLeg) this.leftLeg.rotation.x = angle * 0.8;
         } else { // Lerp back to rest
             [this.rightArm, this.leftArm, this.rightLeg, this.leftLeg].forEach(limb => {
-                if (limb) limb.rotation.x = THREE.MathUtils.lerp(limb.rotation.x, 0, restLerpFactor);
+                if (limb) limb.rotation.x = THREE.MathUtils.lerp(limb.rotation.x, 0, restLerpFactor); // Use calculated factor
             });
         }
     }
@@ -246,20 +270,24 @@ export class Player extends Entity {
     }
 
     public respawn(position: THREE.Vector3): void {
-        this.setPosition(position);
+        this.setPosition(position); // Uses internal mesh check
         this.health = this.maxHealth * 0.75; this.stamina = this.maxStamina;
         this.velocity.set(0, 0, 0); this.isDead = false; this.isExhausted = false;
         this.isOnGround = false; this.canJump = false; this.lastVelocityY = 0;
         console.log("Player respawned.");
         this.eventLog?.addEntry("You feel slightly disoriented but alive.");
-        this.updateBoundingBox();
+        this.updateBoundingBox(); // Uses internal mesh check
     }
 
     override updateBoundingBox(): void {
-        if (!this.mesh) return;
+         if (!this.mesh) { // FIX: Check mesh exists
+            this.boundingBox.makeEmpty();
+            this.userData.boundingBox = undefined;
+            return;
+         }
         const height = this.userData.height ?? PLAYER_HEIGHT;
         const radius = this.userData.radius ?? PLAYER_RADIUS;
-        const center = this.mesh.position.clone().add(new THREE.Vector3(0, height / 2, 0));
+        const center = this.mesh.position.clone().add(new THREE.Vector3(0, height / 2, 0)); // Use current position
         const size = new THREE.Vector3(radius * 2, height, radius * 2);
         this.boundingBox.setFromCenterAndSize(center, size);
         this.userData.boundingBox = this.boundingBox;

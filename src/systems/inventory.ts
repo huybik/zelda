@@ -1,5 +1,4 @@
 // File: /src/systems/inventory.ts
-// Optimization: Minor cleanup, use optional chaining.
 
 import { InventoryItem } from '../types/common';
 

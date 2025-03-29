@@ -1,3 +1,5 @@
+// File: /src/game.ts
+
 import * as THREE from 'three';
 import { setupLighting } from './world/lighting';
 import { createTerrain } from './world/terrain';
@@ -8,21 +10,24 @@ import { HUD } from './ui/hud';
 import { Minimap } from './ui/minimap';
 import { Inventory } from './systems/inventory';
 import { InventoryDisplay } from './ui/inventoryDisplay';
-import { InteractionSystem, InteractableObject } from './systems/interaction';
+import { InteractionSystem } from './systems/interaction'; // FIX: Removed InteractableObject (re-imported in environment)
 import { populateEnvironment, createWorldBoundary } from './world/environment';
 import { Physics } from './systems/physics';
 import { QuestLog, EventLog } from './systems/quest';
 import { JournalDisplay } from './ui/journal';
-import { Entity } from './entities/entity';
+// FIX: Removed unused Entity import
+// import { Entity } from './entities/entity';
 
 const WORLD_SIZE = 1000; const TERRAIN_SEGMENTS = 150;
 (window as any).game = null; // Global reference
 
 // Local helper for terrain height (could be moved to a World utility)
 function getTerrainHeight(x: number, z: number): number {
-    const terrain = (window as any).game?.scene?.getObjectByName("Terrain") as THREE.Mesh | undefined;
-    if (!terrain) return 0;
-    const raycaster = new THREE.Raycaster(new THREE.Vector3(x, 200, z), new THREE.Vector3(0, -1, 0));
+    const gameInstance = (window as any).game as Game | null; // Type cast
+    const terrain = gameInstance?.scene?.getObjectByName("Terrain") as THREE.Mesh | undefined;
+    if (!terrain?.geometry) return 0; // Check geometry too
+    // Consider caching raycaster if performance is an issue
+    const raycaster = new THREE.Raycaster(new THREE.Vector3(x, terrain.geometry.boundingBox?.max?.y ?? 200, z), new THREE.Vector3(0, -1, 0));
     const intersects = raycaster.intersectObject(terrain);
     return intersects[0]?.point.y ?? 0;
 }
@@ -48,6 +53,7 @@ class Game {
     private journalDisplay: JournalDisplay | null = null;
 
     // Collections (references, not owners)
+    // Use more specific types if possible, 'any' for brevity if mixed types are complex
     public entities: Array<any> = []; // Entities/Objects requiring .update()
     public collidableObjects: THREE.Object3D[] = []; // Meshes/Groups for physics checks
     public interactableObjects: Array<any> = []; // Entities/Objects for interaction checks
@@ -84,15 +90,28 @@ class Game {
         // Player
         const spawnPos = new THREE.Vector3(0, 0, 5); spawnPos.y = getTerrainHeight(spawnPos.x, spawnPos.z) + 0.5;
         this.player = new Player(this.scene, spawnPos);
-        this.entities.push(this.player); this.collidableObjects.push(this.player.mesh);
+        this.entities.push(this.player); // Push the Player instance
+        // FIX: Check player.mesh before adding to collidables
+        if (this.player.mesh) {
+             this.collidableObjects.push(this.player.mesh);
+        }
         this.player.setJournal(this.questLog, this.eventLog);
 
-        // Dependent Systems & UI
+        // Dependent Systems & UI (Ensure player, camera, inventory etc. exist)
+        if (!this.player || !this.camera || !this.inventory || !this.questLog || !this.eventLog) {
+             throw new Error("Failed to initialize core game components.");
+        }
+
+        // FIX: Check player.mesh before passing to camera/controls
+        if (!this.player.mesh) {
+            throw new Error("Player mesh failed to initialize.");
+        }
+
         this.thirdPersonCamera = new ThirdPersonCamera(this.camera, this.player.mesh);
         this.controls = new Controls(this.player, this.thirdPersonCamera, this.renderer.domElement);
         this.physics = new Physics(this.player, this.collidableObjects);
 
-        // Populate (fills collection arrays)
+        // Populate (fills collection arrays - ensure dependencies like questLog are passed)
         populateEnvironment(this.scene, WORLD_SIZE, this.collidableObjects, this.interactableObjects, this.entities, this.questLog, this.inventory, this.eventLog);
 
         this.interactionSystem = new InteractionSystem(this.player, this.camera, this.interactableObjects, this.controls, this.inventory, this.eventLog);
@@ -155,22 +174,33 @@ class Game {
     }
 
     private update(): void {
-        if (!this.clock || !this.renderer || !this.scene || !this.camera || !this.player) return;
+        if (!this.clock || !this.renderer || !this.scene || !this.camera || !this.player || !this.controls) return; // FIX: Add controls check
         const dt = Math.min(this.clock.getDelta(), 0.05); // Capped delta time
 
-        this.controls?.update(dt); // Read input even if paused
+        this.controls.update(dt); // Read input even if paused
 
         if (!this.isPaused) {
-            // Update player (uses controls.moveState directly)
-            this.player.update(dt, this.controls!.moveState, this.collidableObjects);
+            // Update player (uses controls.moveState via player's internal state)
+            // Player's update now matches Entity signature, moveState is internal
+            this.player.update(dt, undefined, this.collidableObjects); // Pass undefined for player arg
 
             // Update Physics AFTER player move intent
             this.physics?.update(dt);
 
             // Update other entities (NPC, Animal, Windmill, Chest etc.)
             this.entities.forEach(entity => {
+                // Skip player, check for update method
                 if (entity !== this.player && typeof entity.update === 'function') {
-                    try { entity.update(dt, this.player, this.collidableObjects); }
+                    try {
+                        // Pass player instance if the entity might need it (like Animal/NPC)
+                        // Check if update signature expects player
+                        // A safer approach might be a different update signature for interactive entities
+                        if (entity.update.length >= 2) { // Check if update accepts at least 2 args (dt, player)
+                            entity.update(dt, this.player, this.collidableObjects);
+                        } else {
+                             entity.update(dt); // Assume simple update like Windmill
+                        }
+                    }
                     catch (e) { console.error(`Error updating entity ${entity?.name ?? entity?.id}:`, e); }
                 }
             });
@@ -189,7 +219,7 @@ class Game {
         // Inv/Journal updated via callbacks or on show
 
         try { this.renderer.render(this.scene, this.camera); }
-        catch (e) { console.error("Render error:", e); /* Stop loop? */ }
+        catch (e) { console.error("Render error:", e); /* Consider stopping loop? */ }
     }
 
     private respawnPlayer(): void {
@@ -220,18 +250,29 @@ class Game {
     public dispose(): void {
         console.log("Disposing game...");
         this.renderer?.setAnimationLoop(null);
-        this.renderer?.domElement.parentNode?.removeChild(this.renderer.domElement);
+        // FIX: Check parentNode before removing
+        if (this.renderer?.domElement.parentNode) {
+            this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
+        }
         this.renderer?.dispose();
         this.controls?.dispose(); this.inventoryDisplay?.dispose(); this.journalDisplay?.dispose();
         this.scene?.traverse(obj => { // Dispose scene resources
             if (obj instanceof THREE.Mesh) {
                 obj.geometry?.dispose();
-                if (Array.isArray(obj.material)) obj.material.forEach(m => m?.dispose());
-                else obj.material?.dispose();
+                const material = obj.material; // Avoid TS error with Array.isArray check
+                if (Array.isArray(material)) material.forEach(m => m?.dispose());
+                else material?.dispose();
             }
         });
         this.entities = []; this.collidableObjects = []; this.interactableObjects = [];
-        this.scene = null; this.player = null; /* Null out others */ (window as any).game = null;
+        this.scene = null; this.player = null; // Null out other properties too
+        this.camera = null; this.clock = null; this.thirdPersonCamera = null;
+        this.controls = null; this.physics = null; this.inventory = null;
+        this.questLog = null; this.eventLog = null; this.interactionSystem = null;
+        this.hud = null; this.minimap = null; this.inventoryDisplay = null;
+        this.journalDisplay = null; this.renderer = null;
+
+        (window as any).game = null;
         console.log("Game disposed.");
     }
 }

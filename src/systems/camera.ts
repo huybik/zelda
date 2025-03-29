@@ -1,5 +1,5 @@
 // File: /src/systems/camera.ts
-// Optimization: Minor cleanup, use Vector3.set() where applicable.
+
 
 import * as THREE from 'three';
 import { smoothVectorLerp } from '../utils/helpers';

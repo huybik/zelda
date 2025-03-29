@@ -1,5 +1,4 @@
 // File: /src/entities/entity.ts
-// Optimization: Minor cleanup, removed redundant checks.
 
 import * as THREE from 'three';
 import { EntityUserData } from '../types/common';
@@ -9,7 +8,7 @@ let nextEntityId = 0;
 export class Entity {
     public id: string;
     public scene: THREE.Scene | null;
-    public mesh: THREE.Group;
+    public mesh: THREE.Group | null; // FIX: Allow mesh to be null after destroy
     public name: string;
     public velocity: THREE.Vector3;
     public boundingBox: THREE.Box3;
@@ -19,11 +18,10 @@ export class Entity {
     public userData: EntityUserData;
 
     constructor(scene: THREE.Scene, position: THREE.Vector3, name: string = 'Entity') {
-        // scene and position checks removed, assume valid input for brevity
         this.id = `${name}_${nextEntityId++}`;
         this.scene = scene;
         this.name = name;
-        this.mesh = new THREE.Group();
+        this.mesh = new THREE.Group(); // Mesh is initialized here
         this.mesh.position.copy(position);
         this.velocity = new THREE.Vector3();
         this.boundingBox = new THREE.Box3();
@@ -34,24 +32,31 @@ export class Entity {
             entityReference: this, isEntity: true, isPlayer: false, isNPC: false, isAnimal: false,
             isCollidable: true, isInteractable: false, id: this.id,
         };
-        this.mesh.userData = this.userData;
+        this.mesh.userData = this.userData; // Assign userData to the initialized mesh
         this.mesh.name = this.name;
 
-        this.scene.add(this.mesh);
+        this.scene?.add(this.mesh); // FIX: Check scene exists
     }
 
-    // Base update - subclasses should implement fully
-    update(deltaTime: number, player?: Entity, collidables?: THREE.Object3D[]): void {}
+    // Base update - subclasses should implement fully using override
+    // FIX: Made parameters optional to allow override flexibility
+    update(_deltaTime: number, _player?: Entity | undefined, _collidables?: THREE.Object3D[] | undefined): void {}
 
     updateBoundingBox(): void {
-        if (!this.mesh) return;
+        // FIX: Check mesh exists
+        if (!this.mesh) {
+            this.boundingBox.makeEmpty(); // Ensure box is empty if no mesh
+            this.userData.boundingBox = undefined;
+            return;
+        }
         // Default uses non-recursive bounding box for performance.
         // Subclasses can override if recursive calculation is needed.
-        this.boundingBox.setFromObject(this.mesh, false);
+        this.boundingBox.setFromObject(this.mesh, false); // Calculate from the existing mesh
         this.userData.boundingBox = this.boundingBox;
     }
 
     setPosition(position: THREE.Vector3): void {
+        // FIX: Check mesh exists
         if (this.mesh) {
             this.mesh.position.copy(position);
             this.updateBoundingBox();
@@ -59,6 +64,7 @@ export class Entity {
     }
 
     lookAt(targetPosition: THREE.Vector3): void {
+        // FIX: Check mesh exists
         if (this.mesh) {
             const target = targetPosition.clone();
             target.y = this.mesh.position.y; // Look horizontally by default
@@ -97,13 +103,16 @@ export class Entity {
             this.mesh.traverse((child) => {
                 if (child instanceof THREE.Mesh) {
                     child.geometry?.dispose();
-                    if (Array.isArray(child.material)) child.material.forEach(mat => mat?.dispose());
-                    else child.material?.dispose();
+                    const material = child.material;
+                    if (Array.isArray(material)) material.forEach(mat => mat?.dispose());
+                    else material?.dispose();
                 }
             });
             this.scene.remove(this.mesh);
         }
-        this.mesh = null!; this.scene = null;
+        // FIX: Set mesh to null after removal
+        this.mesh = null;
+        this.scene = null;
         if(this.userData) this.userData.entityReference = null;
     }
 }

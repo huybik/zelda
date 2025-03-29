@@ -1,0 +1,98 @@
+src/entities/animal.ts(155,18): error TS2540: Cannot assign to 'detectionRange' because it is a read-only property.
+src/entities/animal.ts(156,18): error TS2540: Cannot assign to 'attackRange' because it is a read-only property.
+src/entities/animal.ts(157,18): error TS2540: Cannot assign to 'attackDamage' because it is a read-only property.
+src/entities/animal.ts(158,18): error TS2540: Cannot assign to 'attackCooldown' because it is a read-only property.
+src/entities/animal.ts(182,9): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(188,9): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(193,27): error TS2345: Argument of type 'Group<Object3DEventMap> | null' is not assignable to parameter of type 'Group<Object3DEventMap>'.
+  Type 'null' is not assignable to type 'Group<Object3DEventMap>'.
+src/entities/animal.ts(207,13): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(223,21): error TS18047: 'player.mesh' is possibly 'null'.
+src/entities/animal.ts(233,14): error TS2416: Property 'update' in type 'Animal' is not assignable to the same property in base type 'Entity'.
+  Type '(deltaTime: number, player: Player, collidables: Object3D<Object3DEventMap>[]) => void' is not assignable to type '(_deltaTime: number, _player?: Entity | undefined, _collidables?: Object3D<Object3DEventMap>[] | undefined) => void'.
+    Types of parameters 'player' and '_player' are incompatible.
+      Type 'Entity | undefined' is not assignable to type 'Player'.
+        Type 'undefined' is not assignable to type 'Player'.
+src/entities/animal.ts(238,36): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(238,73): error TS18047: 'player.mesh' is possibly 'null'.
+src/entities/animal.ts(245,9): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(251,25): error TS6133: 'deltaTime' is declared but its value is never read.
+src/entities/animal.ts(264,56): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(274,64): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(284,42): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(292,37): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(292,61): error TS18047: 'player.mesh' is possibly 'null'.
+src/entities/animal.ts(298,38): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(326,39): error TS18047: 'player.mesh' is possibly 'null'.
+src/entities/animal.ts(326,65): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(327,29): error TS18047: 'player.mesh' is possibly 'null'.
+src/entities/animal.ts(368,26): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(385,32): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(387,21): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(406,9): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(406,54): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(407,9): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(407,54): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(413,97): error TS2531: Object is possibly 'null'.
+src/entities/animal.ts(417,13): error TS2531: Object is possibly 'null'.
+src/entities/npc.ts(9,40): error TS6133: 'QuestStatus' is declared but its value is never read.
+src/entities/npc.ts(154,25): error TS18047: 'player.mesh' is possibly 'null'.
+src/entities/npc.ts(233,14): error TS2416: Property 'update' in type 'NPC' is not assignable to the same property in base type 'Entity'.
+  Type '(deltaTime: number, player: Player, _collidables?: Object3D<Object3DEventMap>[] | undefined) => void' is not assignable to type '(_deltaTime: number, _player?: Entity | undefined, _collidables?: Object3D<Object3DEventMap>[] | undefined) => void'.
+    Types of parameters 'player' and '_player' are incompatible.
+      Type 'Entity | undefined' is not assignable to type 'Player'.
+        Type 'undefined' is not assignable to type 'Player'.
+src/entities/npc.ts(239,77): error TS18047: 'player.mesh' is possibly 'null'.
+src/entities/npc.ts(243,36): error TS18047: 'player.mesh' is possibly 'null'.
+src/entities/player.ts(147,14): error TS2416: Property 'update' in type 'Player' is not assignable to the same property in base type 'Entity'.
+  Type '(deltaTime: number, moveState: MoveState, collidables: Object3D<Object3DEventMap>[]) => void' is not assignable to type '(_deltaTime: number, _player?: Entity | undefined, _collidables?: Object3D<Object3DEventMap>[] | undefined) => void'.
+    Types of parameters 'moveState' and '_player' are incompatible.
+      Type 'Entity | undefined' is not assignable to type 'MoveState'.
+        Type 'undefined' is not assignable to type 'MoveState'.
+src/entities/player.ts(216,28): error TS6133: 'deltaTime' is declared but its value is never read.
+src/game.ts(11,29): error TS6133: 'InteractableObject' is declared but its value is never read.
+src/game.ts(16,1): error TS6133: 'Entity' is declared but its value is never read.
+src/game.ts(87,70): error TS2345: Argument of type 'Group<Object3DEventMap> | null' is not assignable to parameter of type 'Object3D<Object3DEventMap>'.
+  Type 'null' is not assignable to type 'Object3D<Object3DEventMap>'.
+src/game.ts(91,69): error TS2345: Argument of type 'Group<Object3DEventMap> | null' is not assignable to parameter of type 'Object3D<Object3DEventMap>'.
+  Type 'null' is not assignable to type 'Object3D<Object3DEventMap>'.
+src/systems/camera.ts(46,29): error TS6133: 'deltaX' is declared but its value is never read.
+src/systems/controls.ts(4,1): error TS6133: 'THREE' is declared but its value is never read.
+src/systems/controls.ts(111,21): error TS6133: 'event' is declared but its value is never read.
+src/systems/controls.ts(136,19): error TS6133: 'deltaTime' is declared but its value is never read.
+src/systems/controls.ts(142,13): error TS2531: Object is possibly 'null'.
+src/systems/interaction.ts(14,79): error TS6133: '_tempBox' is declared but its value is never read.
+src/systems/interaction.ts(23,106): error TS6133: 'scene' is declared but its value is never read.
+src/systems/interaction.ts(35,14): error TS6133: 'player' is declared but its value is never read.
+src/systems/interaction.ts(66,12): error TS6133: 'deltaTime' is declared but its value is never read.
+src/systems/interaction.ts(187,9): error TS2531: Object is possibly 'null'.
+src/systems/interaction.ts(188,9): error TS2531: Object is possibly 'null'.
+src/systems/interaction.ts(194,46): error TS2367: This comparison appears to be unintentional because the types 'Object3D<Object3DEventMap> | Entity | InteractableObject' and 'Player' have no overlap.
+src/systems/interaction.ts(216,26): error TS2531: Object is possibly 'null'.
+src/systems/interaction.ts(282,32): error TS6133: 'deltaTime' is declared but its value is never read.
+src/systems/physics.ts(3,1): error TS6133: 'Entity' is declared but its value is never read.
+src/systems/physics.ts(24,30): error TS6133: 'deltaTime' is declared but its value is never read.
+src/systems/physics.ts(30,27): error TS2531: Object is possibly 'null'.
+src/systems/physics.ts(52,17): error TS18048: 'playerBox' is possibly 'undefined'.
+src/systems/physics.ts(53,39): error TS2345: Argument of type 'Box3 | undefined' is not assignable to parameter of type 'Box3'.
+  Type 'undefined' is not assignable to type 'Box3'.
+src/systems/physics.ts(59,76): error TS6133: 'object' is declared but its value is never read.
+src/systems/physics.ts(97,9): error TS2531: Object is possibly 'null'.
+src/ui/inventoryDisplay.ts(10,13): error TS2564: Property 'boundUpdateDisplay' has no initializer and is not definitely assigned in the constructor.
+src/ui/journal.ts(10,13): error TS2564: Property 'boundUpdateQuests' has no initializer and is not definitely assigned in the constructor.
+src/ui/journal.ts(11,13): error TS2564: Property 'boundUpdateEvents' has no initializer and is not definitely assigned in the constructor.
+src/ui/minimap.ts(41,9): error TS2531: Object is possibly 'null'.
+src/ui/minimap.ts(42,28): error TS2531: Object is possibly 'null'.
+src/ui/minimap.ts(55,59): error TS2367: This comparison appears to be unintentional because the types 'Object3D<Object3DEventMap> | Entity' and 'Player' have no overlap.
+src/world/environment.ts(7,31): error TS6133: 'randomInt' is declared but its value is never read.
+src/world/environment.ts(7,42): error TS6133: 'smoothstep' is declared but its value is never read.
+src/world/environment.ts(127,57): error TS6133: 'closedAngle' is declared but its value is never read.
+src/world/environment.ts(146,31): error TS2552: Cannot find name 'smoothLerp'. Did you mean 'smoothstep'?
+src/world/environment.ts(164,47): error TS6133: 'eventLog' is declared but its value is never read.
+src/world/environment.ts(197,9): error TS18047: 'npc.mesh' is possibly 'null'.
+src/world/environment.ts(197,48): error TS18047: 'npc.mesh' is possibly 'null'.
+src/world/environment.ts(197,69): error TS18047: 'npc.mesh' is possibly 'null'.
+src/world/environment.ts(263,38): error TS2345: Argument of type '{ gold: number; 'Health Potion': number; wood?: undefined; stone?: undefined; herb?: undefined; } | { wood: number; stone: number; herb: number; gold?: undefined; 'Health Potion'?: undefined; }' is not assignable to parameter of type 'Record<string, number> | undefined'.
+  Type '{ gold: number; 'Health Potion': number; wood?: undefined; stone?: undefined; herb?: undefined; }' is not assignable to type 'Record<string, number>'.
+    Property 'wood' is incompatible with index signature.
+      Type 'undefined' is not assignable to type 'number'.

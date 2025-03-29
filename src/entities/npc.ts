@@ -1,10 +1,9 @@
 // File: /src/entities/npc.ts
-// Optimization: Minor cleanup, simplified interaction logic slightly.
 
 import * as THREE from 'three';
 import { Entity } from './entity';
 import { Player } from './player';
-import { QuestLog } from '../systems/quest';
+import { QuestLog } from '../systems/quest'; // Removed QuestStatus
 import { Inventory } from '../systems/inventory';
 import { QuestData, InteractionResult } from '../types/common';
 import { smoothQuaternionSlerp } from '../utils/helpers';
@@ -49,15 +48,22 @@ export class NPC extends Entity {
 
         this.idleTimer = 2 + Math.random() * 3;
         this.idleLookTarget = new THREE.Vector3();
-        this.mesh.updateMatrixWorld();
-        this.baseQuaternion = this.mesh.quaternion.clone();
-        this.baseForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.baseQuaternion);
-        this.idleLookTarget.copy(this.mesh.position).addScaledVector(this.baseForward, 5); // Initial look forward
-
-        this.updateBoundingBox();
+        if (this.mesh) { // FIX: Check mesh exists
+            this.mesh.updateMatrixWorld();
+            this.baseQuaternion = this.mesh.quaternion.clone();
+            this.baseForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.baseQuaternion);
+            this.idleLookTarget.copy(this.mesh.position).addScaledVector(this.baseForward, 5); // Initial look forward
+            this.updateBoundingBox();
+        } else {
+            // Handle case where mesh creation failed (though constructor should ensure it)
+            this.baseQuaternion = new THREE.Quaternion();
+            this.baseForward = new THREE.Vector3(0, 0, 1);
+        }
     }
 
     private createModel(): void {
+        if (!this.mesh) return; // Should not happen, but safe check
+
         const bodyMat = new THREE.MeshLambertMaterial({ color: Math.random() * 0xffffff });
         const headMat = new THREE.MeshLambertMaterial({ color: 0xffdab9 }); // PeachPuff
         const bodyHeight = 1.1, headRadius = 0.3;
@@ -79,6 +85,8 @@ export class NPC extends Entity {
     }
 
     private addAccessory(headPosition: THREE.Vector3): void {
+        if (!this.mesh) return; // Check mesh exists
+
         let accessory: THREE.Object3D | null = null;
         let color = 0x8B4513; // Brown default
 
@@ -119,10 +127,16 @@ export class NPC extends Entity {
     }
 
     public interact(player: Player): InteractionResult | null {
+        if (!this.mesh) return null; // Check mesh exists
+
         console.log(`Interacting with ${this.name}`);
-        _playerPos.copy(player.mesh.position).setY(this.mesh.position.y);
-        this.mesh.lookAt(_playerPos);
-        this.idleLookTarget.copy(_playerPos); this.idleTimer = 3.0; // Look at player
+        // FIX: Check player mesh exists
+        if (player.mesh) {
+            _playerPos.copy(player.mesh.position).setY(this.mesh.position.y);
+            this.mesh.lookAt(_playerPos);
+            this.idleLookTarget.copy(_playerPos);
+        }
+        this.idleTimer = 3.0; // Look towards player general direction even if mesh missing
 
         let dialogue: string = `Hello there, ${player.name}.`;
         let interactionResultType: InteractionResult['type'] = 'dialogue';
@@ -164,19 +178,31 @@ export class NPC extends Entity {
         return dialogues[Math.floor(Math.random() * dialogues.length)];
     }
 
-    override update(deltaTime: number, player: Player, collidables?: THREE.Object3D[]): void {
+    // FIX: Update signature to match base
+    override update(deltaTime: number, _player?: Entity | undefined, _collidables?: THREE.Object3D[]): void {
+        if (!this.mesh) return; // Check mesh exists
+
         this.idleTimer -= deltaTime;
         if (this.idleTimer <= 0) {
             this.idleTimer = 3 + Math.random() * 4;
-            const distanceToPlayerSq = this.mesh.position.distanceToSquared(player.mesh.position);
 
-            if (distanceToPlayerSq < 225 && Math.random() < 0.3) { // Player nearby (15*15)
-                _targetLookAt.copy(player.mesh.position).setY(this.mesh.position.y);
-                this.idleLookTarget.copy(_targetLookAt);
-            } else { // Look random direction or forward
-                const randomAngleOffset = (Math.random() - 0.5) * Math.PI * 1.5;
-                const direction = (Math.random() < 0.5) ? this.baseForward.clone().applyAxisAngle(THREE.Object3D.DEFAULT_UP, randomAngleOffset) : this.baseForward;
-                this.idleLookTarget.copy(this.mesh.position).addScaledVector(direction, 5);
+            // FIX: Check if _player is Player and has mesh
+            if (_player instanceof Player && _player.mesh) {
+                const player = _player; // Now we know it's a Player
+                const distanceToPlayerSq = this.mesh.position.distanceToSquared(player.mesh.position);
+
+                if (distanceToPlayerSq < 225 && Math.random() < 0.3) { // Player nearby (15*15)
+                    _targetLookAt.copy(player.mesh.position).setY(this.mesh.position.y);
+                    this.idleLookTarget.copy(_targetLookAt);
+                } else { // Look random direction or forward
+                    const randomAngleOffset = (Math.random() - 0.5) * Math.PI * 1.5;
+                    const direction = (Math.random() < 0.5) ? this.baseForward.clone().applyAxisAngle(THREE.Object3D.DEFAULT_UP, randomAngleOffset) : this.baseForward;
+                    this.idleLookTarget.copy(this.mesh.position).addScaledVector(direction, 5);
+                }
+            } else { // Player not valid or nearby, look random/forward
+                 const randomAngleOffset = (Math.random() - 0.5) * Math.PI * 1.5;
+                 const direction = (Math.random() < 0.5) ? this.baseForward.clone().applyAxisAngle(THREE.Object3D.DEFAULT_UP, randomAngleOffset) : this.baseForward;
+                 this.idleLookTarget.copy(this.mesh.position).addScaledVector(direction, 5);
             }
         }
 
@@ -186,12 +212,19 @@ export class NPC extends Entity {
             _targetLookAt.copy(this.mesh.position).add(_targetDirection.normalize());
             _tempMatrix.lookAt(_targetLookAt, this.mesh.position, this.mesh.up);
             _targetQuaternion.setFromRotationMatrix(_tempMatrix);
-            smoothQuaternionSlerp(this.mesh.quaternion, _targetQuaternion, 0.05, deltaTime);
+            // Ensure mesh quaternion is not null/undefined before slerp
+             if (this.mesh.quaternion) {
+                 smoothQuaternionSlerp(this.mesh.quaternion, _targetQuaternion, 0.05, deltaTime);
+             }
         }
     }
 
     override updateBoundingBox(): void {
-        if (!this.mesh) return;
+        if (!this.mesh) { // FIX: Check mesh exists
+            this.boundingBox.makeEmpty();
+            this.userData.boundingBox = undefined;
+            return;
+        }
         const height = this.userData.height ?? 1.7; const radius = 0.4;
         const center = this.mesh.position.clone().add(new THREE.Vector3(0, height / 2, 0));
         this.boundingBox.setFromCenterAndSize(center, new THREE.Vector3(radius * 2, height, radius * 2));
