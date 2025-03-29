@@ -8,7 +8,6 @@ export interface EntityUserData {
     isEntity: boolean;
     isPlayer: boolean;
     isNPC: boolean;
-    isAnimal: boolean;
     isCollidable: boolean;
     isInteractable: boolean;
     interactionType?: string;
@@ -48,41 +47,6 @@ export interface InventoryItem {
     count: number;
     icon?: string;
     data?: any;
-}
-
-export type QuestStatus = 'unknown' | 'available' | 'active' | 'completed' | 'failed';
-
-export interface Objective {
-    type: 'gather' | 'retrieve' | 'kill' | 'explore' | 'talk_to';
-    item?: string;
-    amount?: number;
-    turnIn?: boolean;
-    target?: string;
-    locationId?: string;
-    locationHint?: string;
-    npcId?: string;
-    npcName?: string;
-    [key: string]: any;
-}
-
-export interface Reward {
-    gold?: number;
-    items?: Array<{ name: string; amount: number }>;
-    xp?: number;
-}
-
-export interface QuestData {
-    id: string;
-    title: string;
-    description: string;
-    objectives: Objective[];
-    reward?: Reward;
-}
-
-export interface QuestState {
-    data: QuestData;
-    status: QuestStatus;
-    progress?: Record<string, any>;
 }
 
 export interface EventEntry {
@@ -217,7 +181,6 @@ export class Entity {
             isEntity: true,
             isPlayer: false,
             isNPC: false,
-            isAnimal: false,
             isCollidable: true,
             isInteractable: false,
             id: this.id,
@@ -341,7 +304,6 @@ export class Player extends Entity {
     private leftLeg?: THREE.Mesh;
     private rightLeg?: THREE.Mesh;
 
-    public questLog: QuestLog | null = null;
     public eventLog: EventLog | null = null;
 
     constructor(scene: THREE.Scene, position: THREE.Vector3) {
@@ -378,8 +340,7 @@ export class Player extends Entity {
         this.updateBoundingBox();
     }
 
-    public setJournal(questLog: QuestLog, eventLog: EventLog): void {
-        this.questLog = questLog;
+    public setEventLog(eventLog: EventLog): void {
         this.eventLog = eventLog;
     }
 
@@ -658,14 +619,11 @@ const _targetQuaternion = new THREE.Quaternion();
 const _tempMatrix = new THREE.Matrix4();
 
 type AccessoryType = 'none' | 'straw_hat' | 'cap';
-type DialogueState = 'idle' | 'greeting' | 'quest_offer' | 'quest_incomplete' | 'quest_complete' | 'post_quest' | 'available';
+type DialogueState = 'idle' | 'greeting';
 
 export class NPC extends Entity {
     public accessoryType: AccessoryType;
-    public questLog: QuestLog | null;
     public inventory: Inventory | null;
-    public assignedQuestId: string | null;
-    private assignedQuestData: QuestData | null;
 
     public dialogueState: DialogueState;
     public interactionPrompt: string;
@@ -680,7 +638,6 @@ export class NPC extends Entity {
         position: THREE.Vector3,
         name: string,
         accessoryType: AccessoryType = 'none',
-        questLog: QuestLog | null,
         inventory: Inventory | null
     ) {
         super(scene, position, name);
@@ -690,10 +647,7 @@ export class NPC extends Entity {
         this.userData.interactionType = 'talk';
 
         this.accessoryType = accessoryType;
-        this.questLog = questLog;
         this.inventory = inventory;
-        this.assignedQuestId = null;
-        this.assignedQuestData = null;
 
         this.dialogueState = 'idle';
         this.interactionPrompt = `Press E to talk to ${this.name}`;
@@ -767,17 +721,6 @@ export class NPC extends Entity {
         }
     }
 
-    public assignQuest(questData: QuestData): void {
-        if (this.assignedQuestId && this.questLog?.getQuestStatus(this.assignedQuestId) !== 'completed') {
-            console.warn(`${this.name} already has quest ${this.assignedQuestId}. Cannot assign new one yet.`);
-            return;
-        }
-        this.assignedQuestId = questData.id;
-        this.assignedQuestData = questData;
-        this.questLog?.makeQuestAvailable(questData.id);
-        console.log(`${this.name} will offer quest: ${questData.id}`);
-    }
-
     public interact(player: Player): InteractionResult | null {
         console.log(`Interacting with ${this.name}`);
         let dialogue: string = `Hello there, ${player.name}.`;
@@ -789,49 +732,8 @@ export class NPC extends Entity {
         this.idleLookTarget.copy(_playerPos);
         this.idleTimer = 3.0;
 
-        if (this.assignedQuestId && this.questLog && this.inventory) {
-            const questStatus = this.questLog.getQuestStatus(this.assignedQuestId);
-            const questData = this.questLog.getQuestData(this.assignedQuestId) ?? this.assignedQuestData;
-
-            if (!questData) {
-                console.error(`Quest data not found for ID: ${this.assignedQuestId}`);
-                dialogue = "I seem to have forgotten what I needed...";
-                this.dialogueState = 'idle';
-                this.assignedQuestId = null;
-                this.assignedQuestData = null;
-            } else if (questStatus === 'available') {
-                dialogue = `${questData.description} Will you help me?`;
-                this.dialogueState = 'quest_offer';
-                if (this.questLog.acceptQuest(this.assignedQuestId)) {
-                    dialogue = `Thank you! ${this.questLog.getQuestProgress(this.assignedQuestId, this.inventory)}`;
-                    player.eventLog?.addEntry(`Quest accepted: ${questData.title}`);
-                    this.dialogueState = 'quest_incomplete';
-                } else {
-                    dialogue = "Hmm, let me know if you change your mind.";
-                    this.dialogueState = 'available';
-                }
-            } else if (questStatus === 'active') {
-                if (this.questLog.checkQuestCompletion(this.assignedQuestId, this.inventory)) {
-                    this.dialogueState = 'quest_complete';
-                    if (this.questLog.completeQuest(this.assignedQuestId, this.inventory)) {
-                        dialogue = `Ah, you've done it! Thank you so much! Here is your reward.`;
-                        player.eventLog?.addEntry(`Quest completed: ${questData.title}`);
-                    } else {
-                        dialogue = `Something went wrong turning that in... try again?`;
-                        this.dialogueState = 'quest_incomplete';
-                    }
-                } else {
-                    dialogue = `Have you completed the task yet? ${this.questLog.getQuestProgress(this.assignedQuestId, this.inventory)}`;
-                    this.dialogueState = 'quest_incomplete';
-                }
-            } else if (questStatus === 'completed') {
-                dialogue = "Thanks again for your help!";
-                this.dialogueState = 'post_quest';
-            }
-        } else {
-            dialogue = this.getRandomIdleDialogue();
-            this.dialogueState = 'greeting';
-        }
+        dialogue = this.getRandomIdleDialogue();
+        this.dialogueState = 'greeting';
 
         console.log(`${this.name}: ${dialogue}`);
         player.eventLog?.addEntry(`${this.name}: "${dialogue}"`);
@@ -890,466 +792,6 @@ export class NPC extends Entity {
         this.userData.boundingBox = this.boundingBox;
     }
 }
-
-
-type AnimalType = 'Deer' | 'Wolf' | 'Rabbit' | 'Generic';
-type AnimalState = 'wandering' | 'fleeing' | 'idle' | 'attacking' | 'dead';
-
-const _direction = new THREE.Vector3();
-const _lookTarget = new THREE.Vector3();
-const _fleeDirection = new THREE.Vector3();
-const _attackDirection = new THREE.Vector3();
-const _origin = new THREE.Vector3();
-const _rayDirection = new THREE.Vector3(0, -1, 0);
-const _tempVec = new THREE.Vector3();
-
-export class Animal extends Entity {
-    public type: AnimalType;
-    private worldSize: number;
-    private isOnGround: boolean;
-    private groundCheckTimer: number;
-    private groundCheckInterval: number;
-
-    public state: AnimalState;
-    private stateTimer: number;
-    private wanderTarget: THREE.Vector3;
-    public speed: number;
-    private headMesh?: THREE.Mesh | THREE.Object3D;
-
-    private detectionRange?: number;
-    private attackRange?: number;
-    private attackDamage?: number;
-    private attackCooldown?: number;
-    private lastAttackTime?: number;
-
-    constructor(scene: THREE.Scene, position: THREE.Vector3, type: AnimalType, worldSize: number) {
-        super(scene, position, type);
-        this.userData.isAnimal = true;
-        this.userData.isCollidable = true;
-        this.type = type;
-        this.worldSize = worldSize;
-        this.isOnGround = false;
-        this.groundCheckTimer = Math.random();
-        this.groundCheckInterval = 0.15 + Math.random() * 0.1;
-
-        this.state = 'wandering';
-        this.stateTimer = 0;
-        this.wanderTarget = new THREE.Vector3();
-        this.speed = 1.5;
-
-        this.setupTypeSpecifics();
-        this.createModel();
-        this.updateBoundingBox();
-        this.findNewWanderTarget();
-    }
-
-    private setupTypeSpecifics(): void {
-        switch (this.type) {
-            case 'Deer':
-                this.userData.isInteractable = true;
-                this.userData.interactionType = 'pet';
-                this.userData.prompt = "Press E to Pet Deer";
-                this.speed = 2.0;
-                this.health = 30; this.maxHealth = 30;
-                break;
-            case 'Wolf':
-                this.userData.isInteractable = false;
-                this.speed = 3.5;
-                this.health = 50; this.maxHealth = 50;
-                this.state = 'idle';
-                this.detectionRange = 20;
-                this.attackRange = 2.5;
-                this.attackDamage = 8;
-                this.attackCooldown = 2.0;
-                this.lastAttackTime = -Infinity;
-                this.userData.isHostile = false;
-                break;
-            case 'Rabbit':
-                this.userData.isInteractable = false;
-                this.userData.isCollidable = false;
-                this.speed = 4.0;
-                this.health = 10; this.maxHealth = 10;
-                this.state = 'wandering';
-                break;
-            default:
-                this.speed = 1.5;
-                this.health = 20; this.maxHealth = 20;
-                break;
-        }
-    }
-
-    private createModel(): void {
-        let bodyColor = 0xCD853F;
-        let headColor = 0xD2B48C;
-        let limbColor = bodyColor;
-
-        let bodyGeo: THREE.BufferGeometry;
-        let headGeo: THREE.BufferGeometry;
-        let bodyDimensions = { w: 0.8, h: 0.5, d: 0.4 };
-        let headDimensions = { w: 0.4, h: 0.4, d: 0.4 };
-        const limbRadius = 0.1;
-        const limbLength = 0.6;
-
-        switch (this.type) {
-            case 'Deer':
-                bodyColor = 0xA0522D; headColor = 0xBC8F8F; limbColor = headColor;
-                bodyDimensions = { w: 1.2, h: 0.7, d: 0.6 }; headDimensions = { w: 0.4, h: 0.4, d: 0.5 };
-                bodyGeo = new THREE.BoxGeometry(bodyDimensions.w, bodyDimensions.h, bodyDimensions.d);
-                headGeo = new THREE.BoxGeometry(headDimensions.w, headDimensions.h, headDimensions.d);
-                break;
-            case 'Wolf':
-                bodyColor = 0x696969; headColor = 0x808080; limbColor = headColor;
-                bodyDimensions = { w: 1.0, h: 0.5, d: 0.4 }; headDimensions = { w: 0.35, h: 0.35, d: 0.45 };
-                bodyGeo = new THREE.BoxGeometry(bodyDimensions.w, bodyDimensions.h, bodyDimensions.d);
-                headGeo = new THREE.BoxGeometry(headDimensions.w, headDimensions.h, headDimensions.d);
-                break;
-            case 'Rabbit':
-                bodyColor = 0xF5F5DC; headColor = 0xFFFAFA; limbColor = headColor;
-                bodyDimensions = { w: 0.4, h: 0.3, d: 0.3 }; headDimensions = { w: 0.3, h: 0.3, d: 0.3 };
-                bodyGeo = new THREE.BoxGeometry(bodyDimensions.w, bodyDimensions.h, bodyDimensions.d);
-                headGeo = new THREE.SphereGeometry(headDimensions.w / 2, 8, 6);
-                break;
-            default:
-                bodyGeo = new THREE.BoxGeometry(bodyDimensions.w, bodyDimensions.h, bodyDimensions.d);
-                headGeo = new THREE.SphereGeometry(headDimensions.w / 2, 8, 8);
-                break;
-        }
-
-        const bodyMat = new THREE.MeshLambertMaterial({ color: bodyColor });
-        const headMat = new THREE.MeshLambertMaterial({ color: headColor });
-        const limbMat = new THREE.MeshLambertMaterial({ color: limbColor });
-
-        const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
-        bodyMesh.position.y = limbLength + bodyDimensions.h / 2;
-        bodyMesh.castShadow = true;
-        bodyMesh.receiveShadow = true;
-        this.mesh.add(bodyMesh);
-
-        const headMesh = new THREE.Mesh(headGeo, headMat);
-        const headY = bodyMesh.position.y + bodyDimensions.h / 2;
-        const headZ = bodyDimensions.d / 2 + headDimensions.d / 2;
-        headMesh.position.set(0, headY, headZ);
-        headMesh.castShadow = true;
-        this.mesh.add(headMesh);
-        this.headMesh = headMesh;
-        this.headMesh.userData.originalY = headMesh.position.y;
-
-        this.addTypeSpecificParts(bodyMesh, headMesh, bodyDimensions, headDimensions, headColor);
-
-        const legOffsetX = bodyDimensions.w / 2 - limbRadius;
-        const legOffsetZ = bodyDimensions.d / 2 - limbRadius;
-        const hipY = bodyMesh.position.y - bodyDimensions.h / 2;
-
-        const legPositions = [
-            new THREE.Vector3(legOffsetX, hipY, legOffsetZ), new THREE.Vector3(-legOffsetX, hipY, legOffsetZ),
-            new THREE.Vector3(legOffsetX, hipY, -legOffsetZ), new THREE.Vector3(-legOffsetX, hipY, -legOffsetZ)
-        ];
-
-        legPositions.forEach(pos => {
-            const legGeo = new THREE.CylinderGeometry(limbRadius, limbRadius * 0.9, limbLength, 6);
-            legGeo.translate(0, -limbLength / 2, 0);
-            const legMesh = new THREE.Mesh(legGeo, limbMat);
-            legMesh.position.copy(pos);
-            legMesh.castShadow = true;
-            this.mesh.add(legMesh);
-        });
-
-        this.userData.height = limbLength + bodyDimensions.h + headDimensions.h;
-        this.userData.width = bodyDimensions.w;
-        this.userData.depth = bodyDimensions.d;
-    }
-
-    private addTypeSpecificParts(
-        bodyMesh: THREE.Mesh, headMesh: THREE.Mesh | THREE.Object3D,
-        bodyDim: { w: number, h: number, d: number }, headDim: { w: number, h: number, d: number }, headColor: number
-    ): void {
-        const headPos = headMesh.position;
-
-        if (this.type === 'Deer') {
-            const antlerMat = new THREE.MeshLambertMaterial({ color: 0xD2B48C });
-            const antlerGeo = new THREE.ConeGeometry(0.05, 0.5, 4);
-            const addAntler = (xOffset: number, zRot: number) => {
-                const antler = new THREE.Mesh(antlerGeo, antlerMat);
-                antler.castShadow = true;
-                antler.position.set(xOffset, 0.2, -0.2).add(headPos);
-                antler.rotation.z = zRot;
-                this.mesh.add(antler);
-            };
-            addAntler(-0.15, 0.5); addAntler(0.15, -0.5);
-        } else if (this.type === 'Rabbit') {
-            const earMat = new THREE.MeshLambertMaterial({ color: headColor });
-            const earGeo = new THREE.BoxGeometry(0.05, 0.3, 0.05);
-             const addEar = (xOffset: number, zRot: number) => {
-                const ear = new THREE.Mesh(earGeo, earMat);
-                ear.castShadow = true;
-                ear.position.set(xOffset, 0.15, -0.05).add(headPos);
-                ear.rotation.z = zRot;
-                this.mesh.add(ear);
-             };
-             addEar(-0.05, 0.2); addEar(0.05, -0.2);
-        } else if (this.type === 'Wolf') {
-            const tailGeo = new THREE.BoxGeometry(0.1, 0.4, 0.1);
-            const tailMat = new THREE.MeshLambertMaterial({ color: (bodyMesh.material as THREE.MeshLambertMaterial).color });
-            const tailMesh = new THREE.Mesh(tailGeo, tailMat);
-            tailMesh.position.set(0, bodyMesh.position.y + 0.1, bodyMesh.position.z - bodyDim.d / 2 - 0.1);
-            tailMesh.rotation.x = -0.5;
-            tailMesh.castShadow = true;
-            this.mesh.add(tailMesh);
-        }
-    }
-
-
-    public interact(player: Player): InteractionResult | null {
-        if (this.isDead) return null;
-
-        if (this.type === 'Deer' && this.userData.isInteractable) {
-            console.log("Petting deer...");
-            player.eventLog?.addEntry("You gently pet the deer.");
-
-            this.state = 'idle';
-            this.stateTimer = 2.0 + Math.random() * 2;
-            this.lookAt(player.mesh.position);
-
-            if (Math.random() < 0.3) {
-                return { type: 'reward', item: { name: 'feather', amount: 1 }, message: "The deer seems calm. You found a feather!" };
-            } else {
-                return { type: 'message', message: "The deer looks at you curiously." };
-            }
-        }
-        return null;
-    }
-
-
-    override update(deltaTime: number, player: Player, collidables: THREE.Object3D[]): void {
-        if (this.isDead || this.state === 'dead') return;
-
-        const distanceToPlayerSq = this.mesh.position.distanceToSquared(player.mesh.position);
-        if (this.stateTimer > 0) this.stateTimer -= deltaTime;
-
-        this.updateState(deltaTime, player, distanceToPlayerSq);
-        this.applyGravityAndGroundCheck(deltaTime, collidables);
-        this.mesh.position.addScaledVector(this.velocity, deltaTime);
-        this.clampToWorldBounds();
-        this.animate(deltaTime);
-        this.updateBoundingBox();
-    }
-
-    private updateState(deltaTime: number, player: Player, distanceToPlayerSq: number): void {
-        switch (this.state) {
-            case 'idle':
-                this.velocity.set(0, this.velocity.y, 0);
-                if (this.stateTimer <= 0) {
-                    this.findNewWanderTarget();
-                    this.state = 'wandering';
-                } else {
-                    this.checkProximityTriggers(player, distanceToPlayerSq);
-                }
-                break;
-
-            case 'wandering':
-                _direction.copy(this.wanderTarget).sub(this.mesh.position);
-                _direction.y = 0;
-                const distanceToTarget = _direction.length();
-
-                if (distanceToTarget < 1.0 || this.stateTimer <= 0) {
-                    if (Math.random() < 0.3) {
-                        this.state = 'idle';
-                        this.stateTimer = 2 + Math.random() * 3;
-                        this.velocity.x = 0; this.velocity.z = 0;
-                    } else {
-                        this.findNewWanderTarget();
-                        _direction.copy(this.wanderTarget).sub(this.mesh.position).normalize();
-                    }
-                } else {
-                    _direction.normalize();
-                }
-
-                if (this.state === 'wandering') {
-                    this.velocity.x = _direction.x * this.speed;
-                    this.velocity.z = _direction.z * this.speed;
-                    if (_direction.lengthSq() > 0.01) {
-                        this.lookAt(this.mesh.position.clone().add(_direction));
-                    }
-                }
-                this.checkProximityTriggers(player, distanceToPlayerSq);
-                break;
-
-            case 'fleeing':
-                _fleeDirection.copy(this.mesh.position).sub(player.mesh.position);
-                _fleeDirection.y = 0;
-                if (_fleeDirection.lengthSq() > 0.001) {
-                    _fleeDirection.normalize();
-                    const fleeSpeed = this.speed * 1.5;
-                    this.velocity.x = _fleeDirection.x * fleeSpeed;
-                    this.velocity.z = _fleeDirection.z * fleeSpeed;
-                    this.lookAt(this.mesh.position.clone().add(_fleeDirection));
-                } else {
-                    this.velocity.x = (Math.random() - 0.5) * this.speed;
-                    this.velocity.z = (Math.random() - 0.5) * this.speed;
-                }
-
-                if (distanceToPlayerSq > 20 * 20) {
-                    this.findNewWanderTarget();
-                    this.state = 'wandering';
-                }
-                break;
-
-            case 'attacking':
-                if (!this.detectionRange || !this.attackRange || !this.attackDamage || !this.attackCooldown || typeof this.lastAttackTime === 'undefined') {
-                    this.state = 'idle';
-                    break;
-                }
-                this.userData.isHostile = true;
-
-                if (distanceToPlayerSq > (this.detectionRange * 1.2) ** 2) {
-                    this.state = 'idle';
-                    this.userData.isHostile = false;
-                    this.stateTimer = 1.0 + Math.random();
-                    this.velocity.x = 0; this.velocity.z = 0;
-                    break;
-                }
-
-                _attackDirection.copy(player.mesh.position).sub(this.mesh.position);
-                _attackDirection.y = 0;
-                const distanceToAttackTarget = _attackDirection.length();
-                this.lookAt(player.mesh.position);
-
-                if (distanceToAttackTarget > this.attackRange) {
-                    _attackDirection.normalize();
-                    this.velocity.x = _attackDirection.x * this.speed;
-                    this.velocity.z = _attackDirection.z * this.speed;
-                } else {
-                    this.velocity.x = 0; this.velocity.z = 0;
-                    const time = performance.now() / 1000;
-                    if (time > this.lastAttackTime + this.attackCooldown) {
-                        console.log("Wolf attacks!");
-                        player.takeDamage(this.attackDamage);
-                        player.eventLog?.addEntry(`The wolf bites you! (-${this.attackDamage} HP)`);
-                        this.lastAttackTime = time;
-                    }
-                }
-                break;
-        }
-    }
-
-    private checkProximityTriggers(player: Player, distanceSq: number): void {
-        if (this.type === 'Wolf' && this.detectionRange && distanceSq < this.detectionRange ** 2) {
-             this.state = 'attacking';
-             this.userData.isHostile = true;
-             player.eventLog?.addEntry("A wolf growls nearby!");
-        } else if ((this.type === 'Deer' || this.type === 'Rabbit') && distanceSq < 10 * 10) {
-             this.state = 'fleeing';
-        }
-    }
-
-    private applyGravityAndGroundCheck(deltaTime: number, collidables: THREE.Object3D[]): void {
-        if (!this.isOnGround || this.velocity.y > 0) {
-            this.velocity.y += -15 * deltaTime;
-        }
-
-        this.groundCheckTimer -= deltaTime;
-        if (this.groundCheckTimer <= 0) {
-            this.groundCheckTimer = this.groundCheckInterval;
-
-            _origin.copy(this.mesh.position).y += 0.1;
-            const raycaster = new THREE.Raycaster(_origin, _rayDirection, 0, 0.5);
-            const checkAgainst = collidables.filter(obj => obj !== this.mesh && obj?.userData?.isCollidable);
-            const intersects = raycaster.intersectObjects(checkAgainst, true);
-
-            let foundGround = false;
-            let groundY = -Infinity;
-
-            if (intersects.length > 0) {
-                for (const intersect of intersects) {
-                    if (intersect.distance > 0.01) {
-                        groundY = Math.max(groundY, intersect.point.y);
-                        foundGround = true;
-                    }
-                }
-            }
-
-            const snapThreshold = 0.2;
-            if (foundGround && this.mesh.position.y <= groundY + snapThreshold) {
-                if (!this.isOnGround) {
-                     this.mesh.position.y = groundY;
-                     if (this.velocity.y < 0) this.velocity.y = 0;
-                }
-                this.isOnGround = true;
-            } else {
-                this.isOnGround = false;
-            }
-        }
-
-        if (this.isOnGround && this.velocity.y < 0) {
-             this.velocity.y = 0;
-        }
-    }
-
-
-    private clampToWorldBounds(): void {
-        const halfSize = this.worldSize / 2 - 1;
-        this.mesh.position.x = THREE.MathUtils.clamp(this.mesh.position.x, -halfSize, halfSize);
-        this.mesh.position.z = THREE.MathUtils.clamp(this.mesh.position.z, -halfSize, halfSize);
-    }
-
-    private findNewWanderTarget(): void {
-        const wanderDistance = 10 + Math.random() * 15;
-        const angle = Math.random() * Math.PI * 2;
-        _tempVec.set( Math.cos(angle) * wanderDistance, 0, Math.sin(angle) * wanderDistance ).add(this.mesh.position);
-
-        const halfSize = this.worldSize / 2 - 5;
-        this.wanderTarget.x = THREE.MathUtils.clamp(_tempVec.x, -halfSize, halfSize);
-        this.wanderTarget.z = THREE.MathUtils.clamp(_tempVec.z, -halfSize, halfSize);
-        this.wanderTarget.y = this.mesh.position.y;
-
-        this.stateTimer = 5 + Math.random() * 5;
-    }
-
-    private animate(deltaTime: number): void {
-        if (!this.headMesh) return;
-        const horizontalSpeed = Math.sqrt(this.velocity.x ** 2 + this.velocity.z ** 2);
-
-        if (horizontalSpeed > 0.1 && this.isOnGround) {
-            const bobFrequency = 8;
-            const bobAmplitude = 0.03;
-            const time = performance.now() * 0.001;
-            const headBobY = Math.sin(time * bobFrequency) * bobAmplitude;
-            const originalY = this.headMesh.userData.originalY ?? this.headMesh.position.y;
-            this.headMesh.position.y = originalY + headBobY;
-        } else if (this.headMesh.userData.originalY !== undefined) {
-            const originalY = this.headMesh.userData.originalY;
-            this.headMesh.position.y = THREE.MathUtils.lerp(this.headMesh.position.y, originalY, 10 * deltaTime);
-        }
-    }
-
-    override die(): void {
-        if (this.isDead) return;
-        super.die();
-        console.log(`${this.name} died.`);
-        this.state = 'dead';
-        this.userData.isHostile = false;
-
-        setTimeout(() => {
-            if (this.mesh) {
-                this.mesh.rotation.z = Math.PI / 2 * (Math.random() > 0.5 ? 1 : -1);
-                this.mesh.rotation.x = (Math.random() - 0.5) * 0.5;
-            }
-        }, 200);
-    }
-
-    override updateBoundingBox(): void {
-        if (!this.mesh) return;
-        const height = this.userData.height ?? 1.0;
-        const width = this.userData.width ?? 0.8;
-        const depth = this.userData.depth ?? 0.6;
-
-        const center = this.mesh.position.clone().add(new THREE.Vector3(0, height / 2, 0));
-        const size = new THREE.Vector3(width, height, depth);
-        this.boundingBox.setFromCenterAndSize(center, size);
-        this.userData.boundingBox = this.boundingBox;
-    }
-}
-
 
 export class Inventory {
     public readonly size: number;
@@ -1547,219 +989,6 @@ export class Inventory {
 }
 
 
-export class QuestLog {
-    private quests: Record<string, QuestState>;
-    private allQuestDefinitions: Record<string, QuestData>;
-    private onChangeCallbacks: Array<(quests: QuestState[]) => void>;
-
-    constructor(allQuestDefinitions: Record<string, QuestData> = {}) {
-        this.quests = {};
-        this.allQuestDefinitions = allQuestDefinitions;
-        this.onChangeCallbacks = [];
-    }
-
-    public addQuestDefinitions(definitions: Record<string, QuestData>): void {
-        this.allQuestDefinitions = { ...this.allQuestDefinitions, ...definitions };
-    }
-
-    public getQuestData(questId: string): QuestData | null {
-        return this.allQuestDefinitions[questId] ?? null;
-    }
-
-    public makeQuestAvailable(questId: string): boolean {
-        const definition = this.getQuestData(questId);
-        if (!definition) {
-            console.warn(`Quest definition not found for ID: ${questId}`);
-            return false;
-        }
-        const currentState = this.quests[questId];
-        if (!currentState || currentState.status === 'unknown') {
-            this.quests[questId] = { data: definition, status: 'available' };
-            console.log(`Quest now available: ${definition.title}`);
-            this.notifyChange();
-            return true;
-        }
-        return false;
-    }
-
-    public acceptQuest(questId: string): boolean {
-        const quest = this.quests[questId];
-        if (quest?.status === 'available') {
-            quest.status = 'active';
-            console.log(`Quest accepted: ${quest.data.title}`);
-            this.notifyChange();
-            return true;
-        }
-        console.warn(`Cannot accept quest ${questId}. Status: ${this.getQuestStatus(questId)}`);
-        return false;
-    }
-
-    public checkQuestCompletion(questId: string, inventory: Inventory | null): boolean {
-        const quest = this.quests[questId];
-        if (!quest || quest.status !== 'active') return false;
-        if (!inventory) {
-            console.error("Inventory reference missing for quest completion check!");
-            return false;
-        }
-
-        for (const objective of quest.data.objectives) {
-            let isComplete = false;
-            switch (objective.type) {
-                case 'gather': case 'retrieve':
-                    isComplete = inventory.hasItem(objective.item!, objective.amount ?? 1);
-                    break;
-                case 'kill':
-                    console.warn(`Kill objective check not implemented for quest ${questId}`);
-                    isComplete = false;
-                    break;
-                case 'explore':
-                    console.warn(`Explore objective check not implemented for quest ${questId}`);
-                    isComplete = false;
-                    break;
-                case 'talk_to':
-                    console.warn(`Talk_to objective check not implemented for quest ${questId}`);
-                    isComplete = false;
-                    break;
-                default:
-                    console.warn(`Unknown objective type "${objective.type}" in quest ${questId}`);
-                    return false;
-            }
-            if (!isComplete) return false;
-        }
-        return true;
-    }
-
-    public getQuestProgress(questId: string, inventory: Inventory | null): string {
-        const quest = this.quests[questId];
-        if (!quest) return "Quest unknown.";
-        if (quest.status !== 'active') return `(${quest.status})`;
-        if (!inventory) return "Cannot check progress (no inventory).";
-
-        const progressParts = quest.data.objectives.map(objective => {
-            let current = 0;
-            const required = objective.amount ?? 1;
-            switch (objective.type) {
-                case 'gather': case 'retrieve':
-                    current = inventory.countItem(objective.item!);
-                    return `${objective.item}: ${Math.min(current, required)} / ${required}`;
-                case 'kill':
-                    return `${objective.target ?? 'enemies'}: ${current} / ${required}`;
-                case 'explore':
-                    return `Explore ${objective.locationHint ?? objective.locationId ?? 'area'}: ${current} / ${required}`;
-                case 'talk_to':
-                    return `Talk to ${objective.npcName ?? objective.npcId ?? 'NPC'}: ${current} / ${required}`;
-                default:
-                    return `${objective.type}: ? / ?`;
-            }
-        });
-        return progressParts.length > 0 ? progressParts.join(', ') : "No objectives defined.";
-    }
-
-    public completeQuest(questId: string, inventory: Inventory | null): boolean {
-        const quest = this.quests[questId];
-        if (!quest || quest.status !== 'active') {
-            console.warn(`Attempted to complete non-active quest: ${questId}`);
-            return false;
-        }
-        if (!inventory) {
-            console.error("Inventory reference missing for quest completion!");
-            return false;
-        }
-        if (!this.checkQuestCompletion(questId, inventory)) {
-            console.warn(`Attempted to complete quest ${questId} but objectives not met.`);
-            return false;
-        }
-
-        console.log(`Completing quest: ${quest.data.title}`);
-
-        let itemsRemovedSuccessfully = true;
-        quest.data.objectives.forEach(objective => {
-            if (objective.turnIn && objective.item && objective.amount && objective.amount > 0) {
-                if (!inventory.removeItem(objective.item, objective.amount)) {
-                    console.error(`CRITICAL: Failed to remove required item ${objective.item} x${objective.amount} for quest ${questId}! Completion failed.`);
-                    itemsRemovedSuccessfully = false;
-                }
-            }
-        });
-
-        if (!itemsRemovedSuccessfully) return false;
-
-        const reward = quest.data.reward;
-        if (reward) {
-            if (reward.gold) inventory.addItem('gold', reward.gold);
-            reward.items?.forEach(item => {
-                if (!inventory.addItem(item.name, item.amount)) {
-                    console.warn(`Inventory full. Could not grant reward: ${item.amount} ${item.name}`);
-                }
-            });
-        }
-
-        quest.status = 'completed';
-        this.notifyChange();
-        console.log(`Quest ${questId} completed!`);
-        return true;
-    }
-
-    public getQuestStatus(questId: string): QuestStatus {
-        return this.quests[questId]?.status ?? 'unknown';
-    }
-
-    public getAllKnownQuests(): QuestState[] {
-        return Object.values(this.quests);
-    }
-
-    public getQuestsByStatus(status: QuestStatus): QuestState[] {
-        return Object.values(this.quests).filter(q => q.status === status);
-    }
-    public getActiveQuests(): QuestState[] { return this.getQuestsByStatus('active'); }
-    public getCompletedQuests(): QuestState[] { return this.getQuestsByStatus('completed'); }
-    public getAvailableQuests(): QuestState[] { return this.getQuestsByStatus('available'); }
-
-    public getSaveData(): Record<string, QuestStatus> {
-        const saveData: Record<string, QuestStatus> = {};
-        Object.entries(this.quests).forEach(([id, questState]) => {
-            saveData[id] = questState.status;
-        });
-        return saveData;
-    }
-
-    public loadSaveData(saveData: Record<string, QuestStatus> | null): void {
-        this.quests = {};
-        if (!saveData) return;
-
-        Object.entries(saveData).forEach(([id, status]) => {
-            const definition = this.getQuestData(id);
-            if (definition) {
-                this.quests[id] = { data: definition, status: status };
-            } else {
-                console.warn(`Quest definition not found for saved quest ID: ${id}. Skipping load.`);
-            }
-        });
-        this.notifyChange();
-        console.log("Quest log loaded.");
-    }
-
-    public onChange(callback: (quests: QuestState[]) => void): void {
-        if (typeof callback === 'function') {
-            this.onChangeCallbacks.push(callback);
-        }
-    }
-    public removeOnChange(callback: (quests: QuestState[]) => void): void {
-        this.onChangeCallbacks = this.onChangeCallbacks.filter(cb => cb !== callback);
-    }
-
-    private notifyChange(): void {
-        const allQuests = this.getAllKnownQuests();
-        this.onChangeCallbacks.forEach(cb => {
-            try {
-                cb(allQuests);
-            } catch (error) {
-                console.error("Error in questLog onChange callback:", error);
-            }
-        });
-    }
-}
-
 export class EventLog {
     private entries: EventEntry[];
     private readonly maxEntries: number;
@@ -1859,7 +1088,7 @@ export class InteractableObject {
         this.userData = {
             id: this.id, entityReference: this, isInteractable: true,
             interactionType: this.interactionType, prompt: this.prompt, data: this.data,
-            isSimpleObject: true, isEntity: false, isPlayer: false, isNPC: false, isAnimal: false,
+            isSimpleObject: true, isEntity: false, isPlayer: false, isNPC: false,
             isCollidable: false,
         };
     }
@@ -3113,16 +2342,12 @@ class Chest extends THREE.Group {
     }
 }
 
-interface SimpleQuestDef extends Partial<QuestData> {
-    id: string; title: string; description: string;
-    objectives: QuestData['objectives']; reward?: QuestData['reward'];
-}
 
 export function populateEnvironment(
     scene: THREE.Scene, worldSize: number, collidableObjects: THREE.Object3D[],
     interactableObjects: Array<Entity | InteractableObject | THREE.Object3D>,
     entities: Array<Entity | THREE.Object3D>,
-    questLog: QuestLog, inventory: Inventory, eventLog: EventLog
+    inventory: Inventory, eventLog: EventLog
 ): void {
     const halfSize = worldSize / 2;
     const terrain = scene.getObjectByName("Terrain") as THREE.Mesh | undefined;
@@ -3150,7 +2375,7 @@ export function populateEnvironment(
     });
 
     const addNpc = (pos: THREE.Vector3, name: string, accessory: 'none' | 'straw_hat' | 'cap'): NPC => {
-        const npc = new NPC(scene, pos, name, accessory, questLog, inventory);
+        const npc = new NPC(scene, pos, name, accessory, inventory);
         npc.mesh.position.y = getTerrainHeight(pos.x, pos.z);
         entities.push(npc);
         collidableObjects.push(npc.mesh);
@@ -3160,24 +2385,6 @@ export function populateEnvironment(
     const farmer = addNpc(villageCenter.clone().add(new THREE.Vector3(-12, 0, 2)), 'Farmer Giles', 'straw_hat');
     const blacksmith = addNpc(villageCenter.clone().add(new THREE.Vector3(10, 0, -3)), 'Blacksmith Brynn', 'cap');
     const hunter = addNpc(new THREE.Vector3(halfSize * 0.4, 0, -halfSize * 0.3), 'Hunter Rex', 'none');
-
-    const questDefinitions: Record<string, SimpleQuestDef> = {
-        gatherWood: {
-            id: 'gatherWood', title: 'Wood for the Winter',
-            description: 'Farmer Giles looks worried. "The nights are getting colder. Could you gather 5 Wood for me?"',
-            objectives: [{ type: 'gather', item: 'wood', amount: 5, turnIn: true }],
-            reward: { gold: 10, items: [{ name: 'Health Potion', amount: 1 }] }
-        },
-        findBow: {
-            id: 'findBow', title: 'Lost Bow',
-            description: 'Hunter Rex sighs. "Blast it! I left my favorite bow near the old cave entrance to the southeast. Can you retrieve it for me?"',
-            objectives: [{ type: 'retrieve', item: 'Hunter\'s Bow', amount: 1, locationHint: 'old cave SE', turnIn: true }],
-            reward: { gold: 25 }
-        }
-    };
-    questLog.addQuestDefinitions(questDefinitions as Record<string, QuestData>);
-    farmer.assignQuest(questDefinitions.gatherWood as QuestData);
-    hunter.assignQuest(questDefinitions.findBow as QuestData);
 
 
     const addObject = (creator: (pos: THREE.Vector3, ...args: any[]) => THREE.Group, count: number, minDistSq: number, ...args: any[]) => {
@@ -3201,29 +2408,6 @@ export function populateEnvironment(
     addObject(createTree, 150, 25 * 25);
     addObject(createRock, 80, 20 * 20, randomFloat(1, 2.5));
     addObject(createHerb, 60, 10 * 10);
-
-    const addAnimal = (type: 'Deer' | 'Wolf' | 'Rabbit', count: number, area?: { x: number, z: number, range: number }) => {
-        for (let i = 0; i < count; i++) {
-            let x, z;
-            if (area) {
-                x = area.x + randomFloat(-area.range, area.range);
-                z = area.z + randomFloat(-area.range, area.range);
-            } else {
-                x = randomFloat(-halfSize * 0.85, halfSize * 0.85);
-                z = randomFloat(-halfSize * 0.85, halfSize * 0.85);
-            }
-            const pos = new THREE.Vector3(x, 0, z);
-            const animal = new Animal(scene, pos, type, worldSize);
-            animal.mesh.position.y = getTerrainHeight(x, z);
-            entities.push(animal);
-            if (animal.userData.isCollidable) collidableObjects.push(animal.mesh);
-            if (animal.userData.isInteractable) interactableObjects.push(animal);
-        }
-    };
-
-    addAnimal('Deer', 12);
-    addAnimal('Wolf', 6, { x: halfSize * 0.6, z: -halfSize * 0.6, range: halfSize * 0.35 });
-    addAnimal('Rabbit', 15);
 
     const windmillPos = new THREE.Vector3(-halfSize * 0.6, 0, -halfSize * 0.2);
     const windmill = new Windmill(windmillPos);
@@ -3464,39 +2648,29 @@ export class InventoryDisplay {
 
 
 export class JournalDisplay {
-    private questLog: QuestLog;
     private eventLog: EventLog;
-    private inventory: Inventory;
     private displayElement: HTMLElement | null;
-    private questListElement: HTMLElement | null;
     private eventListElement: HTMLElement | null;
     private _isOpen: boolean;
 
-    private boundUpdateQuests!: (quests: QuestState[]) => void;
     private boundUpdateEvents!: (entries: string[]) => void;
 
-
-    constructor(questLog: QuestLog, eventLog: EventLog, inventory: Inventory) {
-        if (!questLog || !eventLog || !inventory) {
-            throw new Error("QuestLog, EventLog, and Inventory instances are required for JournalDisplay.");
+    constructor(eventLog: EventLog) {
+        if (!eventLog) {
+            throw new Error("EventLog instance is required for JournalDisplay.");
         }
-        this.questLog = questLog;
         this.eventLog = eventLog;
-        this.inventory = inventory;
         this._isOpen = false;
 
         this.displayElement = document.getElementById('journal-display');
-        this.questListElement = document.getElementById('quest-log');
         this.eventListElement = document.getElementById('event-log');
 
-        if (!this.displayElement || !this.questListElement || !this.eventListElement) {
-            console.error("Journal UI elements not found (#journal-display, #quest-log, or #event-log). Aborting setup.");
+        if (!this.displayElement || !this.eventListElement) {
+            console.error("Journal UI elements not found (#journal-display or #event-log). Aborting setup.");
             return;
         }
 
-        this.boundUpdateQuests = this.updateQuests.bind(this);
         this.boundUpdateEvents = this.updateEvents.bind(this);
-        this.questLog.onChange(this.boundUpdateQuests);
         this.eventLog.onChange(this.boundUpdateEvents);
 
         this.hide();
@@ -3508,49 +2682,7 @@ export class JournalDisplay {
 
     private updateDisplay(): void {
         if (!this._isOpen) return;
-        this.updateQuests(this.questLog.getAllKnownQuests());
         this.updateEvents(this.eventLog.getFormattedEntries());
-    }
-
-    private updateQuests(allQuests: QuestState[] = this.questLog.getAllKnownQuests()): void {
-        if (!this._isOpen || !this.questListElement) return;
-
-        const active = allQuests.filter(q => q.status === 'active');
-        const available = allQuests.filter(q => q.status === 'available');
-        const completed = allQuests.filter(q => q.status === 'completed');
-        const failed = allQuests.filter(q => q.status === 'failed');
-
-        this.questListElement.innerHTML = '';
-
-        if ([...active, ...available, ...completed, ...failed].length === 0) {
-            this.questListElement.innerHTML = '<li>No quests discovered yet.</li>';
-            return;
-        }
-
-        const createListItem = (quest: QuestState): HTMLElement => {
-            const li = document.createElement('li');
-            const statusClass = `quest-${quest.status}`;
-            li.classList.add(statusClass);
-
-            const title = quest.data?.title ?? 'Unknown Quest';
-            const description = quest.data?.description ?? 'No description available.';
-            let progressHtml = '';
-
-            if (quest.status === 'active') {
-                const progress = this.questLog.getQuestProgress(quest.data.id, this.inventory);
-                progressHtml = `<br><em>Progress: ${progress || 'Started'}</em>`;
-            } else if (quest.status !== 'available' && quest.status !== 'unknown') {
-                progressHtml = `<br><em>(${quest.status})</em>`;
-            }
-
-            li.innerHTML = `<strong>${title}</strong><br>${description}${progressHtml}`;
-            return li;
-        };
-
-        active.forEach(q => this.questListElement?.appendChild(createListItem(q)));
-        available.forEach(q => this.questListElement?.appendChild(createListItem(q)));
-        completed.forEach(q => this.questListElement?.appendChild(createListItem(q)));
-        failed.forEach(q => this.questListElement?.appendChild(createListItem(q)));
     }
 
     private updateEvents(entries: string[] = this.eventLog.getFormattedEntries()): void {
@@ -3569,7 +2701,6 @@ export class JournalDisplay {
 
         this.eventListElement.scrollTop = this.eventListElement.scrollHeight;
     }
-
 
     public toggle(): void {
         if (this._isOpen) this.hide(); else this.show();
@@ -3591,7 +2722,6 @@ export class JournalDisplay {
     }
 
     public dispose(): void {
-        this.questLog.removeOnChange(this.boundUpdateQuests);
         this.eventLog.removeOnChange(this.boundUpdateEvents);
         console.log("JournalDisplay disposed.");
     }
@@ -3613,10 +2743,6 @@ export class Minimap {
     private bgColor: string = 'rgba(100, 100, 100, 0.6)';
     private playerColor: string = 'yellow';
     private npcColor: string = 'cyan';
-    private questNpcColor: string = '#FFD700';
-    private friendlyAnimalColor: string = 'lime';
-    private neutralAnimalColor: string = 'white';
-    private hostileAnimalColor: string = 'red';
     private defaultColor: string = 'gray';
 
     private dotSize: number = 3;
@@ -3686,18 +2812,7 @@ export class Minimap {
 
              if (entity instanceof NPC) {
                 color = this.npcColor;
-                if (entity.assignedQuestId && entity.questLog) {
-                     const status = entity.questLog.getQuestStatus(entity.assignedQuestId);
-                     if (status === 'available' || (status === 'active' && entity.questLog.checkQuestCompletion(entity.assignedQuestId, entity.inventory))) {
-                         color = this.questNpcColor;
-                     }
-                }
                 size += 1;
-             } else if (entity instanceof Animal) {
-                 if (entity.userData.isHostile) color = this.hostileAnimalColor;
-                 else if (entity.type === 'Deer') color = this.friendlyAnimalColor;
-                 else if (entity.type === 'Rabbit') { color = this.neutralAnimalColor; size -=1; }
-                 else color = this.neutralAnimalColor;
              } else {
                  draw = false;
              }
@@ -3768,7 +2883,6 @@ class Game {
 
     private physics: Physics | null = null;
     public inventory: Inventory | null = null;
-    public questLog: QuestLog | null = null;
     public eventLog: EventLog | null = null;
     private interactionSystem: InteractionSystem | null = null;
 
@@ -3805,7 +2919,6 @@ class Game {
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
 
         this.inventory = new Inventory(24);
-        this.questLog = new QuestLog();
         this.eventLog = new EventLog(75);
 
         setupLighting(this.scene);
@@ -3819,7 +2932,7 @@ class Game {
         this.player = new Player(this.scene, playerSpawnPos);
         this.entities.push(this.player);
         this.collidableObjects.push(this.player.mesh);
-        this.player.setJournal(this.questLog, this.eventLog);
+        this.player.setEventLog(this.eventLog);
 
         this.thirdPersonCamera = new ThirdPersonCamera(this.camera, this.player.mesh);
         this.controls = new Controls(this.player, this.thirdPersonCamera, this.renderer.domElement);
@@ -3829,7 +2942,7 @@ class Game {
         populateEnvironment(
             this.scene, WORLD_SIZE, this.collidableObjects,
             this.interactableObjects, this.entities,
-            this.questLog, this.inventory, this.eventLog
+            this.inventory, this.eventLog
         );
 
         this.interactionSystem = new InteractionSystem(
@@ -3840,7 +2953,7 @@ class Game {
         this.hud = new HUD(this.player);
         this.minimap = new Minimap(document.getElementById('minimap-canvas') as HTMLCanvasElement | null, this.player, this.entities, WORLD_SIZE);
         this.inventoryDisplay = new InventoryDisplay(this.inventory);
-        this.journalDisplay = new JournalDisplay(this.questLog, this.eventLog, this.inventory);
+        this.journalDisplay = new JournalDisplay(this.eventLog);
 
         this.setupUIControls();
 
@@ -4069,7 +3182,7 @@ if (checkWebGL()) {
         const onResize = () => gameInstance?.onWindowResize();
         window.addEventListener('resize', onResize, false);
 
-        console.log("Low-Poly Wilderness Quest (TypeScript) initialized.");
+        console.log("Low-Poly Wilderness (TypeScript) initialized.");
 
         window.addEventListener('beforeunload', () => {
             window.removeEventListener('resize', onResize);
