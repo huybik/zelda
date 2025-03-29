@@ -1,174 +1,113 @@
 import * as THREE from 'three';
 import { Player } from '../entities/player';
-import { Entity } from '../entities/entity'; // Base type for entities array
-import { NPC } from '../entities/npc'; // Need for quest check
-import { Animal } from '../entities/animal'; // Need for type/hostility check
+import { Entity } from '../entities/entity';
+import { NPC } from '../entities/npc';
+import { Animal } from '../entities/animal';
+import { EntityUserData } from '../types/common'; // For userData typing
 
 export class Minimap {
-    private canvas: HTMLCanvasElement;
-    private ctx: CanvasRenderingContext2D | null;
+    private ctx: CanvasRenderingContext2D;
     private player: Player;
-    private entities: Array<Entity | THREE.Object3D>; // More general type for things to draw
+    private entities: Array<Entity | THREE.Object3D>;
     private worldSize: number;
+    private mapSize: number; private mapScale: number;
+    private halfMapSize: number; private halfWorldSize: number;
 
-    // Map properties
-    private mapSize: number;
-    private mapScale: number;
-    private halfMapSize: number;
-    private halfWorldSize: number;
+    private colors = {
+        bg: 'rgba(100, 100, 100, 0.6)', player: 'yellow', npc: 'cyan', questNpc: '#FFD700',
+        animalFriendly: 'lime', animalNeutral: 'white', animalHostile: 'red', default: 'gray'
+    };
+    private sizes = { dot: 3, player: 4, playerTriangle: 6 };
 
-    // Colors & Styles
-    private bgColor: string = 'rgba(100, 100, 100, 0.6)';
-    private playerColor: string = 'yellow';
-    private npcColor: string = 'cyan';
-    private questNpcColor: string = '#FFD700'; // Gold
-    private friendlyAnimalColor: string = 'lime';
-    private neutralAnimalColor: string = 'white';
-    private hostileAnimalColor: string = 'red';
-    private defaultColor: string = 'gray';
+    private _entityPos = new THREE.Vector3(); private _playerPos = new THREE.Vector3();
 
-    private dotSize: number = 3;
-    private playerDotSize: number = 4;
-    private playerTriangleSize: number;
-
-    // Reusable vectors
-    private _entityPos = new THREE.Vector3();
-    private _playerPos = new THREE.Vector3();
-
-    constructor(
-        canvasElement: HTMLCanvasElement | null,
-        player: Player,
-        entities: Array<Entity | THREE.Object3D>,
-        worldSize: number
-    ) {
-        if (!canvasElement || !player || !entities || !worldSize) {
-            throw new Error("Minimap requires canvas, player, entities array, and worldSize.");
-        }
-        this.canvas = canvasElement;
-        this.ctx = this.canvas.getContext('2d');
-        this.player = player;
-        this.entities = entities; // Reference to the main list
-        this.worldSize = worldSize;
-
-        if (!this.ctx) {
-             throw new Error("Failed to get 2D context from minimap canvas.");
-        }
-
-        this.mapSize = this.canvas.width; // Assume square
-        this.mapScale = this.mapSize / this.worldSize;
-        this.halfMapSize = this.mapSize / 2;
-        this.halfWorldSize = this.worldSize / 2;
-        this.playerTriangleSize = this.playerDotSize * 1.5;
+    constructor(canvas: HTMLCanvasElement | null, player: Player, entities: Array<any>, worldSize: number) {
+        if (!canvas || !player || !entities || !worldSize) throw new Error("Minimap requires valid arguments.");
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error("Failed to get 2D context.");
+        this.ctx = context; this.player = player; this.entities = entities; this.worldSize = worldSize;
+        this.mapSize = canvas.width; this.mapScale = this.mapSize / this.worldSize;
+        this.halfMapSize = this.mapSize / 2; this.halfWorldSize = this.worldSize / 2;
+        this.sizes.playerTriangle = this.sizes.player * 1.5;
     }
 
     update(): void {
-        if (!this.ctx) return;
-
-        // Clear canvas
-        this.ctx.fillStyle = this.bgColor;
+        // Clear
+        this.ctx.fillStyle = this.colors.bg;
         this.ctx.fillRect(0, 0, this.mapSize, this.mapSize);
+        if (this.player.isDead) return; // Don't draw if dead
 
-        // Don't draw if player is dead, but keep canvas clear
-        if (this.player.isDead) return;
-
-        // Get player's current world position and Y rotation
+        // Player Info
         this.player.mesh.getWorldPosition(this._playerPos);
-        const playerRotationY = this.player.mesh.rotation.y;
+        const playerRotY = this.player.mesh.rotation.y;
+        const playerMapX = this.worldToMap(this._playerPos.x);
+        const playerMapY = this.worldToMap(this._playerPos.z);
 
-        // Calculate player's position on the map's coordinate system (0 to mapSize)
-        const playerMapX = this.worldToMapX(this._playerPos.x);
-        const playerMapY = this.worldToMapZ(this._playerPos.z); // Use world Z for map Y
-
-        // --- Set up transformation for centered & rotated view ---
+        // Transform canvas
         this.ctx.save();
-        // 1. Translate origin to canvas center
-        this.ctx.translate(this.halfMapSize, this.halfMapSize);
-        // 2. Rotate opposite to player's rotation (makes player arrow point up)
-        this.ctx.rotate(-playerRotationY);
-        // 3. Translate map so player's calculated map position is at the origin
-        this.ctx.translate(-playerMapX, -playerMapY);
+        this.ctx.translate(this.halfMapSize, this.halfMapSize); // Center
+        this.ctx.rotate(-playerRotY); // Rotate opposite to player
+        this.ctx.translate(-playerMapX, -playerMapY); // Center on player
 
-        // --- Draw Entities ---
+        // Draw Entities
         this.entities.forEach(entity => {
-            // Skip invalid entries, self, or dead entities
-            if (!entity || (entity instanceof Player && entity === this.player) || (entity instanceof Entity && entity.isDead)) {
-                 return;
-            }
-            // Get the mesh to determine position
-             const mesh = (entity instanceof Entity) ? entity.mesh : (entity instanceof THREE.Object3D ? entity : null);
-             if (!mesh || !mesh.parent || !mesh.visible) return; // Skip if no mesh, not in scene, or invisible
+            const mesh = (entity instanceof Entity) ? entity.mesh : (entity instanceof THREE.Object3D ? entity : null);
+            if (!mesh || !mesh.parent || !mesh.visible || entity === this.player || (entity instanceof Entity && entity.isDead)) return;
 
-             mesh.getWorldPosition(this._entityPos);
-             const entityMapX = this.worldToMapX(this._entityPos.x);
-             const entityMapY = this.worldToMapZ(this._entityPos.z);
-
-             let color = this.defaultColor;
-             let size = this.dotSize;
-             let draw = true;
-
-             // Determine color/size based on type/state
-             if (entity instanceof NPC) {
-                color = this.npcColor;
-                // Highlight if offering or ready to complete quest
-                if (entity.assignedQuestId && entity.questLog) {
-                     const status = entity.questLog.getQuestStatus(entity.assignedQuestId);
-                     if (status === 'available' || (status === 'active' && entity.questLog.checkQuestCompletion(entity.assignedQuestId, entity.inventory))) {
-                         color = this.questNpcColor;
-                     }
-                }
-                size += 1;
-             } else if (entity instanceof Animal) {
-                 if (entity.userData.isHostile) color = this.hostileAnimalColor;
-                 else if (entity.type === 'Deer') color = this.friendlyAnimalColor;
-                 else if (entity.type === 'Rabbit') { color = this.neutralAnimalColor; size -=1; }
-                 else color = this.neutralAnimalColor; // Default animal
-             } else {
-                 draw = false; // Don't draw unknown types by default
-             }
-
-             if (draw) {
-                 this.drawDot(entityMapX, entityMapY, color, size);
-             }
+            mesh.getWorldPosition(this._entityPos);
+            const mapX = this.worldToMap(this._entityPos.x);
+            const mapY = this.worldToMap(this._entityPos.z);
+            const { color, size } = this.getEntityStyle(entity);
+            this.drawDot(mapX, mapY, color, size);
         });
 
-        // --- Restore canvas state before drawing player ---
+        // Restore and Draw Player
         this.ctx.restore();
-
-        // --- Draw Player Triangle ---
-        // Player is always in the center, pointing "up" due to the rotation logic
-        this.drawPlayerTriangle(this.halfMapSize, this.halfMapSize, this.playerColor, this.playerTriangleSize);
+        this.drawPlayerTriangle(this.halfMapSize, this.halfMapSize, this.colors.player, this.sizes.playerTriangle);
     }
 
-    private worldToMapX(worldX: number): number {
-        return (worldX + this.halfWorldSize) * this.mapScale;
+    // Determine dot style based on entity type/state
+    private getEntityStyle(entity: Entity | THREE.Object3D): { color: string; size: number } {
+        const userData = (entity as any).userData as EntityUserData | undefined;
+        let color = this.colors.default;
+        let size = this.sizes.dot;
+
+        if (entity instanceof NPC) {
+            color = this.colors.npc; size += 1;
+            if (entity.assignedQuestId && entity.questLog) {
+                 const status = entity.questLog.getQuestStatus(entity.assignedQuestId);
+                 const isCompletable = status === 'active' && entity.questLog.checkQuestCompletion(entity.assignedQuestId, entity.inventory);
+                 if (status === 'available' || isCompletable) color = this.colors.questNpc;
+            }
+        } else if (entity instanceof Animal) {
+            if (userData?.isHostile) color = this.colors.animalHostile;
+            else if (entity.type === 'Deer') color = this.colors.animalFriendly;
+            else { color = this.colors.animalNeutral; if (entity.type === 'Rabbit') size -=1; }
+        } else if (userData?.isInteractable && !userData?.isEntity) { // Simple interactables like Chests?
+            color = 'orange'; size += 1;
+        } else {
+            // Don't draw unknown types by returning default/transparent?
+             // color = 'transparent';
+             return { color: this.colors.default, size: 0 }; // Return size 0 to skip drawing
+        }
+        return { color, size };
     }
 
-    private worldToMapZ(worldZ: number): number {
-        // Map Z+ to map Y+ (North up)
-        return (worldZ + this.halfWorldSize) * this.mapScale;
-        // Alt: Map Z+ to map Y- (North down):
-        // return this.mapSize - ((worldZ + this.halfWorldSize) * this.mapScale);
+    private worldToMap(worldCoord: number): number {
+        return (worldCoord + this.halfWorldSize) * this.mapScale;
     }
 
-    // Draws a dot (already in transformed map coordinates)
-    private drawDot(mapX: number, mapY: number, color: string, size: number): void {
-        if (!this.ctx) return;
-        this.ctx.fillStyle = color;
-        this.ctx.beginPath();
-        this.ctx.arc(mapX, mapY, size, 0, Math.PI * 2);
-        this.ctx.fill();
+    private drawDot(x: number, y: number, color: string, radius: number): void {
+        if (radius <= 0) return;
+        this.ctx.fillStyle = color; this.ctx.beginPath();
+        this.ctx.arc(x, y, radius, 0, Math.PI * 2); this.ctx.fill();
     }
 
-    // Draws player triangle (always at center, pointing up)
-    private drawPlayerTriangle(centerX: number, centerY: number, color: string, size: number): void {
-        if (!this.ctx) return;
-        this.ctx.fillStyle = color;
-        this.ctx.beginPath();
-        // Triangle points upwards
-        this.ctx.moveTo(centerX, centerY - size * 0.6);       // Top point
-        this.ctx.lineTo(centerX - size / 2, centerY + size * 0.4); // Bottom left
-        this.ctx.lineTo(centerX + size / 2, centerY + size * 0.4); // Bottom right
-        this.ctx.closePath();
-        this.ctx.fill();
+    private drawPlayerTriangle(x: number, y: number, color: string, size: number): void {
+        this.ctx.fillStyle = color; this.ctx.beginPath();
+        this.ctx.moveTo(x, y - size * 0.6); // Top
+        this.ctx.lineTo(x - size / 2, y + size * 0.4); // Bottom left
+        this.ctx.lineTo(x + size / 2, y + size * 0.4); // Bottom right
+        this.ctx.closePath(); this.ctx.fill();
     }
 }

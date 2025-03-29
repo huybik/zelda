@@ -1,19 +1,37 @@
+// File: /src/entities/animal.ts
+// Optimization: Refactored model creation using config objects and helper functions.
+// Reduced repetition in setupTypeSpecifics and createModel. Simplified interaction logic slightly.
+
 import * as THREE from 'three';
 import { Entity } from './entity';
 import { Player } from './player';
 import { InteractionResult } from '../types/common';
+import { Colors } from '../utils/helpers'; // Use shared colors
 
 type AnimalType = 'Deer' | 'Wolf' | 'Rabbit' | 'Generic';
 type AnimalState = 'wandering' | 'fleeing' | 'idle' | 'attacking' | 'dead';
 
-// Reusable vectors for calculations
+interface AnimalConfig {
+    speed: number;
+    health: number;
+    interaction?: { type: string; prompt: string };
+    collidable: boolean;
+    hostile?: { detection: number; attackRange: number; damage: number; cooldown: number; };
+    body: { w: number; h: number; d: number; color: number; geo?: 'box' | 'sphere' };
+    head: { w: number; h: number; d: number; color: number; geo?: 'box' | 'sphere' };
+    limbColor: number;
+    limbLength?: number;
+    limbRadius?: number;
+    addParts?: (mesh: THREE.Group, bodyMesh: THREE.Mesh, headMesh: THREE.Object3D, config: AnimalConfig) => void;
+}
+
 const _direction = new THREE.Vector3();
 const _lookTarget = new THREE.Vector3();
 const _fleeDirection = new THREE.Vector3();
 const _attackDirection = new THREE.Vector3();
 const _origin = new THREE.Vector3();
 const _rayDirection = new THREE.Vector3(0, -1, 0);
-const _tempVec = new THREE.Vector3(); // General purpose temporary vector
+const _tempVec = new THREE.Vector3();
 
 export class Animal extends Entity {
     public type: AnimalType;
@@ -22,234 +40,190 @@ export class Animal extends Entity {
     private groundCheckTimer: number;
     private groundCheckInterval: number;
 
-    // Behavior
     public state: AnimalState;
     private stateTimer: number;
     private wanderTarget: THREE.Vector3;
     public speed: number;
-    private headMesh?: THREE.Mesh | THREE.Object3D; // Reference for animation/head position
+    private headMesh?: THREE.Object3D;
 
-    // Type-specific properties (example for Wolf)
+    // Behavior Config
     private detectionRange?: number;
     private attackRange?: number;
     private attackDamage?: number;
     private attackCooldown?: number;
     private lastAttackTime?: number;
 
+    private static animalConfigs: Record<AnimalType, AnimalConfig> = {
+        Deer: {
+            speed: 2.0, health: 30, collidable: true,
+            interaction: { type: 'pet', prompt: "Press E to Pet Deer" },
+            body: { w: 1.2, h: 0.7, d: 0.6, color: Colors.SADDLE_BROWN },
+            head: { w: 0.4, h: 0.4, d: 0.5, color: Colors.PEACH_PUFF },
+            limbColor: Colors.PEACH_PUFF,
+            addParts: (mesh, body, head, cfg) => {
+                const antlerMat = new THREE.MeshLambertMaterial({ color: Colors.PEACH_PUFF });
+                const antlerGeo = new THREE.ConeGeometry(0.05, 0.5, 4);
+                [-0.15, 0.15].forEach((xOffset, i) => {
+                    const antler = new THREE.Mesh(antlerGeo, antlerMat);
+                    antler.castShadow = true;
+                    antler.position.set(xOffset, 0.2, -0.2).add(head.position);
+                    antler.rotation.z = i === 0 ? 0.5 : -0.5;
+                    mesh.add(antler);
+                });
+            }
+        },
+        Wolf: {
+            speed: 3.5, health: 50, collidable: true,
+            hostile: { detection: 20, attackRange: 2.5, damage: 8, cooldown: 2.0 },
+            body: { w: 1.0, h: 0.5, d: 0.4, color: Colors.DIM_GRAY },
+            head: { w: 0.35, h: 0.35, d: 0.45, color: 0x808080 }, // Darker Grey
+            limbColor: 0x808080,
+            addParts: (mesh, body, head, cfg) => {
+                const tailGeo = new THREE.BoxGeometry(0.1, 0.4, 0.1);
+                const tailMat = new THREE.MeshLambertMaterial({ color: cfg.body.color });
+                const tail = new THREE.Mesh(tailGeo, tailMat);
+                tail.position.set(0, body.position.y + 0.1, body.position.z - cfg.body.d / 2 - 0.1);
+                tail.rotation.x = -0.5; tail.castShadow = true;
+                mesh.add(tail);
+            }
+        },
+        Rabbit: {
+            speed: 4.0, health: 10, collidable: false,
+            body: { w: 0.4, h: 0.3, d: 0.3, color: Colors.BEIGE },
+            head: { w: 0.3, h: 0.3, d: 0.3, color: Colors.SNOW_WHITE, geo: 'sphere' },
+            limbColor: Colors.SNOW_WHITE, limbLength: 0.3, limbRadius: 0.06,
+            addParts: (mesh, body, head, cfg) => {
+                const earMat = new THREE.MeshLambertMaterial({ color: cfg.head.color });
+                const earGeo = new THREE.BoxGeometry(0.05, 0.3, 0.05);
+                [-0.05, 0.05].forEach((xOffset, i) => {
+                    const ear = new THREE.Mesh(earGeo, earMat);
+                    ear.castShadow = true;
+                    ear.position.set(xOffset, 0.15, -0.05).add(head.position);
+                    ear.rotation.z = i === 0 ? 0.2 : -0.2;
+                    mesh.add(ear);
+                });
+            }
+        },
+        Generic: {
+            speed: 1.5, health: 20, collidable: true,
+            body: { w: 0.8, h: 0.5, d: 0.4, color: Colors.PASTEL_BROWN },
+            head: { w: 0.4, h: 0.4, d: 0.4, color: Colors.PEACH_PUFF, geo: 'sphere' },
+            limbColor: Colors.PASTEL_BROWN
+        }
+    };
+
     constructor(scene: THREE.Scene, position: THREE.Vector3, type: AnimalType, worldSize: number) {
-        super(scene, position, type); // Use type as name
+        super(scene, position, type);
         this.userData.isAnimal = true;
-        this.userData.isCollidable = true;
         this.type = type;
         this.worldSize = worldSize;
         this.isOnGround = false;
-        this.groundCheckTimer = Math.random(); // Stagger checks
+        this.groundCheckTimer = Math.random();
         this.groundCheckInterval = 0.15 + Math.random() * 0.1;
-
-        this.state = 'wandering';
-        this.stateTimer = 0;
         this.wanderTarget = new THREE.Vector3();
-        this.speed = 1.5; // Base speed
+        
+        
 
-        this.setupTypeSpecifics();
+        this.setupFromConfig();
         this.createModel();
-        this.updateBoundingBox(); // Initial calculation
-        this.findNewWanderTarget(); // Start wandering
+        this.updateBoundingBox();
+        this.findNewWanderTarget();
     }
 
-    private setupTypeSpecifics(): void {
-        switch (this.type) {
-            case 'Deer':
-                this.userData.isInteractable = true;
-                this.userData.interactionType = 'pet';
-                this.userData.prompt = "Press E to Pet Deer";
-                this.speed = 2.0;
-                this.health = 30; this.maxHealth = 30;
-                break;
-            case 'Wolf':
-                this.userData.isInteractable = false;
-                this.speed = 3.5;
-                this.health = 50; this.maxHealth = 50;
-                this.state = 'idle'; // Wolves might start idle
-                this.detectionRange = 20;
-                this.attackRange = 2.5;
-                this.attackDamage = 8;
-                this.attackCooldown = 2.0; // Seconds
-                this.lastAttackTime = -Infinity;
-                this.userData.isHostile = false; // Start non-hostile
-                break;
-            case 'Rabbit':
-                this.userData.isInteractable = false;
-                this.userData.isCollidable = false; // Rabbits might not need collision
-                this.speed = 4.0;
-                this.health = 10; this.maxHealth = 10;
-                this.state = 'wandering';
-                break;
-            default: // Generic
-                this.speed = 1.5;
-                this.health = 20; this.maxHealth = 20;
-                break;
+    private setupFromConfig(): void {
+        const config = Animal.animalConfigs[this.type];
+        if (!config) {
+            console.error(`No config found for animal type: ${this.type}`);
+            return; // Use defaults from Entity constructor?
+        }
+
+        this.speed = config.speed;
+        this.health = config.health; this.maxHealth = config.health;
+        this.userData.isCollidable = config.collidable;
+        this.state = config.hostile ? 'idle' : 'wandering'; // Hostile start idle
+        this.stateTimer = 0;
+
+        if (config.interaction) {
+            this.userData.isInteractable = true;
+            this.userData.interactionType = config.interaction.type;
+            this.userData.prompt = config.interaction.prompt;
+        }
+        if (config.hostile) {
+            this.detectionRange = config.hostile.detection;
+            this.attackRange = config.hostile.attackRange;
+            this.attackDamage = config.hostile.damage;
+            this.attackCooldown = config.hostile.cooldown;
+            this.lastAttackTime = -Infinity;
+            this.userData.isHostile = false; // Start non-hostile
         }
     }
 
     private createModel(): void {
-        let bodyColor = 0xCD853F; // Peru Brown (default)
-        let headColor = 0xD2B48C; // Tan
-        let limbColor = bodyColor;
+        const config = Animal.animalConfigs[this.type];
+        const bodyCfg = config.body;
+        const headCfg = config.head;
+        const limbLength = config.limbLength ?? 0.6;
+        const limbRadius = config.limbRadius ?? 0.1;
 
-        let bodyGeo: THREE.BufferGeometry;
-        let headGeo: THREE.BufferGeometry;
-        let bodyDimensions = { w: 0.8, h: 0.5, d: 0.4 };
-        let headDimensions = { w: 0.4, h: 0.4, d: 0.4 };
-        const limbRadius = 0.1;
-        const limbLength = 0.6;
+        const bodyGeo = bodyCfg.geo === 'sphere' ? new THREE.SphereGeometry(bodyCfg.w / 2, 8, 6) : new THREE.BoxGeometry(bodyCfg.w, bodyCfg.h, bodyCfg.d);
+        const headGeo = headCfg.geo === 'sphere' ? new THREE.SphereGeometry(headCfg.w / 2, 8, 6) : new THREE.BoxGeometry(headCfg.w, headCfg.h, headCfg.d);
 
-        switch (this.type) {
-            case 'Deer':
-                bodyColor = 0xA0522D; headColor = 0xBC8F8F; limbColor = headColor;
-                bodyDimensions = { w: 1.2, h: 0.7, d: 0.6 }; headDimensions = { w: 0.4, h: 0.4, d: 0.5 };
-                bodyGeo = new THREE.BoxGeometry(bodyDimensions.w, bodyDimensions.h, bodyDimensions.d);
-                headGeo = new THREE.BoxGeometry(headDimensions.w, headDimensions.h, headDimensions.d);
-                break;
-            case 'Wolf':
-                bodyColor = 0x696969; headColor = 0x808080; limbColor = headColor;
-                bodyDimensions = { w: 1.0, h: 0.5, d: 0.4 }; headDimensions = { w: 0.35, h: 0.35, d: 0.45 };
-                bodyGeo = new THREE.BoxGeometry(bodyDimensions.w, bodyDimensions.h, bodyDimensions.d);
-                headGeo = new THREE.BoxGeometry(headDimensions.w, headDimensions.h, headDimensions.d);
-                break;
-            case 'Rabbit':
-                bodyColor = 0xF5F5DC; headColor = 0xFFFAFA; limbColor = headColor;
-                bodyDimensions = { w: 0.4, h: 0.3, d: 0.3 }; headDimensions = { w: 0.3, h: 0.3, d: 0.3 }; // Sphere approx
-                bodyGeo = new THREE.BoxGeometry(bodyDimensions.w, bodyDimensions.h, bodyDimensions.d);
-                headGeo = new THREE.SphereGeometry(headDimensions.w / 2, 8, 6);
-                break;
-            default:
-                bodyGeo = new THREE.BoxGeometry(bodyDimensions.w, bodyDimensions.h, bodyDimensions.d);
-                headGeo = new THREE.SphereGeometry(headDimensions.w / 2, 8, 8);
-                break;
-        }
+        const bodyMat = new THREE.MeshLambertMaterial({ color: bodyCfg.color });
+        const headMat = new THREE.MeshLambertMaterial({ color: headCfg.color });
+        const limbMat = new THREE.MeshLambertMaterial({ color: config.limbColor });
 
-        const bodyMat = new THREE.MeshLambertMaterial({ color: bodyColor });
-        const headMat = new THREE.MeshLambertMaterial({ color: headColor });
-        const limbMat = new THREE.MeshLambertMaterial({ color: limbColor });
-
-        // Body (position base at leg height)
+        // Body
         const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
-        bodyMesh.position.y = limbLength + bodyDimensions.h / 2;
-        bodyMesh.castShadow = true;
-        bodyMesh.receiveShadow = true;
+        bodyMesh.position.y = limbLength + bodyCfg.h / 2;
+        bodyMesh.castShadow = true; bodyMesh.receiveShadow = true;
         this.mesh.add(bodyMesh);
 
-        // Head (position relative to body)
+        // Head
         const headMesh = new THREE.Mesh(headGeo, headMat);
-        const headY = bodyMesh.position.y + bodyDimensions.h / 2;
-        const headZ = bodyDimensions.d / 2 + headDimensions.d / 2;
-        headMesh.position.set(0, headY, headZ);
+        headMesh.position.set(0, bodyMesh.position.y + bodyCfg.h / 2, bodyCfg.d / 2 + headCfg.d / 2);
         headMesh.castShadow = true;
         this.mesh.add(headMesh);
-        this.headMesh = headMesh; // Store reference
-        this.headMesh.userData.originalY = headMesh.position.y; // Store original local Y
+        this.headMesh = headMesh;
+        this.headMesh.userData.originalY = headMesh.position.y;
 
-        // Type-specific additions (after body/head created)
-        this.addTypeSpecificParts(bodyMesh, headMesh, bodyDimensions, headDimensions, headColor);
+        // Type-specific parts
+        config.addParts?.(this.mesh, bodyMesh, headMesh, config);
 
         // Legs
-        const legOffsetX = bodyDimensions.w / 2 - limbRadius;
-        const legOffsetZ = bodyDimensions.d / 2 - limbRadius;
-        const hipY = bodyMesh.position.y - bodyDimensions.h / 2; // Hip height
-
         const legPositions = [
-            new THREE.Vector3(legOffsetX, hipY, legOffsetZ),  // Front Right Hip
-            new THREE.Vector3(-legOffsetX, hipY, legOffsetZ), // Front Left Hip
-            new THREE.Vector3(legOffsetX, hipY, -legOffsetZ), // Back Right Hip
-            new THREE.Vector3(-legOffsetX, hipY, -legOffsetZ) // Back Left Hip
+            new THREE.Vector3(bodyCfg.w / 2 - limbRadius, bodyMesh.position.y - bodyCfg.h / 2, bodyCfg.d / 2 - limbRadius),
+            new THREE.Vector3(-bodyCfg.w / 2 + limbRadius, bodyMesh.position.y - bodyCfg.h / 2, bodyCfg.d / 2 - limbRadius),
+            new THREE.Vector3(bodyCfg.w / 2 - limbRadius, bodyMesh.position.y - bodyCfg.h / 2, -bodyCfg.d / 2 + limbRadius),
+            new THREE.Vector3(-bodyCfg.w / 2 + limbRadius, bodyMesh.position.y - bodyCfg.h / 2, -bodyCfg.d / 2 + limbRadius)
         ];
-
         legPositions.forEach(pos => {
             const legGeo = new THREE.CylinderGeometry(limbRadius, limbRadius * 0.9, limbLength, 6);
-            legGeo.translate(0, -limbLength / 2, 0); // Pivot at top
+            legGeo.translate(0, -limbLength / 2, 0);
             const legMesh = new THREE.Mesh(legGeo, limbMat);
-            legMesh.position.copy(pos);
-            legMesh.castShadow = true;
+            legMesh.position.copy(pos); legMesh.castShadow = true;
             this.mesh.add(legMesh);
         });
 
-        // Store dimensions for bounding box
-        this.userData.height = limbLength + bodyDimensions.h + headDimensions.h;
-        this.userData.width = bodyDimensions.w;
-        this.userData.depth = bodyDimensions.d;
+        this.userData.height = limbLength + bodyCfg.h + headCfg.h;
+        this.userData.width = bodyCfg.w; this.userData.depth = bodyCfg.d;
     }
-
-    private addTypeSpecificParts(
-        bodyMesh: THREE.Mesh,
-        headMesh: THREE.Mesh | THREE.Object3D,
-        bodyDim: { w: number, h: number, d: number },
-        headDim: { w: number, h: number, d: number },
-        headColor: number
-    ): void {
-        const headPos = headMesh.position;
-
-        if (this.type === 'Deer') {
-            const antlerMat = new THREE.MeshLambertMaterial({ color: 0xD2B48C });
-            const antlerGeo = new THREE.ConeGeometry(0.05, 0.5, 4);
-            const addAntler = (xOffset: number, zRot: number) => {
-                const antler = new THREE.Mesh(antlerGeo, antlerMat);
-                antler.castShadow = true;
-                // Position relative to head mesh's local position
-                antler.position.set(xOffset, 0.2, -0.2).add(headPos);
-                antler.rotation.z = zRot;
-                this.mesh.add(antler);
-            };
-            addAntler(-0.15, 0.5); // Left
-            addAntler(0.15, -0.5); // Right
-        } else if (this.type === 'Rabbit') {
-            const earMat = new THREE.MeshLambertMaterial({ color: headColor });
-            const earGeo = new THREE.BoxGeometry(0.05, 0.3, 0.05);
-             const addEar = (xOffset: number, zRot: number) => {
-                const ear = new THREE.Mesh(earGeo, earMat);
-                ear.castShadow = true;
-                ear.position.set(xOffset, 0.15, -0.05).add(headPos);
-                ear.rotation.z = zRot;
-                this.mesh.add(ear);
-             };
-             addEar(-0.05, 0.2); // Left
-             addEar(0.05, -0.2); // Right
-        } else if (this.type === 'Wolf') {
-            // Add a tail (small box)
-            const tailGeo = new THREE.BoxGeometry(0.1, 0.4, 0.1);
-            const tailMat = new THREE.MeshLambertMaterial({ color: bodyMesh.material.color });
-            const tailMesh = new THREE.Mesh(tailGeo, tailMat);
-            // Attach relative to body's back-center
-            tailMesh.position.set(0, bodyMesh.position.y + 0.1, bodyMesh.position.z - bodyDim.d / 2 - 0.1);
-            tailMesh.rotation.x = -0.5;
-            tailMesh.castShadow = true;
-            this.mesh.add(tailMesh);
-        }
-    }
-
 
     public interact(player: Player): InteractionResult | null {
-        if (this.isDead) return null;
+        if (this.isDead || this.type !== 'Deer' || !this.userData.isInteractable) return null;
 
-        if (this.type === 'Deer' && this.userData.isInteractable) {
-            console.log("Petting deer...");
-            player.eventLog?.addEntry("You gently pet the deer.");
+        console.log("Petting deer...");
+        player.eventLog?.addEntry("You gently pet the deer.");
+        this.state = 'idle';
+        this.stateTimer = 2.0 + Math.random() * 2;
+        this.lookAt(player.mesh.position);
 
-            this.state = 'idle'; // Stop wandering briefly
-            this.stateTimer = 2.0 + Math.random() * 2; // Stay idle for 2-4 seconds
-            this.lookAt(player.mesh.position); // Look at player
-
-            // Chance to get a feather
-            if (Math.random() < 0.3) { // 30% chance
-                return { type: 'reward', item: { name: 'feather', amount: 1 }, message: "The deer seems calm. You found a feather!" };
-            } else {
-                return { type: 'message', message: "The deer looks at you curiously." };
-            }
-        }
-        // Wolves/Rabbits cannot be interacted with via 'E'
-        return null;
+        const gotFeather = Math.random() < 0.3;
+        return {
+            type: gotFeather ? 'reward' : 'message',
+            item: gotFeather ? { name: 'feather', amount: 1 } : undefined,
+            message: gotFeather ? "The deer seems calm. You found a feather!" : "The deer looks at you curiously."
+        };
     }
-
 
     override update(deltaTime: number, player: Player, collidables: THREE.Object3D[]): void {
         if (this.isDead || this.state === 'dead') return;
@@ -257,23 +231,18 @@ export class Animal extends Entity {
         const distanceToPlayerSq = this.mesh.position.distanceToSquared(player.mesh.position);
         if (this.stateTimer > 0) this.stateTimer -= deltaTime;
 
-        // --- State Machine ---
         this.updateState(deltaTime, player, distanceToPlayerSq);
-
-        // --- Physics & Movement ---
         this.applyGravityAndGroundCheck(deltaTime, collidables);
         this.mesh.position.addScaledVector(this.velocity, deltaTime);
         this.clampToWorldBounds();
-
-        // --- Animation & BBox ---
         this.animate(deltaTime);
-        this.updateBoundingBox(); // Update bounds after movement
+        this.updateBoundingBox();
     }
 
     private updateState(deltaTime: number, player: Player, distanceToPlayerSq: number): void {
         switch (this.state) {
             case 'idle':
-                this.velocity.set(0, this.velocity.y, 0); // Keep Y velocity for gravity
+                this.velocity.x = 0; this.velocity.z = 0;
                 if (this.stateTimer <= 0) {
                     this.findNewWanderTarget();
                     this.state = 'wandering';
@@ -283,89 +252,64 @@ export class Animal extends Entity {
                 break;
 
             case 'wandering':
-                _direction.copy(this.wanderTarget).sub(this.mesh.position);
-                _direction.y = 0; // Ignore height difference for movement direction
-                const distanceToTarget = _direction.length();
+                _direction.copy(this.wanderTarget).sub(this.mesh.position).setY(0);
+                const distToTarget = _direction.length();
 
-                if (distanceToTarget < 1.0 || this.stateTimer <= 0) {
-                    if (Math.random() < 0.3) { // 30% chance to go idle
-                        this.state = 'idle';
-                        this.stateTimer = 2 + Math.random() * 3;
+                if (distToTarget < 1.0 || this.stateTimer <= 0) {
+                    if (Math.random() < 0.3) { // Chance to idle
+                        this.state = 'idle'; this.stateTimer = 2 + Math.random() * 3;
                         this.velocity.x = 0; this.velocity.z = 0;
                     } else {
                         this.findNewWanderTarget();
-                        // Update direction immediately
-                        _direction.copy(this.wanderTarget).sub(this.mesh.position).normalize();
+                        _direction.copy(this.wanderTarget).sub(this.mesh.position).normalize(); // Update direction now
                     }
                 } else {
                     _direction.normalize();
                 }
 
-                // Apply velocity only if still wandering
                 if (this.state === 'wandering') {
                     this.velocity.x = _direction.x * this.speed;
                     this.velocity.z = _direction.z * this.speed;
-                    // Look in direction of movement
-                    if (_direction.lengthSq() > 0.01) {
-                        this.lookAt(this.mesh.position.clone().add(_direction));
-                    }
+                    if (_direction.lengthSq() > 0.01) this.lookAt(this.mesh.position.clone().add(_direction));
                 }
-
                 this.checkProximityTriggers(player, distanceToPlayerSq);
                 break;
 
             case 'fleeing':
-                _fleeDirection.copy(this.mesh.position).sub(player.mesh.position);
-                _fleeDirection.y = 0;
+                _fleeDirection.copy(this.mesh.position).sub(player.mesh.position).setY(0);
                 if (_fleeDirection.lengthSq() > 0.001) {
                     _fleeDirection.normalize();
                     const fleeSpeed = this.speed * 1.5;
                     this.velocity.x = _fleeDirection.x * fleeSpeed;
                     this.velocity.z = _fleeDirection.z * fleeSpeed;
                     this.lookAt(this.mesh.position.clone().add(_fleeDirection));
-                } else {
-                    // If player is exactly at animal pos, move randomly
+                } else { // Move randomly if player is too close
                     this.velocity.x = (Math.random() - 0.5) * this.speed;
                     this.velocity.z = (Math.random() - 0.5) * this.speed;
                 }
-
-                // Stop fleeing if player is far away
-                if (distanceToPlayerSq > 20 * 20) { // Use squared distance
-                    this.findNewWanderTarget();
-                    this.state = 'wandering';
+                if (distanceToPlayerSq > 400) { // Stop fleeing if player is 20 units away
+                    this.findNewWanderTarget(); this.state = 'wandering';
                 }
                 break;
 
-            case 'attacking': // Wolf specific
-                if (!this.detectionRange || !this.attackRange || !this.attackDamage || !this.attackCooldown || typeof this.lastAttackTime === 'undefined') {
-                    this.state = 'idle'; // Revert if properties missing
-                    break;
+            case 'attacking':
+                if (!this.detectionRange || !this.attackRange || !this.attackDamage || !this.attackCooldown || this.lastAttackTime === undefined) {
+                    this.state = 'idle'; break; // Revert if config missing
+                }
+                this.userData.isHostile = true;
+                if (distanceToPlayerSq > (this.detectionRange * 1.2) ** 2) { // Lose interest if too far
+                    this.state = 'idle'; this.userData.isHostile = false; this.stateTimer = 1.0 + Math.random();
+                    this.velocity.x = 0; this.velocity.z = 0; break;
                 }
 
-                this.userData.isHostile = true; // Remain hostile
+                _attackDirection.copy(player.mesh.position).sub(this.mesh.position).setY(0);
+                this.lookAt(player.mesh.position);
 
-                // Lose interest if player gets too far
-                if (distanceToPlayerSq > (this.detectionRange * 1.2) ** 2) {
-                    this.state = 'idle';
-                    this.userData.isHostile = false;
-                    this.stateTimer = 1.0 + Math.random();
-                    this.velocity.x = 0; this.velocity.z = 0;
-                    break;
-                }
-
-                _attackDirection.copy(player.mesh.position).sub(this.mesh.position);
-                _attackDirection.y = 0;
-                const distanceToAttackTarget = _attackDirection.length();
-
-                this.lookAt(player.mesh.position); // Look at player
-
-                if (distanceToAttackTarget > this.attackRange) {
-                    // Move towards player
+                if (_attackDirection.length() > this.attackRange) { // Move towards player
                     _attackDirection.normalize();
                     this.velocity.x = _attackDirection.x * this.speed;
                     this.velocity.z = _attackDirection.z * this.speed;
-                } else {
-                    // Close enough to attack
+                } else { // Attack
                     this.velocity.x = 0; this.velocity.z = 0; // Stop moving
                     const time = performance.now() / 1000;
                     if (time > this.lastAttackTime + this.attackCooldown) {
@@ -373,135 +317,99 @@ export class Animal extends Entity {
                         player.takeDamage(this.attackDamage);
                         player.eventLog?.addEntry(`The wolf bites you! (-${this.attackDamage} HP)`);
                         this.lastAttackTime = time;
-                        // TODO: Attack animation/effect
                     }
                 }
                 break;
         }
     }
 
-     // Checks proximity to player to potentially change state (flee/attack)
     private checkProximityTriggers(player: Player, distanceSq: number): void {
         if (this.type === 'Wolf' && this.detectionRange && distanceSq < this.detectionRange ** 2) {
-             this.state = 'attacking';
-             this.userData.isHostile = true;
-             player.eventLog?.addEntry("A wolf growls nearby!");
-        } else if ((this.type === 'Deer' || this.type === 'Rabbit') && distanceSq < 10 * 10) {
-             this.state = 'fleeing';
+            this.state = 'attacking'; this.userData.isHostile = true;
+            player.eventLog?.addEntry("A wolf growls nearby!");
+        } else if ((this.type === 'Deer' || this.type === 'Rabbit') && distanceSq < 100) { // 10 units
+            this.state = 'fleeing';
         }
     }
 
     private applyGravityAndGroundCheck(deltaTime: number, collidables: THREE.Object3D[]): void {
-        // Apply Gravity
-        if (!this.isOnGround || this.velocity.y > 0) {
-            this.velocity.y += -15 * deltaTime; // Gravity constant
-        }
+        if (!this.isOnGround || this.velocity.y > 0) this.velocity.y -= 15 * deltaTime;
 
-        // Scheduled Ground Check
         this.groundCheckTimer -= deltaTime;
         if (this.groundCheckTimer <= 0) {
-            this.groundCheckTimer = this.groundCheckInterval; // Reset timer
-
-            _origin.copy(this.mesh.position).y += 0.1; // Ray origin slightly above feet
-            const raycaster = new THREE.Raycaster(_origin, _rayDirection, 0, 0.5); // Short ray down
+            this.groundCheckTimer = this.groundCheckInterval;
+            _origin.copy(this.mesh.position).y += 0.1;
+            const raycaster = new THREE.Raycaster(_origin, _rayDirection, 0, 0.5);
             const checkAgainst = collidables.filter(obj => obj !== this.mesh && obj?.userData?.isCollidable);
             const intersects = raycaster.intersectObjects(checkAgainst, true);
 
-            let foundGround = false;
             let groundY = -Infinity;
-
-            if (intersects.length > 0) {
-                for (const intersect of intersects) {
-                    if (intersect.distance > 0.01) { // Ignore self-intersections
-                        groundY = Math.max(groundY, intersect.point.y);
-                        foundGround = true;
-                    }
+            const foundGround = intersects.some(intersect => {
+                if (intersect.distance > 0.01) {
+                    groundY = Math.max(groundY, intersect.point.y);
+                    return true;
                 }
-            }
+                return false;
+            });
 
-            // Process Ground Detection
-            const snapThreshold = 0.2;
-            if (foundGround && this.mesh.position.y <= groundY + snapThreshold) {
-                if (!this.isOnGround) { // Just landed
-                     this.mesh.position.y = groundY; // Snap to ground
-                     if (this.velocity.y < 0) this.velocity.y = 0; // Stop downward velocity on land
+            if (foundGround && this.mesh.position.y <= groundY + 0.2) {
+                if (!this.isOnGround) { // Landed
+                    this.mesh.position.y = groundY;
+                    if (this.velocity.y < 0) this.velocity.y = 0;
                 }
                 this.isOnGround = true;
             } else {
-                this.isOnGround = false; // In air or too high above ground
+                this.isOnGround = false;
             }
         }
-
-        // Ensure velocity is zeroed if on ground and not moving up
-        if (this.isOnGround && this.velocity.y < 0) {
-             this.velocity.y = 0;
-        }
+        if (this.isOnGround && this.velocity.y < 0) this.velocity.y = 0;
     }
 
-
     private clampToWorldBounds(): void {
-        const halfSize = this.worldSize / 2 - 1; // Stay 1 unit from edge
-        this.mesh.position.x = THREE.MathUtils.clamp(this.mesh.position.x, -halfSize, halfSize);
-        this.mesh.position.z = THREE.MathUtils.clamp(this.mesh.position.z, -halfSize, halfSize);
-        // Y position handled by ground check/gravity
+        const limit = this.worldSize / 2 - 1;
+        this.mesh.position.x = THREE.MathUtils.clamp(this.mesh.position.x, -limit, limit);
+        this.mesh.position.z = THREE.MathUtils.clamp(this.mesh.position.z, -limit, limit);
     }
 
     private findNewWanderTarget(): void {
-        const wanderDistance = 10 + Math.random() * 15; // 10m to 25m
+        const wanderDistance = 10 + Math.random() * 15;
         const angle = Math.random() * Math.PI * 2;
-        _tempVec.set(
-            Math.cos(angle) * wanderDistance,
-            0,
-            Math.sin(angle) * wanderDistance
-        ).add(this.mesh.position);
-
-        // Clamp target within world bounds
-        const halfSize = this.worldSize / 2 - 5; // Keep slightly away from edge
-        this.wanderTarget.x = THREE.MathUtils.clamp(_tempVec.x, -halfSize, halfSize);
-        this.wanderTarget.z = THREE.MathUtils.clamp(_tempVec.z, -halfSize, halfSize);
-        this.wanderTarget.y = this.mesh.position.y; // Keep target at current height level
-
-        this.stateTimer = 5 + Math.random() * 5; // Wander for 5-10 seconds
+        _tempVec.set(Math.cos(angle) * wanderDistance, 0, Math.sin(angle) * wanderDistance).add(this.mesh.position);
+        const limit = this.worldSize / 2 - 5;
+        this.wanderTarget.set(
+            THREE.MathUtils.clamp(_tempVec.x, -limit, limit),
+            this.mesh.position.y,
+            THREE.MathUtils.clamp(_tempVec.z, -limit, limit)
+        );
+        this.stateTimer = 5 + Math.random() * 5;
     }
 
     private animate(deltaTime: number): void {
         if (!this.headMesh) return;
         const horizontalSpeed = Math.sqrt(this.velocity.x ** 2 + this.velocity.z ** 2);
+        const originalY = this.headMesh.userData.originalY ?? this.headMesh.position.y;
 
         if (horizontalSpeed > 0.1 && this.isOnGround) {
-            // Head bobbing
-            const bobFrequency = 8;
-            const bobAmplitude = 0.03;
+            const bobFrequency = 8; const bobAmplitude = 0.03;
             const time = performance.now() * 0.001;
-            const headBobY = Math.sin(time * bobFrequency) * bobAmplitude;
-            const originalY = this.headMesh.userData.originalY ?? this.headMesh.position.y; // Fallback
-            this.headMesh.position.y = originalY + headBobY;
-            // TODO: Leg animations
-        } else if (this.headMesh.userData.originalY !== undefined) {
-            // Lerp head back to original position when idle
-            const originalY = this.headMesh.userData.originalY;
+            this.headMesh.position.y = originalY + Math.sin(time * bobFrequency) * bobAmplitude;
+        } else {
+            // Lerp head back smoothly
             this.headMesh.position.y = THREE.MathUtils.lerp(this.headMesh.position.y, originalY, 10 * deltaTime);
         }
     }
 
     override die(): void {
         if (this.isDead) return;
-        super.die(); // Calls Entity.die()
+        super.die();
         console.log(`${this.name} died.`);
-        this.state = 'dead'; // Set specific state
-        this.userData.isHostile = false; // Ensure flags are cleared
-
-        // Simple death effect: rotate onto side after a delay
+        this.state = 'dead'; this.userData.isHostile = false;
         setTimeout(() => {
-            if (this.mesh) { // Check if mesh still exists
+            if (this.mesh) { // Check existence
                 this.mesh.rotation.z = Math.PI / 2 * (Math.random() > 0.5 ? 1 : -1);
                 this.mesh.rotation.x = (Math.random() - 0.5) * 0.5;
-                // Try to re-snap to ground after rotation (might be glitchy)
-                // this.applyGravityAndGroundCheck(0.1, []);
             }
         }, 200);
-
-        // TODO: Request removal from game arrays (handled by Game class or EntityManager)
     }
 
     override updateBoundingBox(): void {
@@ -509,11 +417,8 @@ export class Animal extends Entity {
         const height = this.userData.height ?? 1.0;
         const width = this.userData.width ?? 0.8;
         const depth = this.userData.depth ?? 0.6;
-
-        // Center the box vertically based on group origin (Y=0) and calculated height
         const center = this.mesh.position.clone().add(new THREE.Vector3(0, height / 2, 0));
-        const size = new THREE.Vector3(width, height, depth);
-        this.boundingBox.setFromCenterAndSize(center, size);
+        this.boundingBox.setFromCenterAndSize(center, new THREE.Vector3(width, height, depth));
         this.userData.boundingBox = this.boundingBox;
     }
 }

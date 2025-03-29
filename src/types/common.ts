@@ -1,24 +1,34 @@
 import * as THREE from 'three';
-import { Inventory } from '../systems/inventory'; // Assuming Inventory path
-import { Player } from '../entities/player'; // Assuming Player path
+// Removed unused imports like Player/Inventory if only types are needed
 
 // --- Entity ---
 export interface EntityUserData {
-    entityReference: any; // Consider a more specific base entity type if possible
+    entityReference: any; // Could be Entity | InteractableObject | THREE.Object3D etc.
     isEntity: boolean;
     isPlayer: boolean;
     isNPC: boolean;
     isAnimal: boolean;
     isCollidable: boolean;
     isInteractable: boolean;
-    interactionType?: string; // e.g., 'talk', 'pet', 'gather', 'open'
+    interactionType?: string;
     prompt?: string;
     id: string;
-    boundingBox?: THREE.Box3; // Added for consistency
+    boundingBox?: THREE.Box3;
     height?: number;
     width?: number;
     depth?: number;
-    [key: string]: any; // Allow other properties (like resource, loot, etc.)
+    // Flags for specific object types
+    isSimpleObject?: boolean; // For InteractableObject differentiation
+    isTerrain?: boolean;
+    // Dynamic properties
+    isHostile?: boolean;
+    resource?: string;
+    gatherTime?: number;
+    isDepletable?: boolean;
+    respawnTime?: number;
+    loot?: Record<string, number>;
+    isOpen?: boolean; // For chests etc.
+    [key: string]: any; // Allow other properties
 }
 
 // --- Interaction ---
@@ -26,19 +36,19 @@ export interface InteractionResult {
     type: 'reward' | 'message' | 'dialogue' | 'item_retrieved' | 'error' | 'gather_start' | 'open_result';
     item?: { name: string; amount: number };
     message?: string;
-    text?: string; // For dialogue
-    state?: string; // NPC dialogue state
+    text?: string;
+    state?: string;
 }
 
 export interface TargetInfo {
     mesh: THREE.Object3D;
-    instance: any; // The actual class instance (Entity, InteractableObject, etc.)
+    instance: any; // Entity | InteractableObject | THREE.Object3D
     point: THREE.Vector3;
     distance: number;
 }
 
 export interface ActiveGather {
-    targetInstance: any; // The entity/object being gathered from
+    targetInstance: any;
     startTime: number;
     duration: number;
     resource: string;
@@ -48,8 +58,8 @@ export interface ActiveGather {
 export interface InventoryItem {
     name: string;
     count: number;
-    icon?: string; // Icon identifier (e.g., CSS class name)
-    data?: any; // Optional extra data (e.g., durability, effects)
+    icon?: string;
+    data?: any;
 }
 
 // --- Quest ---
@@ -57,22 +67,21 @@ export type QuestStatus = 'unknown' | 'available' | 'active' | 'completed' | 'fa
 
 export interface Objective {
     type: 'gather' | 'retrieve' | 'kill' | 'explore' | 'talk_to';
-    item?: string; // For gather/retrieve
+    item?: string;
     amount?: number;
-    turnIn?: boolean; // Does the item get removed on completion?
-    target?: string; // For kill quests
-    locationId?: string; // For explore quests
+    turnIn?: boolean;
+    target?: string;
+    locationId?: string;
     locationHint?: string;
-    npcId?: string; // For talk_to quests
+    npcId?: string;
     npcName?: string;
-    [key: string]: any; // Allow other objective properties
+    [key: string]: any;
 }
 
 export interface Reward {
     gold?: number;
     items?: Array<{ name: string; amount: number }>;
     xp?: number;
-    // Add other potential rewards (reputation, etc.)
 }
 
 export interface QuestData {
@@ -81,13 +90,12 @@ export interface QuestData {
     description: string;
     objectives: Objective[];
     reward?: Reward;
-    // Add prerequisites, follow-up quests, etc. if needed
 }
 
 export interface QuestState {
     data: QuestData;
     status: QuestStatus;
-    progress?: Record<string, any>; // Optional detailed progress tracking
+    progress?: Record<string, any>;
 }
 
 // --- Event Log ---
@@ -97,22 +105,6 @@ export interface EventEntry {
 }
 
 // --- Controls ---
-export interface KeyState {
-    [key: string]: boolean | undefined; // Use `code` property from KeyboardEvent
-}
-
-export interface MouseState {
-    x: number;
-    y: number;
-    dx: number;
-    dy: number;
-    buttons: { [key: number]: boolean | undefined };
-}
-
-export interface MoveState {
-    forward: number; // -1, 0, 1
-    right: number; // -1, 0, 1
-    jump: boolean;
-    sprint: boolean;
-    interact: boolean; // Added for interaction system
-}
+export interface KeyState { [key: string]: boolean | undefined; }
+export interface MouseState { x: number; y: number; dx: number; dy: number; buttons: { [key: number]: boolean | undefined }; }
+export interface MoveState { forward: number; right: number; jump: boolean; sprint: boolean; interact: boolean; }

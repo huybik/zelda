@@ -2,53 +2,32 @@ import { Player } from '../entities/player';
 
 export class HUD {
     private player: Player;
-    private healthBarElement: HTMLElement | null;
-    private staminaBarElement: HTMLElement | null;
-    // Interaction prompt is handled separately by InteractionSystem
+    private healthBar: HTMLElement | null;
+    private staminaBar: HTMLElement | null;
 
     constructor(player: Player) {
-        if (!player) throw new Error("Player instance is required for HUD.");
         this.player = player;
-
-        this.healthBarElement = document.getElementById('health-bar');
-        this.staminaBarElement = document.getElementById('stamina-bar');
-
-        if (!this.healthBarElement) console.error("HUD element not found: #health-bar");
-        if (!this.staminaBarElement) console.error("HUD element not found: #stamina-bar");
-
-        this.update(); // Initial update
+        this.healthBar = document.getElementById('health-bar');
+        this.staminaBar = document.getElementById('stamina-bar');
+        if (!this.healthBar) console.error("#health-bar not found");
+        if (!this.staminaBar) console.error("#stamina-bar not found");
+        this.update(); // Initial render
     }
 
     update(): void {
-        // Handle dead player state
-        if (this.player.isDead) {
-            if (this.healthBarElement) this.healthBarElement.style.width = `0%`;
-            if (this.staminaBarElement) this.staminaBarElement.style.width = `0%`;
-            // Optionally hide the entire HUD or add a 'dead' class
-            return;
-        }
+        if (!this.healthBar || !this.staminaBar) return;
 
-        // Guard clauses for missing elements
-        if (!this.healthBarElement || !this.staminaBarElement) return;
+        // Handle dead player state gracefully
+        const healthPercent = this.player.isDead ? 0 : Math.max(0, (this.player.health / this.player.maxHealth) * 100);
+        const staminaPercent = this.player.isDead ? 0 : Math.max(0, (this.player.stamina / this.player.maxStamina) * 100);
 
-        // Update Health Bar
-        const healthPercent = Math.max(0, (this.player.health / this.player.maxHealth) * 100);
-        this.healthBarElement.style.width = `${healthPercent}%`;
-        // Update health bar color based on percentage
-        if (healthPercent < 30) this.healthBarElement.style.backgroundColor = '#FF4500'; // OrangeRed
-        else if (healthPercent < 60) this.healthBarElement.style.backgroundColor = '#FFA500'; // Orange
-        else this.healthBarElement.style.backgroundColor = '#4CAF50'; // Green
+        // Update Health
+        this.healthBar.style.width = `${healthPercent}%`;
+        this.healthBar.style.backgroundColor = healthPercent < 30 ? '#FF4500' : healthPercent < 60 ? '#FFA500' : '#4CAF50';
 
-        // Update Stamina Bar
-        const staminaPercent = Math.max(0, (this.player.stamina / this.player.maxStamina) * 100);
-        this.staminaBarElement.style.width = `${staminaPercent}%`;
-        // Update stamina bar style/color based on exhaustion
-        if (this.player.isExhausted) {
-            this.staminaBarElement.style.backgroundColor = '#888'; // Grey out
-            this.staminaBarElement.classList.add('exhausted');
-        } else {
-            this.staminaBarElement.style.backgroundColor = '#FF69B4'; // Pink
-            this.staminaBarElement.classList.remove('exhausted');
-        }
+        // Update Stamina
+        this.staminaBar.style.width = `${staminaPercent}%`;
+        this.staminaBar.style.backgroundColor = this.player.isExhausted ? '#888' : '#FF69B4';
+        this.staminaBar.classList.toggle('exhausted', this.player.isExhausted);
     }
 }
