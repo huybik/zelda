@@ -21,7 +21,8 @@
     "baseUrl": ".", // Base directory for path resolution
     "paths": { // Optional: Define path aliases
       "@/*": ["src/*"]
-    }
+    },
+    "types": ["three"]
   },
   "include": ["src/**/*"], // Files to include in compilation
   "exclude": ["node_modules", "dist"] // Folders to exclude

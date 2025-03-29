@@ -1,8 +1,8 @@
 import {
   AmbientLight, Box3, BoxGeometry, Color, ConeGeometry, CylinderGeometry, DirectionalLight,
   DoubleSide, Fog, Group, HemisphereLight, Material, Matrix4, Mesh, MeshBasicMaterial,
-  MeshLambertMaterial, Object3D, PCFSoftShadowMap, PerspectiveCamera, PlaneGeometry, Quaternion,
-  Raycaster, Scene, SphereGeometry, Vector2, Vector3, WebGLRenderer, MathUtils
+  MeshLambertMaterial,  PCFSoftShadowMap, PerspectiveCamera, PlaneGeometry, Quaternion,
+  Raycaster, Scene, SphereGeometry, Vector2, Vector3, WebGLRenderer, MathUtils, Object3D
 } from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import { Clock } from 'three';
@@ -1603,19 +1603,20 @@ function populateEnvironment(scene: Scene, worldSize: number, collidableObjects:
   addNpc(villageCenter.clone().add(new Vector3(10, 0, -3)), 'Blacksmith Brynn', 'cap');
   addNpc(new Vector3(halfSize * 0.4, 0, -halfSize * 0.3), 'Hunter Rex', 'none');
   const addObject = (creator: (pos: Vector3, ...args: any[]) => Group, count: number, minDistSq: number, ...args: any[]) => {
-    for (let i = 0; i < count; i++) {
-      const x = randomFloat(-halfSize * 0.95, halfSize * 0.95);
-      const z = randomFloat(-halfSize * 0.95, halfSize * 0.95);
-      const distSq = (x - villageCenter.x) ** 2 + (z - villageCenter.z) ** 2;
-      if (distSq < minDistSq) continue;
-      const obj = creator(new Vector3(x, 0, z), ...args);
-      const height = getTerrainHeight(x, z);
-      obj.position.y = height;
-      if (obj.name === "Herb Plant") obj.position.y = height + 0.1;
-      scene.add(obj);
-      if (obj.userData.isCollidable) collidableObjects.push(obj);
-      if (obj.userData.isInteractable) interactableObjects.push(obj);
-    }
+  for (let i = 0; i < count; i++) {
+    const x = randomFloat(-halfSize * 0.95, halfSize * 0.95);
+    const z = randomFloat(-halfSize * 0.95, halfSize * 0.95);
+    const distSq = (x - villageCenter.x) ** 2 + (z - villageCenter.z) ** 2;
+    if (distSq < minDistSq) continue;
+    const obj = creator(new Vector3(x, 0, z), ...args);
+    const height = getTerrainHeight(x, z);
+    obj.position.y = height;
+    if (obj.name === "Herb Plant") obj.position.y = height + 0.1;
+    scene.add(obj);
+    if (obj.userData.isCollidable) collidableObjects.push(obj);
+    if (obj.userData.isInteractable) interactableObjects.push(obj);
+    entities.push(obj); // Add this line to include resources in entities
+  }
   };
   addObject(createTree, 150, 25 * 25);
   addObject(createRock, 80, 20 * 20, randomFloat(1, 2.5));
@@ -1834,35 +1835,50 @@ class Minimap {
   }
 
   update(): void {
-    if (!this.ctx) return;
-    this.ctx.fillStyle = this.bgColor;
-    this.ctx.fillRect(0, 0, this.mapSize, this.mapSize);
-    if (this.player.isDead) return;
-    this.player.mesh!.getWorldPosition(this.playerPosition);
-    const playerRotationY = this.player.mesh!.rotation.y;
-    this.ctx.save();
-    this.ctx.translate(this.halfMapSize, this.halfMapSize);
-    this.ctx.rotate(-playerRotationY);
-    this.ctx.translate(-this.worldToMapX(this.playerPosition.x), -this.worldToMapZ(this.playerPosition.z));
-    this.entities.forEach(entity => {
-      if (!entity || entity === this.player || (entity instanceof Entity && entity.isDead)) return;
-      const mesh = (entity instanceof Entity) ? entity.mesh : entity;
-      if (!mesh || !mesh.parent || !mesh.visible) return;
-      mesh.getWorldPosition(this.entityPosition);
-      const entityMapX = this.worldToMapX(this.entityPosition.x);
-      const entityMapY = this.worldToMapZ(this.entityPosition.z);
-      let color = 'gray';
-      let size = this.dotSize;
-      let draw = false;
-      if (entity instanceof NPC) {
-        color = this.npcColor;
-        size += 1;
-        draw = true;
+  if (!this.ctx) return;
+  this.ctx.fillStyle = this.bgColor;
+  this.ctx.fillRect(0, 0, this.mapSize, this.mapSize);
+  if (this.player.isDead) return;
+  this.player.mesh!.getWorldPosition(this.playerPosition);
+  const playerRotationY = this.player.mesh!.rotation.y;
+  this.ctx.save();
+  this.ctx.translate(this.halfMapSize, this.halfMapSize);
+  this.ctx.rotate(-playerRotationY);
+  this.ctx.translate(-this.worldToMapX(this.playerPosition.x), -this.worldToMapZ(this.playerPosition.z));
+  this.entities.forEach(entity => {
+    if (!entity || entity === this.player || (entity instanceof Entity && entity.isDead)) return;
+    const mesh = (entity instanceof Entity) ? entity.mesh : entity;
+    if (!mesh || !mesh.parent || !mesh.visible) return;
+    mesh.getWorldPosition(this.entityPosition);
+    const entityMapX = this.worldToMapX(this.entityPosition.x);
+    const entityMapY = this.worldToMapZ(this.entityPosition.z);
+    let color = 'gray';
+    let size = this.dotSize;
+    let draw = false;
+    if (entity.userData.resource) {
+      switch (entity.userData.resource) {
+        case 'wood':
+          color = 'green';
+          break;
+        case 'stone':
+          color = 'gray';
+          break;
+        case 'herb':
+          color = 'lightgreen';
+          break;
+        default:
+          color = 'white';
       }
-      if (draw) this.drawDot(entityMapX, entityMapY, color, size);
-    });
-    this.ctx.restore();
-    this.drawPlayerTriangle(this.halfMapSize, this.halfMapSize, this.playerColor, this.playerTriangleSize);
+      draw = true;
+    } else if (entity instanceof NPC) {
+      color = this.npcColor;
+      size += 1;
+      draw = true;
+    }
+    if (draw) this.drawDot(entityMapX, entityMapY, color, size);
+  });
+  this.ctx.restore();
+  this.drawPlayerTriangle(this.halfMapSize, this.halfMapSize, this.playerColor, this.playerTriangleSize);
   }
 
   worldToMapX(worldX: number): number {
@@ -1870,7 +1886,7 @@ class Minimap {
   }
 
   worldToMapZ(worldZ: number): number {
-    return (worldZ + this.halfWorldSize) * this.mapScale;
+  return (this.halfWorldSize - worldZ) * this.mapScale; // Changed from (worldZ + this.halfWorldSize)
   }
 
   drawDot(mapX: number, mapY: number, color: string, size: number): void {
@@ -1883,15 +1899,17 @@ class Minimap {
   drawPlayerTriangle(centerX: number, centerY: number, color: string, size: number): void {
     this.ctx!.fillStyle = color;
     this.ctx!.beginPath();
-    this.ctx!.moveTo(centerX, centerY - size * 0.6);
-    this.ctx!.lineTo(centerX - size / 2, centerY + size * 0.4);
-    this.ctx!.lineTo(centerX + size / 2, centerY + size * 0.4);
+    this.ctx!.moveTo(centerX, centerY - size * 0.8); // Top vertex
+    this.ctx!.lineTo(centerX - size / 2, centerY + size * 0.3); // Bottom-left
+    this.ctx!.lineTo(centerX + size / 2, centerY + size * 0.3); // Bottom-right
     this.ctx!.closePath();
     this.ctx!.fill();
+    
+    
   }
 }
 
-const WORLD_SIZE = 1000;
+const WORLD_SIZE = 100;
 const TERRAIN_SEGMENTS = 150;
 
 (window as any).game = null;
