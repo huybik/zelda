@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2020", // Target modern ES features
+    "module": "ESNext", // Use ES modules
+    "moduleResolution": "node", // How modules are resolved
+    "lib": ["ES2020", "DOM", "DOM.Iterable"], // Include necessary libraries
+    "outDir": "./dist", // Output directory for compiled JS (if building)
+    // "rootDir": "./src", // Source directory
+    "strict": true, // Enable all strict type-checking options
+    "noImplicitAny": true, // Require explicit 'any' type
+    "strictNullChecks": true, // Handle null and undefined strictly
+    "noUnusedLocals": true, // Warn on unused local variables
+    "noUnusedParameters": true, // Warn on unused parameters
+    "skipLibCheck": true, // Skip type checking of declaration files (.d.ts)
+    "esModuleInterop": true, // Enables compatibility with CommonJS modules
+    "forceConsistentCasingInFileNames": true, // Ensure consistent file casing
+    "resolveJsonModule": true, // Allow importing JSON files
+    "sourceMap": true, // Generate source maps for debugging (optional)
+    "allowJs": false, // Disallow JavaScript files in the project
+    // "checkJs": false, // Don't type-check JS files if allowJs is true
+    "baseUrl": ".", // Base directory for path resolution
+    "paths": { // Optional: Define path aliases
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["src/**/*"], // Files to include in compilation
+  "exclude": ["node_modules", "dist"] // Folders to exclude
+}
