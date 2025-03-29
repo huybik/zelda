@@ -54,10 +54,7 @@ function applyNoiseToGeometry(geometry) {
     const noiseStrength = 24; // Reduced from 12 for gentler slopes
     const noiseScale = 0.005; // Reduced from 0.02 for larger, smoother features
     // Removed additional noise layers to eliminate fine details
-    const noiseStrength2 = 0; // Was 0.5
-    const noiseScale2 = 0.08;
-    const noiseStrength3 = 0; // Was 0.1
-    const noiseScale3 = 0.3;
+
 
     const numVertices = geometry.attributes.position.count;
 
