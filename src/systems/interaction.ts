@@ -1,5 +1,3 @@
-// File: /src/systems/interaction.ts
-
 import * as THREE from 'three';
 import { Player } from '../entities/player';
 import { Controls } from './controls';
@@ -10,7 +8,9 @@ import { InteractionResult, EntityUserData, TargetInfo, ActiveGather } from '../
 
 const _camDir = new THREE.Vector3(); const _objDir = new THREE.Vector3();
 const _playerPos = new THREE.Vector3(); const _playerDir = new THREE.Vector3();
-const _objPos = new THREE.Vector3(); const _size = new THREE.Vector3(); const _tempBox = new THREE.Box3();
+const _objPos = new THREE.Vector3(); const _size = new THREE.Vector3();
+// FIX: Removed unused _tempBox
+// const _tempBox = new THREE.Box3();
 
 // --- Interactable World Object ---
 export class InteractableObject {
@@ -19,7 +19,8 @@ export class InteractableObject {
     public prompt: string; public mesh: THREE.Mesh | THREE.Group | null = null;
     public isActive: boolean = true; public userData: EntityUserData;
 
-    constructor(id: string, position: THREE.Vector3, interactionType: string, data: any, prompt: string, scene?: THREE.Scene) {
+    // FIX: Removed unused scene parameter
+    constructor(id: string, position: THREE.Vector3, interactionType: string, data: any, prompt: string /*, scene?: THREE.Scene*/) {
         this.id = id; this.position = position.clone(); this.interactionType = interactionType;
         this.data = data; this.prompt = prompt;
         this.userData = {
@@ -28,7 +29,7 @@ export class InteractableObject {
             isPlayer: false, isNPC: false, isAnimal: false, isCollidable: false,
         };
         // Optional: Add default visual marker if scene is provided
-        // this.createDefaultMesh(scene);
+        // if (scene) this.createDefaultMesh(scene);
     }
 
     interact(player: Player, inventory: Inventory, eventLog: EventLog): InteractionResult | null {
@@ -39,15 +40,15 @@ export class InteractableObject {
             case 'retrieve':
                 const itemName = this.data as string;
                 if (inventory.addItem(itemName, 1)) {
-                    eventLog?.addEntry(`You picked up: ${itemName}`);
+                    eventLog?.addEntry(`You picked up: ${itemName}`); // FIX: Optional chaining
                     this.removeFromWorld();
                     return { type: 'item_retrieved', item: { name: itemName, amount: 1 } };
                 }
-                eventLog?.addEntry(`Your inventory is full.`);
+                eventLog?.addEntry(`Your inventory is full.`); // FIX: Optional chaining
                 return { type: 'error', message: 'Inventory full' };
             case 'read_sign':
                 const signText = this.data as string || "Illegible sign.";
-                eventLog?.addEntry(`Sign: "${signText}"`);
+                eventLog?.addEntry(`Sign: "${signText}"`); // FIX: Optional chaining
                 return { type: 'message', message: signText };
             default:
                 console.warn(`Unhandled simple interaction: ${this.interactionType}`);
@@ -57,21 +58,35 @@ export class InteractableObject {
 
     removeFromWorld(): void {
         this.isActive = false; this.userData.isInteractable = false;
-        if (this.mesh) { this.mesh.visible = false; this.userData.isCollidable = false; }
+        // FIX: Check mesh exists
+        if (this.mesh) {
+             this.mesh.visible = false;
+             // Optionally remove from parent scene if managed externally
+             // this.mesh.parent?.remove(this.mesh);
+        }
+        this.userData.isCollidable = false; // Update collision status
         // TODO: Proper scene removal handled by Game class or manager
     }
 
     // Required for compatibility if treated like an Entity
-    update(deltaTime: number): void { /* Static */ }
+    // FIX: Removed unused parameters
+    update(/*deltaTime: number, player: Player*/): void { /* Static objects don't update */ }
+
     updateBoundingBox(): void {
         this.userData.boundingBox ??= new THREE.Box3();
-        if (this.mesh) this.userData.boundingBox.setFromObject(this.mesh);
-        else this.userData.boundingBox.setFromCenterAndSize(this.position, _size.set(0.5, 0.5, 0.5));
+        if (this.mesh) { // FIX: Check mesh exists
+            this.userData.boundingBox.setFromObject(this.mesh);
+        } else {
+            this.userData.boundingBox.setFromCenterAndSize(this.position, _size.set(0.5, 0.5, 0.5));
+        }
     }
 
     // Assign mesh AFTER construction if needed
     setMesh(mesh: THREE.Mesh | THREE.Group): void {
-        if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh); // Remove old mesh
+        // FIX: Check mesh and parent exist before removing
+        if (this.mesh && this.mesh.parent) {
+            this.mesh.parent.remove(this.mesh); // Remove old mesh
+        }
         this.mesh = mesh;
         this.mesh.position.copy(this.position);
         this.mesh.userData = this.userData; // Link user data
@@ -84,7 +99,7 @@ export class InteractableObject {
 // --- Interaction System ---
 export class InteractionSystem {
     private player: Player; private camera: THREE.PerspectiveCamera;
-    private interactableSource: Array<Entity | InteractableObject | THREE.Object3D>; // Reference Game's list
+    private interactableSource: Array<any>; // Reference Game's list (Entity | InteractableObject | THREE.Object3D)
     private controls: Controls; private inventory: Inventory; private eventLog: EventLog;
     private raycaster: THREE.Raycaster = new THREE.Raycaster();
     private interactionDistance: number = 3.0; private aimTolerance: number = Math.PI / 6; // ~30 deg
@@ -105,15 +120,27 @@ export class InteractionSystem {
         if (!this.interactionPromptElement) console.warn("#interaction-prompt not found.");
     }
 
-    update(deltaTime: number): void {
+    // FIX: Use _deltaTime if unused
+    update(_deltaTime: number): void {
         // Handle Gather Action
         if (this.activeGather) {
-            const moved = this.player.velocity.lengthSq() * deltaTime > 0.001;
-            if (moved || this.controls.moveState.interact) return this.cancelGatherAction();
-            this.updateGatherAction(deltaTime);
-            return; // Skip target finding
+            // Check for movement using velocity magnitude (less sensitive to tiny physics jitter)
+            const moved = this.player.velocity.lengthSq() > 0.01; // Adjusted threshold
+            // Check if interact key is pressed *during* gather to cancel
+            if (moved || this.controls.moveState.interact) {
+                 this.cancelGatherAction();
+                 if(this.controls.moveState.interact) this.controls.moveState.interact = false; // Consume cancel press
+                 return;
+            }
+            this.updateGatherAction(/*deltaTime*/); // Pass deltaTime if needed by gather logic
+            return; // Skip target finding while gathering
         }
-        this.controls.moveState.interact = false; // Consume interact flag if not gathering
+
+        // Check interact flag *before* finding target, consume if set
+        let interactPressed = this.controls.moveState.interact;
+        if (interactPressed) {
+             this.controls.moveState.interact = false; // Consume interact flag early
+        }
 
         // Find Target
         const targetInfo = this.findInteractableTarget();
@@ -122,13 +149,15 @@ export class InteractionSystem {
         if (targetInfo?.instance?.userData?.isInteractable) {
             if (this.currentTarget !== targetInfo.instance) {
                 this.currentTarget = targetInfo.instance; this.currentTargetMesh = targetInfo.mesh;
-                this.showPrompt(targetInfo.instance.userData.prompt || "Press E to interact");
+                // FIX: Use optional chaining for prompt
+                this.showPrompt(targetInfo.instance.userData?.prompt || "Press E to interact");
             }
-            if (this.controls.moveState.interact) { // Check interact flag again
+            // Use the consumed flag
+            if (interactPressed) {
                 this.tryInteract(this.currentTarget, this.currentTargetMesh);
-                this.controls.moveState.interact = false; // Consume interact flag
+                // interactPressed is already false
             }
-        } else if (this.currentTarget) { // No valid target found
+        } else if (this.currentTarget) { // No valid target found, but had one before
             this.currentTarget = null; this.currentTargetMesh = null; this.hidePrompt();
         }
     }
@@ -140,13 +169,20 @@ export class InteractionSystem {
 
         const meshesToCheck = this.interactableSource
             .map(item => (item as any).mesh ?? (item instanceof THREE.Object3D ? item : null))
-            .filter((mesh): mesh is THREE.Object3D => mesh instanceof THREE.Object3D && mesh.userData?.isInteractable === true && mesh.visible !== false);
+            // FIX: Filter more robustly, check userData exists before accessing properties
+            .filter((mesh): mesh is THREE.Object3D =>
+                 mesh instanceof THREE.Object3D && mesh.visible !== false && mesh.userData?.isInteractable === true
+             );
+
 
         const intersects = this.raycaster.intersectObjects(meshesToCheck, true);
 
         for (const intersect of intersects) {
-            const targetInfo = this.getInteractableFromHit(intersect.object);
+            // Ensure we hit something interactive and not part of the player
+            // FIX: Pass player to getInteractableFromHit to avoid self-interaction
+            const targetInfo = this.getInteractableFromHit(intersect.object, this.player);
             if (targetInfo) {
+                // Check angle tolerance
                 _objDir.copy(intersect.point).sub(this.camera.position).normalize();
                 this.camera.getWorldDirection(_camDir);
                 if (_camDir.angleTo(_objDir) < this.aimTolerance) {
@@ -160,74 +196,99 @@ export class InteractionSystem {
     }
 
     // Helper to find the root interactable instance from a potentially nested hit object
-    private getInteractableFromHit(hitObject: THREE.Object3D): { mesh: THREE.Object3D; instance: any } | null {
+    // FIX: Added player parameter to prevent self-interaction detection
+    private getInteractableFromHit(hitObject: THREE.Object3D, playerToExclude: Player): { mesh: THREE.Object3D; instance: any } | null {
         let current: THREE.Object3D | null = hitObject;
         while (current) {
-            const userData = current.userData;
-            if (userData?.isInteractable && userData.entityReference) {
+            const userData = current.userData as EntityUserData | undefined; // Type userData
+
+            // Check if it's an entity reference and NOT the player
+            if (userData?.isInteractable && userData.entityReference && userData.entityReference !== playerToExclude) {
                 return { mesh: current, instance: userData.entityReference };
             }
-            // Handle InteractableObject directly (where instance *is* the reference)
-             if (userData?.isInteractable && userData.isSimpleObject) {
-                 const instance = this.interactableSource.find(e => (e as any).mesh === current || e === current);
-                 if (instance) return { mesh: current, instance: instance };
+             // Check for simple interactable objects (like InteractableObject class instance)
+             // Ensure it's not the player object itself being checked
+             if (userData?.isInteractable && userData.isSimpleObject && userData.entityReference !== playerToExclude) {
+                 // The instance *is* the entityReference in this case
+                 if (userData.entityReference) return { mesh: current, instance: userData.entityReference };
              }
              // Handle cases where the group itself is the interactable (e.g., Trees from env)
-             if (userData?.isInteractable && this.interactableSource.includes(current)) {
+             // Ensure it's not the player's mesh group
+             if (userData?.isInteractable && this.interactableSource.includes(current) && current !== playerToExclude.mesh) {
                  return { mesh: current, instance: current };
              }
 
             current = current.parent;
         }
-        return null;
+        return null; // No valid, interactable, non-player target found up the hierarchy
     }
 
+
     private findNearbyInteractable(): TargetInfo | null {
+        // FIX: Check player mesh exists
+        if (!this.player.mesh) return null;
+
         this.player.mesh.getWorldPosition(_playerPos);
         this.player.mesh.getWorldDirection(_playerDir);
         let closestDistSq = this.interactionDistance * this.interactionDistance;
         let closestTarget: TargetInfo | null = null;
 
         this.interactableSource.forEach(item => {
-            const userData = (item as any)?.userData;
-            if (!userData?.isInteractable || item === this.player || (userData.entityReference?.isDead) || (userData.isSimpleObject && !(item as InteractableObject).isActive)) return;
-
             const mesh = (item as any).mesh ?? (item instanceof THREE.Object3D ? item : null);
-            if (!mesh || !mesh.visible) return;
+            // FIX: Check item is not the player instance itself AND mesh is not player's mesh
+            if (!mesh || item === this.player || mesh === this.player.mesh || !mesh.visible) return;
+
+            const userData = mesh.userData as EntityUserData | undefined; // Type userData
+
+            // FIX: Check userData exists, isInteractable, and associated entity (if any) is not dead
+            if (!userData?.isInteractable || userData.entityReference?.isDead === true || (userData.isSimpleObject && !(item as InteractableObject).isActive)) {
+                 return;
+            }
+
 
             mesh.getWorldPosition(_objPos);
             const distSq = _playerPos.distanceToSquared(_objPos);
 
             if (distSq < closestDistSq) {
-                _objDir.copy(_objPos).sub(_playerPos).normalize();
-                if (_playerDir.angleTo(_objDir) < Math.PI / 2.5) { // ~72 deg forward arc
+                _objDir.copy(_objPos).sub(_playerPos);
+                // Check if object is roughly in front of the player
+                if (_objDir.lengthSq() > 1e-6 && _playerDir.dot(_objDir.normalize()) > Math.cos(Math.PI / 2.5)) { // ~72 deg forward arc check using dot product
                     closestDistSq = distSq;
-                    closestTarget = { mesh: mesh, instance: item, point: _objPos.clone(), distance: Math.sqrt(distSq) };
+                     // Determine the actual instance (could be Entity, InteractableObject, or the mesh itself)
+                    const instance = userData.entityReference ?? item;
+                    closestTarget = { mesh: mesh, instance: instance, point: _objPos.clone(), distance: Math.sqrt(distSq) };
                 }
             }
         });
         return closestTarget;
     }
 
-    private tryInteract(targetInstance: any, targetMesh: THREE.Object3D | null): void {
-        if (!targetInstance || !targetMesh || !targetInstance.userData?.isInteractable) return;
+     private tryInteract(targetInstance: any, targetMesh: THREE.Object3D | null): void {
+         // FIX: Check player mesh exists
+         if (!targetInstance || !targetMesh?.userData || !this.player.mesh) return;
+
+         // Ensure target is interactable (check userData again)
+         if (!targetMesh.userData.isInteractable) return;
 
         const distance = this.player.mesh.position.distanceTo(targetMesh.position);
         if (distance > this.interactionDistance * 1.1) {
              this.currentTarget = null; this.currentTargetMesh = null; this.hidePrompt(); return; // Too far
         }
 
-        const interactionType = targetInstance.userData.interactionType as string;
+        const interactionType = targetMesh.userData.interactionType as string; // Get type from mesh's userData
         const targetName = targetInstance.name ?? targetInstance.id ?? 'object';
         console.log(`Attempting interaction: ${interactionType} with ${targetName}`);
 
         let result: InteractionResult | null = null;
 
+        // Check if the instance itself has an interact method (covers Entity, InteractableObject)
         if (typeof targetInstance.interact === 'function') {
+            // Pass necessary dependencies
             result = targetInstance.interact(this.player, this.inventory, this.eventLog);
-        } else if (interactionType === 'gather' && targetInstance.userData.resource) {
-            this.startGatherAction(targetInstance); result = { type: 'gather_start' };
-        } else if (interactionType === 'open' && typeof targetInstance.open === 'function') { // Check for Chest's open method
+        } else if (interactionType === 'gather' && targetMesh.userData.resource) { // Check mesh userData for gather info
+            this.startGatherAction(targetMesh); // Pass the mesh/group that has the data
+            result = { type: 'gather_start' };
+        } else if (interactionType === 'open' && typeof targetInstance.open === 'function') { // Check for Chest's open method on instance
              result = this.handleOpenAction(targetInstance);
         } else {
             console.warn(`Unknown interaction type/method for ${targetName}: ${interactionType}`);
@@ -236,9 +297,9 @@ export class InteractionSystem {
 
         if (result) this.handleInteractionResult(result, targetInstance);
 
-        // Deselect if interaction finished and made target non-interactable
-        if (result?.type !== 'gather_start' && !targetInstance.userData?.isInteractable) {
-            this.currentTarget = null; this.currentTargetMesh = null;
+        // Deselect if interaction finished and made target non-interactable (check userData again)
+        if (result?.type !== 'gather_start' && !targetMesh.userData?.isInteractable) {
+            this.currentTarget = null; this.currentTargetMesh = null; this.hidePrompt();
         }
     }
 
@@ -264,63 +325,99 @@ export class InteractionSystem {
             default: console.log("Unhandled interaction result:", result.type); break;
         }
         if (promptText) this.showPrompt(promptText, promptDuration);
+        else if (!this.activeGather && promptDuration === null) {
+             // If no prompt text and not gathering, ensure prompt is hidden
+             this.hidePrompt();
+        }
     }
 
-    private startGatherAction(targetInstance: any): void {
-        if (this.activeGather) return;
+    // FIX: targetInstance is likely the mesh/group with userData here
+    private startGatherAction(targetObject: THREE.Object3D): void {
+        if (this.activeGather || !targetObject.userData) return; // Check userData
+
+        const userData = targetObject.userData;
         this.activeGather = {
-            targetInstance: targetInstance, startTime: performance.now(),
-            duration: (targetInstance.userData.gatherTime as number) || 2000,
-            resource: targetInstance.userData.resource as string
+            targetInstance: targetObject, // Store the object being gathered from
+            startTime: performance.now(),
+            duration: (userData.gatherTime as number) || 2000,
+            resource: (userData.resource as string) || 'unknown resource'
         };
-        this.showPrompt(`Gathering ${this.activeGather.resource}... (0%)`); // Persistent prompt
+        this.showPrompt(`Gathering ${this.activeGather.resource}... (0%)`, null); // Persistent prompt
         this.eventLog?.addEntry(`Started gathering ${this.activeGather.resource}...`);
         this.player.velocity.x = 0; this.player.velocity.z = 0; // Stop player
     }
 
-    private updateGatherAction(deltaTime: number): void {
+    // FIX: Removed unused deltaTime
+    private updateGatherAction(/*deltaTime: number*/): void {
         if (!this.activeGather) return;
         const progress = Math.min(1, (performance.now() - this.activeGather.startTime) / this.activeGather.duration);
-        this.showPrompt(`Gathering ${this.activeGather.resource}... (${Math.round(progress * 100)}%)`);
+        this.showPrompt(`Gathering ${this.activeGather.resource}... (${Math.round(progress * 100)}%)`, null); // Persistent prompt
         if (progress >= 1) this.completeGatherAction();
     }
 
+
     private completeGatherAction(): void {
         if (!this.activeGather) return;
-        const { resource, targetInstance } = this.activeGather;
+        const { resource, targetInstance } = this.activeGather; // targetInstance is the THREE.Object3D here
         const success = this.inventory.addItem(resource, 1);
         this.eventLog?.addEntry(success ? `Gathered 1 ${resource}.` : `Inventory full, could not gather ${resource}.`);
 
-        if (success && targetInstance.userData.isDepletable) { // Handle depletion/removal
-            targetInstance.userData.isInteractable = false;
-            if (targetInstance.mesh) targetInstance.mesh.visible = false;
-            const respawnTime = targetInstance.userData.respawnTime || 15000;
-            setTimeout(() => {
-                if (targetInstance?.userData && targetInstance.mesh) {
-                    targetInstance.userData.isInteractable = true; targetInstance.mesh.visible = true;
-                    console.log(`${resource} node respawned.`);
-                }
-            }, respawnTime);
-        } else if (success && targetInstance.userData.isSimpleObject && typeof targetInstance.removeFromWorld === 'function') {
-             targetInstance.removeFromWorld();
-        }
+        // Check userData on the targetInstance (THREE.Object3D)
+        const userData = targetInstance?.userData as EntityUserData | undefined;
+
+        if (success && userData) {
+             if (userData.isDepletable) {
+                 userData.isInteractable = false;
+                 if (targetInstance instanceof THREE.Mesh || targetInstance instanceof THREE.Group) {
+                      targetInstance.visible = false;
+                 }
+                 const respawnTime = userData.respawnTime || 15000;
+                 setTimeout(() => {
+                      // Check instance and userData still exist
+                      if (targetInstance?.userData) {
+                          targetInstance.userData.isInteractable = true;
+                           if (targetInstance instanceof THREE.Mesh || targetInstance instanceof THREE.Group) {
+                                targetInstance.visible = true;
+                           }
+                          console.log(`${resource} node respawned.`);
+                      }
+                 }, respawnTime);
+            } else if (userData.isSimpleObject && typeof (userData.entityReference as InteractableObject)?.removeFromWorld === 'function') {
+                 // If it's linked to an InteractableObject instance, call its remove method
+                 (userData.entityReference as InteractableObject).removeFromWorld();
+            }
+         }
+
 
         this.activeGather = null; this.hidePrompt();
-        this.currentTarget = null; this.currentTargetMesh = null; // Clear target
+        // Clear target only if it was the gathered object
+        if (this.currentTarget === targetInstance || this.currentTargetMesh === targetInstance) {
+             this.currentTarget = null; this.currentTargetMesh = null;
+        }
     }
 
     public cancelGatherAction(): void { // Made public for Game class access on death
         if (!this.activeGather) return;
         this.eventLog?.addEntry(`Gathering ${this.activeGather.resource} cancelled.`);
         this.activeGather = null; this.hidePrompt();
+        // Don't necessarily clear currentTarget, player might still be looking at it
     }
 
+    // FIX: targetInstance is likely the Chest instance here
     private handleOpenAction(targetInstance: any): InteractionResult | null {
-        if (!targetInstance?.open || !targetInstance.userData) return { type: 'error', message: "Cannot open this." };
-        if (targetInstance.userData.isOpen) return { type: 'message', message: "The chest is empty." };
+         // Check instance has necessary methods/properties and userData
+        if (!targetInstance?.open || !targetInstance.userData) {
+             return { type: 'error', message: "Cannot open this." };
+        }
+        if (targetInstance.userData.isOpen === true) { // Check the flag correctly
+            return { type: 'message', message: "The chest is empty." };
+        }
 
         this.eventLog?.addEntry("You open the chest...");
-        if (!targetInstance.open()) return { type: 'error', message: "Cannot open chest now." }; // Animation/state check
+        // Call the open method on the instance
+        if (!targetInstance.open()) {
+             return { type: 'error', message: "Cannot open chest now." }; // Might be animating or locked
+        }
 
         const loot = targetInstance.userData.loot as Record<string, number> | undefined;
         let lootMessages: string[] = []; let itemsFound = false;
@@ -331,7 +428,7 @@ export class InteractionSystem {
                 const success = this.inventory.addItem(name, amount);
                 lootMessages.push(success ? `Found ${amount} ${name}` : `Found ${amount} ${name}, but inventory is full!`);
             });
-            targetInstance.userData.loot = {}; // Clear loot
+            targetInstance.userData.loot = {}; // Clear loot after attempting to add
         }
         const finalMessage = itemsFound ? lootMessages.join('. ') : "The chest is empty.";
         this.eventLog?.addEntry(finalMessage + ".");
@@ -339,23 +436,47 @@ export class InteractionSystem {
     }
 
     private showPrompt(text: string, duration: number | null = null): void {
-        if (!this.interactionPromptElement || (this.activeGather && duration === null)) return;
+        // FIX: Check element exists
+        if (!this.interactionPromptElement) return;
+
+        // Prevent overriding gathering prompt with timed prompts
+        if (this.activeGather && duration !== null) return;
+
         this.interactionPromptElement.textContent = text;
         this.interactionPromptElement.style.display = 'block';
-        clearTimeout(this.promptTimeout ?? undefined); this.promptTimeout = null;
+
+        // Clear existing timeout *before* setting a new one
+        if (this.promptTimeout !== null) {
+             clearTimeout(this.promptTimeout);
+             this.promptTimeout = null;
+        }
+
         if (duration && duration > 0) {
             this.promptTimeout = setTimeout(() => {
-                if (this.interactionPromptElement?.textContent === text) this.hidePrompt();
+                // Check if the text is still the same before hiding, prevents race conditions
+                if (this.interactionPromptElement?.textContent === text) {
+                     this.hidePrompt();
+                }
+                this.promptTimeout = null; // Clear timeout ID after execution
             }, duration);
         }
     }
 
     private hidePrompt(): void {
+        // FIX: Check element exists
         if (!this.interactionPromptElement) return;
-        // Hide only if not gathering AND no timed prompt is waiting
-        if (!this.activeGather && !this.promptTimeout) {
+
+        // Hide only if not gathering AND no timed prompt is pending completion
+        if (!this.activeGather && this.promptTimeout === null) {
             this.interactionPromptElement.style.display = 'none';
             this.interactionPromptElement.textContent = '';
+        } else if (!this.activeGather && this.promptTimeout !== null) {
+             // If a timed prompt *was* active but we're hiding prematurely, clear its timeout
+             clearTimeout(this.promptTimeout);
+             this.promptTimeout = null;
+             this.interactionPromptElement.style.display = 'none';
+             this.interactionPromptElement.textContent = '';
         }
+         // If gathering, the prompt remains until gathering ends/cancels
     }
 }

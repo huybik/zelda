@@ -3,12 +3,14 @@ html, body {
     padding: 0;
     width: 100%;
     height: 100%;
-    overflow: hidden; /* Prevent scrollbars */
+    overflow: hidden; /* Prevent scrollbars on the body */
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     color: #333;
-    background-color: #87CEEB; /* Fallback sky */
+    background-color: #87CEEB; /* Fallback sky color */
+    position: relative; /* Needed for absolute positioning of children */
 }
 
+/* --- Game Container --- */
 #game-container {
     position: absolute;
     top: 0;
@@ -16,16 +18,19 @@ html, body {
     width: 100%;
     height: 100%;
     cursor: default; /* Default cursor for the container */
+    outline: none; /* Remove focus outline */
 }
 
-/* When pointer is locked, hide the system cursor */
-#game-container:focus-within {
-   /* cursor: none; */ /* Browser usually handles this with pointer lock */
+/* Hide system cursor when pointer is locked (browser usually handles this) */
+#game-container:focus {
+    /* cursor: none; */
 }
 
 
 canvas {
     display: block; /* Remove extra space below canvas */
+    max-width: 100%;
+    max-height: 100%;
 }
 
 /* --- UI Container --- */
@@ -37,53 +42,62 @@ canvas {
     height: 100%;
     pointer-events: none; /* Allow clicks through to canvas by default */
     z-index: 10;
-    display: flex; /* Use flex/grid for positioning if needed, or absolute */
-    flex-direction: column;
+    /* Flex/Grid can be used for layout if needed, but absolute positioning works too */
 }
 
-/* Allow pointer events on specific UI elements */
+/* Allow pointer events on specific UI elements that need interaction */
 #hud, #minimap-container, .ui-panel {
     pointer-events: auto;
 }
 
 /* --- HUD --- */
 #hud {
-    position: absolute; /* Position within ui-container */
+    position: absolute;
     top: 15px;
     left: 15px;
     color: white;
     text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
-    user-select: none;
+    user-select: none; /* Prevent text selection */
+    z-index: 11; /* Above game, below panels */
 }
 
 .stat-bars {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px; /* Increased gap slightly */
 }
 
 .bar-container {
-    background-color: rgba(30, 30, 30, 0.7);
-    border-radius: 5px;
-    padding: 3px;
-    width: 160px;
+    width: 180px; /* Slightly wider */
     position: relative;
-    border: 1px solid rgba(0, 0, 0, 0.3);
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
 }
+
+.bar-background {
+     background-color: rgba(30, 30, 30, 0.7);
+     border-radius: 5px;
+     padding: 3px;
+     border: 1px solid rgba(0, 0, 0, 0.3);
+     box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+     overflow: hidden; /* Clip the inner bar */
+     height: 18px; /* Set height on background */
+}
+
 
 .bar {
-    height: 16px;
-    border-radius: 3px;
+    height: 100%; /* Fill the background height */
+    border-radius: 3px; /* Match outer radius adjusted for padding */
     transition: width 0.2s ease-out, background-color 0.3s ease;
     box-shadow: inset 0 -1px 1px rgba(255,255,255,0.2);
+    width: 100%; /* Start full */
+    float: left; /* Keep bar aligned left */
 }
 
-#health-bar { background-color: #4CAF50; }
-#stamina-bar { background-color: #FF69B4; }
+#health-bar { background-color: #4CAF50; } /* Green */
+#stamina-bar { background-color: #FF69B4; } /* Pink */
 
+/* Specific styling for exhausted stamina bar */
 #stamina-bar.exhausted {
-    background-color: #777;
+    background-color: #777; /* Grey */
     animation: pulse-grey 1.5s infinite ease-in-out;
 }
 @keyframes pulse-grey {
@@ -93,15 +107,17 @@ canvas {
 
 .bar-label {
     position: absolute;
-    top: 1px;
-    left: 6px;
+    top: 3px; /* Align with padding inside background */
+    left: 8px; /* Increased padding */
     font-size: 11px;
     font-weight: bold;
-    line-height: 18px; /* Match bar height + padding */
+    line-height: 18px; /* Match background height */
     color: white;
     text-shadow: 1px 1px 2px black;
     pointer-events: none;
+    z-index: 1; /* Above the bar fill */
 }
+
 
 #interaction-prompt {
     position: fixed; /* Position relative to viewport */
@@ -116,7 +132,7 @@ canvas {
     text-align: center;
     border: 1px solid rgba(255, 255, 255, 0.2);
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
-    display: none; /* Controlled by JS */
+    display: none; /* Controlled by JS/TS */
     z-index: 15; /* Above HUD elements */
 }
 
@@ -127,77 +143,86 @@ canvas {
     right: 15px;
     border: 2px solid rgba(50, 50, 50, 0.8);
     border-radius: 4px;
-    background-color: rgba(100, 100, 100, 0.6);
+    background-color: rgba(100, 100, 100, 0.6); /* Semi-transparent background */
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+    overflow: hidden; /* Ensure canvas fits */
+    z-index: 11; /* Above game, below panels */
 }
 
 #minimap-canvas {
     display: block;
-    border-radius: 2px;
+    /* border-radius: 2px; */ /* Removed if container has border-radius */
 }
 
 /* --- Panels (Inventory & Journal) --- */
 .ui-panel {
-    position: fixed; /* Relative to viewport */
+    position: fixed; /* Position relative to viewport */
     background-color: rgba(235, 235, 235, 0.97); /* Slightly more opaque */
     border: 1px solid #aaa;
     border-radius: 8px;
     padding: 20px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
     z-index: 20; /* Above other UI */
-    transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out; /* Add transitions */
+    transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out, visibility 0s linear 0.2s; /* Visibility transition */
+    opacity: 0; /* Start hidden */
+    transform: scale(0.95); /* Start scaled down */
+    visibility: hidden; /* Start hidden */
+    pointer-events: none; /* Disable interaction when hidden */
+    display: flex; /* Use flex for internal layout */
+    flex-direction: column; /* Stack title, content */
+    max-height: 80vh; /* Limit panel height */
+}
+
+/* Visible state for panels */
+.ui-panel:not(.hidden) {
     opacity: 1;
     transform: scale(1);
-}
-
-/* Hidden state for panels */
-.ui-panel.hidden {
-    opacity: 0;
-    transform: scale(0.95);
-    pointer-events: none; /* Disable interaction when hidden */
-    /* Use visibility: hidden instead of display: none for transitions */
-    visibility: hidden;
-    transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out, visibility 0s 0.2s;
-}
-.ui-panel { /* Ensure visibility is set when not hidden */
     visibility: visible;
-    transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+    pointer-events: auto; /* Enable interaction when visible */
+    transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out, visibility 0s linear 0s;
 }
 
-
+/* Specific Panel Positioning */
 #inventory-display {
     bottom: 20px;
     left: 50%;
-    transform: translateX(-50%) scale(1); /* Initial transform state */
-    width: 85%;
-    max-width: 700px;
+    transform: translateX(-50%) scale(0.95); /* Initial transform state */
+    width: clamp(300px, 85%, 700px); /* Responsive width */
     max-height: 60vh;
-    display: flex;
-    flex-direction: column;
 }
-#inventory-display.hidden { transform: translateX(-50%) scale(0.95); }
+#inventory-display:not(.hidden) { transform: translateX(-50%) scale(1); }
 
 
 #journal-display {
      top: 50%;
      left: 50%;
-     transform: translate(-50%, -50%) scale(1); /* Initial transform state */
-     width: 80%;
-     max-width: 650px;
+     transform: translate(-50%, -50%) scale(0.95); /* Initial transform state */
+     width: clamp(400px, 80%, 650px); /* Responsive width */
      max-height: 75vh;
+}
+#journal-display .journal-content {
+     display: flex; /* Arrange quest/event side-by-side or stacked */
+     flex-direction: row; /* Side-by-side */
+     gap: 20px;
+     overflow: hidden; /* Prevent content overflow */
+     flex-grow: 1; /* Allow content to fill space */
+}
+#journal-display .journal-section {
+     flex: 1; /* Share space equally */
      display: flex;
      flex-direction: column;
+     min-width: 0; /* Prevent flex item overflow */
 }
-#journal-display.hidden { transform: translate(-50%, -50%) scale(0.95); }
+
+#journal-display:not(.hidden) { transform: translate(-50%, -50%) scale(1); }
 
 
 .ui-panel h2 {
-    margin-top: 0;
+    margin: 0 0 18px 0; /* Adjusted margin */
+    padding-bottom: 12px;
     text-align: center;
     color: #444;
     border-bottom: 1px solid #ccc;
-    padding-bottom: 12px;
-    margin-bottom: 18px;
     font-size: 1.3em;
     user-select: none;
     flex-shrink: 0; /* Prevent header shrinking */
@@ -206,11 +231,11 @@ canvas {
 /* Inventory Slots */
 #inventory-slots {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(65px, 1fr)); /* Responsive columns */
     gap: 12px;
-    overflow-y: auto;
-    padding: 5px;
-    flex-grow: 1; /* Allow grid to fill space */
+    overflow-y: auto; /* Scroll if content exceeds max-height */
+    padding: 5px; /* Padding around the grid */
+    flex-grow: 1; /* Allow grid to fill available space */
 }
 
 .inventory-slot {
@@ -219,40 +244,44 @@ canvas {
     background-color: rgba(200, 200, 200, 0.9);
     border: 1px solid #999;
     border-radius: 5px;
-    position: relative;
+    position: relative; /* For positioning count */
     cursor: pointer;
     transition: background-color 0.15s ease, transform 0.1s ease;
-    overflow: hidden;
+    overflow: hidden; /* Hide overflowing content */
     display: flex;
     justify-content: center;
     align-items: center;
+    box-sizing: border-box; /* Include border in size */
 }
 .inventory-slot:hover {
     background-color: rgba(180, 180, 180, 1);
-    transform: scale(1.05);
+    transform: scale(1.05); /* Slight zoom on hover */
     border-color: #666;
+    z-index: 1; /* Bring hovered slot to front */
 }
 
 .item-icon {
-    width: 40px;
-    height: 40px;
-    background-color: #ddd; /* Placeholder bg */
+    width: 48px; /* Increased size */
+    height: 48px; /* Increased size */
+    background-color: #ddd; /* Placeholder background */
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
     border-radius: 3px;
     box-shadow: inset 0 0 2px rgba(0,0,0,0.2);
-    visibility: hidden; /* JS controls visibility */
+    image-rendering: pixelated; /* Keep low-res icons sharp */
+    visibility: hidden; /* JS controls visibility based on data-icon */
 }
-/* Specific Item Icon Styles (using classes generated by JS) */
-.item-icon.wood { background-color: #8B4513; }
-.item-icon.stone { background-color: #808080; }
-.item-icon.herb { background-color: #228B22; } /* Darker green */
-.item-icon.feather { background-color: #FFFFFF; border: 1px solid #eee; }
-.item-icon.health_potion { background-color: #FF4500; border-radius: 50%; } /* Round potion */
-.item-icon.gold { background-color: #FFD700; border-radius: 50%; }
-.item-icon.hunters_bow { background-color: #A0522D; width: 50px; height: 15px; } /* Bow shape */
-.item-icon.default_icon { background-color: #aaa; } /* Fallback */
+/* Specific Item Icon Styles (using data attributes) */
+[data-icon="wood"] { background-color: #8B4513; }
+[data-icon="stone"] { background-color: #808080; }
+[data-icon="herb"] { background-color: #2E8B57; } /* SeaGreen */
+[data-icon="feather"] { background-color: #FFFFFF; border: 1px solid #eee; }
+[data-icon="health_potion"] { background-color: #FF4500; border-radius: 50%; }
+[data-icon="gold"] { background-color: #FFD700; border-radius: 50%; }
+[data-icon="hunters_bow"] { background-color: #A0522D; } /* Add bow SVG/image background? */
+[data-icon="default_icon"] { background-color: #aaa; } /* Fallback */
+[data-icon="empty"] { visibility: hidden; }
 
 
 .item-count {
@@ -263,20 +292,13 @@ canvas {
     font-weight: bold;
     color: #f0f0f0;
     text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.9);
-    background-color: rgba(0, 0, 0, 0.2);
-    padding: 0 3px;
-    border-radius: 2px;
+    background-color: rgba(0, 0, 0, 0.3); /* Slightly more background */
+    padding: 1px 4px; /* Adjusted padding */
+    border-radius: 3px; /* Rounded corners */
+    line-height: 1; /* Prevent extra vertical space */
 }
 
 /* Journal Entries */
-.journal-section {
-    margin-bottom: 15px;
-    flex-shrink: 0;
-}
-.journal-section:last-child {
-     margin-bottom: 0;
-}
-
 .journal-section h3 {
     margin-top: 0;
     margin-bottom: 8px;
@@ -284,19 +306,21 @@ canvas {
     color: #555;
     border-bottom: 1px dotted #ccc;
     padding-bottom: 5px;
+    flex-shrink: 0;
 }
 #quest-log, #event-log {
     list-style: none;
     padding: 0;
     margin: 0;
-    max-height: 25vh; /* Limit height of each list */
-    overflow-y: auto;
+    /* max-height: 25vh; */ /* Max height set by panel/flex */
+    overflow-y: auto; /* Enable scrolling */
     border: 1px solid #ddd;
     background-color: rgba(255, 255, 255, 0.6);
     border-radius: 4px;
     padding: 10px;
     scrollbar-width: thin; /* Firefox scrollbar styling */
     scrollbar-color: #aaa #eee; /* Firefox scrollbar thumb and track */
+    flex-grow: 1; /* Allow lists to fill section space */
 }
 /* Webkit scrollbar styling */
 #quest-log::-webkit-scrollbar, #event-log::-webkit-scrollbar { width: 8px; }
@@ -317,33 +341,47 @@ canvas {
 }
 
 /* Quest Status Styling */
-li.quest-completed { color: #555; font-style: italic; text-decoration: line-through; opacity: 0.7; }
-li.quest-failed { color: #a00; font-style: italic; opacity: 0.8; }
-li.quest-available { color: #005a9c; } /* Dark blue */
-li.quest-active strong { color: #006400; } /* Dark green */
+.quest-entry.quest-completed { color: #555; font-style: italic; /* text-decoration: line-through; */ opacity: 0.7; }
+.quest-entry.quest-failed { color: #a00; font-style: italic; opacity: 0.8; }
+.quest-entry.quest-available { /* Default style or add specific color */ }
+.quest-entry.quest-active .quest-title { color: #006400; } /* Dark green title for active */
 
+.quest-title { font-weight: bold; }
+.quest-description { color: #444; font-size: 0.9em; margin-top: 3px; }
+.quest-progress { color: #333; font-size: 0.85em; margin-top: 5px; }
 
 /* --- Utility --- */
-/* Using class-based hiding instead of !important */
-/* .hidden { display: none !important; } */
+.hidden {
+    /* Using class toggle in JS instead of !important */
+    /* display: none !important; */
+}
 
-/* Crosshair using ::after pseudo-element */
-body::after {
-    content: '+';
+/* --- Crosshair --- */
+#crosshair {
     position: fixed;
     top: 50%;
     left: 50%;
+    width: 2px; /* Thickness */
+    height: 16px; /* Length */
+    background-color: rgba(255, 255, 255, 0.5);
     transform: translate(-50%, -50%);
-    font-size: 24px;
-    font-weight: bold;
-    color: rgba(255, 255, 255, 0.5);
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
-    pointer-events: none; /* Allow clicks through */
+    pointer-events: none;
     z-index: 5; /* Below UI panels */
-    user-select: none;
+    box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7); /* Add shadow like original text */
+}
+#crosshair::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px; /* Length */
+    height: 2px; /* Thickness */
+    background-color: rgba(255, 255, 255, 0.5);
+    transform: translate(-50%, -50%);
+    box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
 }
 
-/* Hide crosshair when UI is open (optional) */
-body:has(.ui-panel:not(.hidden))::after {
-   /* display: none; */ /* Uncomment to hide crosshair when panels are open */
+/* Hide crosshair when UI panel is open */
+body:has(.ui-panel:not(.hidden)) #crosshair {
+   display: none;
 }

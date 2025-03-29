@@ -1,5 +1,3 @@
-// File: /src/systems/inventory.ts
-
 import { InventoryItem } from '../types/common';
 
 export class Inventory {
@@ -59,7 +57,7 @@ export class Inventory {
         // Iterate backwards (optional strategy)
         for (let i = this.size - 1; i >= 0 && needed > 0; i--) {
             const slot = this.items[i];
-            if (slot?.name === itemName) {
+            if (slot?.name === itemName) { // Use optional chaining
                 const amountToRemove = Math.min(needed, slot.count);
                 slot.count -= amountToRemove; needed -= amountToRemove; changed = true;
                 if (slot.count === 0) this.items[i] = null;

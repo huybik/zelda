@@ -20,14 +20,17 @@ export class QuestLog {
 
     public makeQuestAvailable(questId: string): boolean {
         const definition = this.getQuestData(questId);
-        if (!definition) return false;
+        if (!definition) {
+             console.error(`Quest definition not found for ID: ${questId}`);
+             return false;
+        }
         const currentState = this.quests[questId];
         if (!currentState || currentState.status === 'unknown') {
             this.quests[questId] = { data: definition, status: 'available' };
             console.log(`Quest available: ${definition.title}`);
             this.notifyChange(); return true;
         }
-        return false; // Already known
+        return false; // Already known (or in a later state)
     }
 
     public acceptQuest(questId: string): boolean {
@@ -41,25 +44,43 @@ export class QuestLog {
         return false;
     }
 
+    // FIX: Check inventory exists before use
     public checkQuestCompletion(questId: string, inventory: Inventory | null /*, otherState */): boolean {
         const quest = this.quests[questId];
-        if (!quest || quest.status !== 'active' || !inventory) return false;
+        if (!quest || quest.status !== 'active' || !inventory) return false; // FIX: Added !inventory check
 
         return quest.data.objectives.every(obj => {
             const required = obj.amount ?? 1;
             switch (obj.type) {
-                case 'gather': case 'retrieve': return inventory.hasItem(obj.item!, required);
-                case 'kill': /* return otherState.getKillCount(obj.target) >= required; */ return false; // Not implemented
-                case 'explore': /* return otherState.hasVisited(obj.locationId); */ return false; // Not implemented
-                case 'talk_to': /* return otherState.hasTalkedTo(obj.npcId); */ return false; // Not implemented
-                default: console.warn(`Unknown objective type: ${obj.type}`); return false;
+                case 'gather': case 'retrieve':
+                    if (!obj.item) { console.warn(`Quest ${questId} objective missing item name`); return false; }
+                    return inventory.hasItem(obj.item, required);
+                case 'kill': /* return otherState.getKillCount(obj.target) >= required; */
+                     console.warn(`Kill objective type not implemented for quest ${questId}`);
+                     return false; // Not implemented
+                case 'explore': /* return otherState.hasVisited(obj.locationId); */
+                     console.warn(`Explore objective type not implemented for quest ${questId}`);
+                     return false; // Not implemented
+                case 'talk_to': /* return otherState.hasTalkedTo(obj.npcId); */
+                     console.warn(`Talk_to objective type not implemented for quest ${questId}`);
+                     return false; // Not implemented
+                default:
+                    // Handle potential future exhaustive checks with a type assertion
+                    const exhaustiveCheck: never = obj.type;
+                    console.warn(`Unknown objective type: ${exhaustiveCheck} in quest ${questId}`);
+                    return false;
             }
         });
     }
 
+    // FIX: Check inventory exists before use
     public getQuestProgress(questId: string, inventory: Inventory | null /*, otherState */): string {
         const quest = this.quests[questId];
-        if (!quest || quest.status !== 'active' || !inventory) return quest ? `(${quest.status})` : "Unknown";
+        if (!quest) return "Unknown";
+        if (quest.status !== 'active') return `(${quest.status})`;
+        if (!inventory) return `(${quest.status} - requires inventory check)`; // FIX: Handle null inventory
+
+        if (quest.data.objectives.length === 0) return 'No objectives.';
 
         return quest.data.objectives.map(obj => this.getObjectiveProgressString(obj, inventory)).join(', ');
     }
@@ -68,32 +89,57 @@ export class QuestLog {
         let current = 0; const required = obj.amount ?? 1;
         switch (obj.type) {
             case 'gather': case 'retrieve':
-                current = inventory.countItem(obj.item!);
+                if (!obj.item) return `Invalid Objective (no item)`;
+                current = inventory.countItem(obj.item);
                 return `${obj.item}: ${Math.min(current, required)}/${required}`;
-            case 'kill': /* current = otherState.getKillCount(obj.target); */ return `${obj.target ?? 'target'}: ${current}/${required}`;
-            case 'explore': /* current = otherState.hasVisited(obj.locationId) ? 1 : 0; */ return `Explore ${obj.locationHint ?? 'area'}: ${current}/${required}`;
-            case 'talk_to': /* current = otherState.hasTalkedTo(obj.npcId) ? 1 : 0; */ return `Talk to ${obj.npcName ?? 'NPC'}: ${current}/${required}`;
-            default: return `${obj.type}: ?/?`;
+            case 'kill': /* current = otherState.getKillCount(obj.target); */ return `${obj.target ?? 'target'}: ${current}/${required} (NI)`; // NI = Not Implemented
+            case 'explore': /* current = otherState.hasVisited(obj.locationId) ? 1 : 0; */ return `Explore ${obj.locationHint ?? 'area'}: ${current}/${required} (NI)`;
+            case 'talk_to': /* current = otherState.hasTalkedTo(obj.npcId) ? 1 : 0; */ return `Talk to ${obj.npcName ?? 'NPC'}: ${current}/${required} (NI)`;
+            default:
+                 const exhaustiveCheck: never = obj.type;
+                 return `${exhaustiveCheck}: ?/?`;
         }
     }
 
+    // FIX: Check inventory exists before use
     public completeQuest(questId: string, inventory: Inventory | null /*, otherState */): boolean {
         const quest = this.quests[questId];
+        // FIX: Add !inventory check
         if (!quest || quest.status !== 'active' || !inventory || !this.checkQuestCompletion(questId, inventory)) return false;
         console.log(`Completing quest: ${quest.data.title}`);
 
         // Remove required items (if flagged)
-        const itemsRemoved = quest.data.objectives.every(obj =>
-            !obj.turnIn || !obj.item || !obj.amount || inventory.removeItem(obj.item, obj.amount)
-        );
-        if (!itemsRemoved) { console.error(`Failed to remove required items for ${questId}!`); return false; }
+        let itemsRemoved = true; // Assume success unless removal fails
+        for (const obj of quest.data.objectives) {
+            if (obj.turnIn && obj.item && obj.amount && obj.amount > 0) {
+                 if (!inventory.removeItem(obj.item, obj.amount)) {
+                      console.error(`Failed to remove required item ${obj.amount}x ${obj.item} for ${questId}!`);
+                      itemsRemoved = false;
+                      break; // Stop trying to remove items if one fails
+                 }
+            }
+        }
 
-        // Grant rewards
+        if (!itemsRemoved) {
+             console.error(`Cannot complete quest ${questId} due to failure removing items.`);
+             return false; // Do not proceed to grant rewards or change status
+        }
+
+        // Grant rewards (only if items were successfully removed)
         const reward = quest.data.reward;
         if (reward) {
-            if (reward.gold) inventory.addItem('gold', reward.gold);
+            if (reward.gold && reward.gold > 0) {
+                 inventory.addItem('gold', reward.gold)
+                 console.log(`Granted ${reward.gold} gold.`);
+            };
             reward.items?.forEach(item => {
-                if (!inventory.addItem(item.name, item.amount)) console.warn(`Inv full, couldn't grant: ${item.amount} ${item.name}`);
+                if (item.amount > 0) {
+                    if (!inventory.addItem(item.name, item.amount)) {
+                         console.warn(`Inventory full, couldn't grant reward: ${item.amount} ${item.name}`);
+                    } else {
+                         console.log(`Granted ${item.amount} ${item.name}.`);
+                    }
+                }
             });
             // if (reward.xp) otherState.addExperience(reward.xp);
         }
@@ -118,7 +164,7 @@ export class QuestLog {
         Object.entries(saveData).forEach(([id, status]) => {
             const definition = this.getQuestData(id);
             if (definition) this.quests[id] = { data: definition, status: status };
-            else console.warn(`Quest def missing for saved quest ${id}. Skipping.`);
+            else console.warn(`Quest definition missing for saved quest ID ${id}. Skipping load for this quest.`);
         });
         this.notifyChange(); console.log("Quest log loaded.");
     }
@@ -142,14 +188,19 @@ export class EventLog {
     }
 
     public addEntry(message: string): void {
-        if (!message) return;
-        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        if (!message || typeof message !== 'string' || message.trim() === '') return; // Add validation
+        // Basic timestamp, consider more robust library if needed
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
         this.entries.push({ timestamp, message });
-        if (this.entries.length > this.maxEntries) this.entries.shift();
+        // Maintain max entries
+        while (this.entries.length > this.maxEntries) {
+            this.entries.shift();
+        }
         console.log("Event Log:", `[${timestamp}] ${message}`);
         this.notifyChange();
     }
 
+    // Return entries newest first for typical display
     public getEntries(): EventEntry[] { return [...this.entries].reverse(); }
     public getFormattedEntries(): string[] { return this.getEntries().map(e => `[${e.timestamp}] ${e.message}`); }
 
@@ -160,11 +211,17 @@ export class EventLog {
         this.onChangeCallbacks.forEach(cb => { try { cb(formatted); } catch (e) { console.error("EventLog onChange CB error:", e); } });
     }
 
-    public getSaveData(): EventEntry[] { return this.entries.slice(-20); } // Save last 20
+    // Save only a subset if log gets very large
+    public getSaveData(): EventEntry[] { return this.entries.slice(-Math.min(this.maxEntries, 100)); } // Save last 100 or maxEntries
+
     public loadSaveData(savedEntries: EventEntry[] | null): void {
         if (Array.isArray(savedEntries)) {
+            // Ensure loaded entries don't exceed max capacity immediately
             this.entries = savedEntries.slice(-this.maxEntries);
             this.notifyChange(); console.log("Event log loaded.");
+        } else {
+             this.entries = []; // Clear if save data is invalid/null
+             this.notifyChange(); console.log("Event log cleared due to invalid save data.");
         }
     }
 }

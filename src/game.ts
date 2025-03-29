@@ -1,5 +1,3 @@
-// File: /src/game.ts
-
 import * as THREE from 'three';
 import { setupLighting } from './world/lighting';
 import { createTerrain } from './world/terrain';
