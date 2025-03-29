@@ -336,9 +336,7 @@ class Player extends Entity {
     this.mesh!.position.z += this.velocity.z * deltaTime;
     this.checkGround(collidables);
     this.mesh!.position.y += this.velocity.y * deltaTime;
-    if (this.isOnGround && !wasOnGround && this.lastVelocityY < -1.0) {
-      this.handleFallDamage(Math.abs(this.lastVelocityY));
-    }
+    
     this.lastVelocityY = this.velocity.y;
     this.animateMovement(deltaTime);
     this.updateBoundingBox();
@@ -441,18 +439,7 @@ class Player extends Entity {
     }
   }
 
-  handleFallDamage(fallSpeed: number): void {
-    const damageThreshold = 10.0;
-    const damageFactor = 4.0;
-    if (fallSpeed > damageThreshold) {
-      const damage = Math.round((fallSpeed - damageThreshold) * damageFactor);
-      if (damage > 0) {
-        this.eventLog?.addEntry(`Ouch! That hurt! (-${damage} HP)`);
-        this.takeDamage(damage);
-      }
-    }
-  }
-
+  
   animateMovement(deltaTime: number): void {
     const horizontalSpeed = Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z);
     const maxSpeed = this.isSprinting ? this.runSpeed : this.walkSpeed;
@@ -2128,7 +2115,7 @@ class Game {
   }
 }
 
-if (WebGL.isWebGLAvailable()) {
+if (WebGL.isWebGL2Available()) {
   const gameInstance = new Game();
   gameInstance.init();
   gameInstance.start();
