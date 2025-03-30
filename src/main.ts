@@ -1,8 +1,9 @@
 import {
   Scene, PerspectiveCamera, WebGLRenderer, Clock, Vector3, Color, Fog, Mesh,
   PlaneGeometry, MeshLambertMaterial, AmbientLight, DirectionalLight, HemisphereLight,
-  BoxGeometry, MeshBasicMaterial, DoubleSide, PCFSoftShadowMap, MathUtils, Object3D, Group,
+  BoxGeometry, MeshBasicMaterial, DoubleSide, PCFSoftShadowMap, MathUtils, Object3D, Group,AnimationClip
 } from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import WebGL from 'three/examples/jsm/capabilities/WebGL.js';
 import { Player, NPC } from './entities';
@@ -13,6 +14,22 @@ import { Inventory, EventLog, getTerrainHeight, randomFloat, smoothstep } from '
 
 const WORLD_SIZE = 100;
 const TERRAIN_SEGMENTS = 15;
+
+async function loadModels(): Promise<Record<string, { scene: Group; animations: AnimationClip[] }>> {
+  const loader = new GLTFLoader();
+  const modelPaths = {
+    player: 'assets/player/scene.gltf',
+    tavernMan: 'assets/the_tavern_man_2/scene.gltf',
+    oldMan: 'assets/the_tavern_old_man/scene.gltf',
+    woman: 'assets/the_tavern_woman_2/scene.gltf',
+  };
+  const models: Record<string, { scene: Group; animations: AnimationClip[] }> = {};
+  for (const [key, path] of Object.entries(modelPaths)) {
+    const gltf = await loader.loadAsync(path);
+    models[key] = { scene: gltf.scene, animations: gltf.animations };
+  }
+  return models;
+}
 
 function createTerrain(size: number, segments: number = 150): Mesh {
   const simplexTerrain = new SimplexNoise();
@@ -54,8 +71,8 @@ function setupLighting(scene: Scene): void {
   directionalLight.position.set(150, 200, 100);
   directionalLight.castShadow = true;
   directionalLight.target.position.set(0, 0, 0);
-  directionalLight.shadow.mapSize.width = 1024; // Reduced from 2048
-  directionalLight.shadow.mapSize.height = 1024; // Reduced from 2048
+  directionalLight.shadow.mapSize.width = 1024;
+  directionalLight.shadow.mapSize.height = 1024;
   directionalLight.shadow.camera.near = 10;
   directionalLight.shadow.camera.far = 500;
   const shadowCamSize = 150;
@@ -70,20 +87,30 @@ function setupLighting(scene: Scene): void {
   scene.add(hemisphereLight);
 }
 
-function populateEnvironment(scene: Scene, worldSize: number, collidableObjects: Object3D[], interactableObjects: Array<any>, entities: Array<any>, inventory: Inventory): void {
+function populateEnvironment(
+  scene: Scene,
+  worldSize: number,
+  collidableObjects: Object3D[],
+  interactableObjects: Array<any>,
+  entities: Array<any>,
+  inventory: Inventory,
+  models: Record<string, { scene: Group; animations: AnimationClip[] }>
+): void {
   const halfSize = worldSize / 2;
   const villageCenter = new Vector3(5, 0, 10);
-  const addNpc = (pos: Vector3, name: string, accessory: 'none' | 'straw_hat' | 'cap'): NPC => {
-    const npc = new NPC(scene, pos, name, accessory, inventory);
+  const addNpc = (pos: Vector3, name: string, modelKey: string): NPC => {
+    const model = models[modelKey];
+    const npc = new NPC(scene, pos, name, model.scene, model.animations, inventory);
     npc.mesh!.position.y = getTerrainHeight(scene, pos.x, pos.z);
     entities.push(npc);
     collidableObjects.push(npc.mesh!);
     interactableObjects.push(npc);
     return npc;
   };
-  addNpc(villageCenter.clone().add(new Vector3(-12, 0, 2)), 'Farmer Giles', 'straw_hat');
-  addNpc(villageCenter.clone().add(new Vector3(10, 0, -3)), 'Blacksmith Brynn', 'cap');
-  addNpc(new Vector3(halfSize * 0.4, 0, -halfSize * 0.3), 'Hunter Rex', 'none');
+  addNpc(villageCenter.clone().add(new Vector3(-12, 0, 2)), 'Farmer Giles', 'tavernMan');
+  addNpc(villageCenter.clone().add(new Vector3(10, 0, -3)), 'Blacksmith Brynn', 'woman');
+  addNpc(new Vector3(halfSize * 0.4, 0, -halfSize * 0.3), 'Hunter Rex', 'oldMan');
+
   const addObject = (creator: (pos: Vector3, ...args: any[]) => Group, count: number, minDistSq: number, ...args: any[]) => {
     for (let i = 0; i < count; i++) {
       const x = randomFloat(-halfSize * 0.95, halfSize * 0.95);
@@ -100,9 +127,9 @@ function populateEnvironment(scene: Scene, worldSize: number, collidableObjects:
       entities.push(obj);
     }
   };
-  addObject(createTree, 100, 25 * 25); // Reduced from 150
-  addObject(createRock, 50, 20 * 20, randomFloat(1, 2.5)); // Reduced from 80
-  addObject(createHerb, 30, 10 * 10); // Reduced from 60
+  addObject(createTree, 100, 25 * 25);
+  addObject(createRock, 50, 20 * 20, randomFloat(1, 2.5));
+  addObject(createHerb, 30, 10 * 10);
 }
 
 function createWorldBoundary(scene: Scene, worldSize: number, collidableObjects: Object3D[]): void {
@@ -148,20 +175,20 @@ class Game {
   collidableObjects: Object3D[] = [];
   interactableObjects: Array<any> = [];
   isPaused: boolean = false;
-  
 
   constructor() {}
 
-  init(): void {
+  async init(): Promise<void> {
     this.clock = new Clock();
     this.initRenderer();
     this.initScene();
     this.initCamera();
     this.initInventoryAndEventLog();
-    this.initPlayer();
+    const models = await loadModels();
+    this.initPlayer(models);
     this.initControls();
     this.initPhysics();
-    this.initEnvironment();
+    this.initEnvironment(models);
     this.initSystems();
     this.initUI();
     this.setupUIControls();
@@ -197,10 +224,10 @@ class Game {
     this.eventLog = new EventLog(75);
   }
 
-  initPlayer(): void {
+  initPlayer(models: Record<string, { scene: Group; animations: AnimationClip[] }>): void {
     const playerSpawnPos = new Vector3(0, 0, 5);
-    playerSpawnPos.y = getTerrainHeight(this.scene!, playerSpawnPos.x, playerSpawnPos.z) + 0.5;
-    this.player = new Player(this.scene!, playerSpawnPos);
+    playerSpawnPos.y = getTerrainHeight(this.scene!, playerSpawnPos.x, playerSpawnPos.z);
+    this.player = new Player(this.scene!, playerSpawnPos, models.player.scene, models.player.animations);
     this.entities.push(this.player);
     this.collidableObjects.push(this.player.mesh!);
     this.player.setEventLog(this.eventLog!);
@@ -215,8 +242,8 @@ class Game {
     this.physics = new Physics(this.player!, this.collidableObjects);
   }
 
-  initEnvironment(): void {
-    populateEnvironment(this.scene!, WORLD_SIZE, this.collidableObjects, this.interactableObjects, this.entities, this.inventory!);
+  initEnvironment(models: Record<string, { scene: Group; animations: AnimationClip[] }>): void {
+    populateEnvironment(this.scene!, WORLD_SIZE, this.collidableObjects, this.interactableObjects, this.entities, this.inventory!, models);
   }
 
   initSystems(): void {
@@ -326,7 +353,7 @@ class Game {
       this.eventLog!.addEntry(`You lost ${goldPenalty} gold.`);
     }
     const respawnPos = new Vector3(0, 0, 10);
-    respawnPos.y = getTerrainHeight(this.scene!, respawnPos.x, respawnPos.z) + 0.5;
+    respawnPos.y = getTerrainHeight(this.scene!, respawnPos.x, respawnPos.z);
     this.player!.respawn(respawnPos);
     this.setPauseState(false);
     this.interactionSystem!.cancelGatherAction();
@@ -342,12 +369,15 @@ class Game {
 }
 
 if (WebGL.isWebGL2Available()) {
-  const gameInstance = new Game();
-  gameInstance.init();
-  gameInstance.start();
-  const onResize = () => gameInstance.onWindowResize();
-  window.addEventListener('resize', onResize, false);
-  window.addEventListener('beforeunload', () => window.removeEventListener('resize', onResize));
+  async function startGame() {
+    const gameInstance = new Game();
+    await gameInstance.init();
+    gameInstance.start();
+    const onResize = () => gameInstance.onWindowResize();
+    window.addEventListener('resize', onResize, false);
+    window.addEventListener('beforeunload', () => window.removeEventListener('resize', onResize));
+  }
+  startGame();
 } else {
   const warning = WebGL.getWebGLErrorMessage();
   document.getElementById('game-container')?.appendChild(warning);

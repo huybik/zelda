@@ -1,11 +1,11 @@
 Model Information:
-* title:	Autumn - Explaining Exasperated
-* source:	https://sketchfab.com/3d-models/autumn-explaining-exasperated-4483cba7a276400c86019b5fc15acae4
-* author:	BootlegGirl1 (https://sketchfab.com/BootlegGirl1)
+* title:	The Tavern - Man 1
+* source:	https://sketchfab.com/3d-models/the-tavern-man-1-c7732b90f63841d2898f5af22cce3423
+* author:	François Espagnet (https://sketchfab.com/francoisespagnet)
 
 Model License:
 * license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 * requirements:	Author must be credited. Commercial use is allowed.
 
 If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
-This work is based on "Autumn - Explaining Exasperated" (https://sketchfab.com/3d-models/autumn-explaining-exasperated-4483cba7a276400c86019b5fc15acae4) by BootlegGirl1 (https://sketchfab.com/BootlegGirl1) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+This work is based on "The Tavern - Man 1" (https://sketchfab.com/3d-models/the-tavern-man-1-c7732b90f63841d2898f5af22cce3423) by François Espagnet (https://sketchfab.com/francoisespagnet) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
