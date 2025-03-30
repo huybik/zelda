@@ -1,0 +1,162 @@
+import {
+  Vector3, Mesh, Group, CylinderGeometry, ConeGeometry, BoxGeometry, SphereGeometry,
+  MeshLambertMaterial,Scene,Box3,
+} from 'three';
+import { Player } from './entities';
+import { Inventory, EventLog, EntityUserData, InteractionResult, Colors, randomFloat } from './ultils';
+
+const treeTrunkMat = new MeshLambertMaterial({ color: Colors.PASTEL_BROWN });
+const treeFoliageMat = new MeshLambertMaterial({ color: Colors.PASTEL_GREEN });
+const rockMat = new MeshLambertMaterial({ color: Colors.PASTEL_GRAY });
+const herbMat = new MeshLambertMaterial({ color: Colors.FOREST_GREEN });
+
+export class InteractableObject {
+  id: string;
+  name: string;
+  position: Vector3;
+  interactionType: string;
+  data: any;
+  prompt: string;
+  mesh: Mesh | Group | null;
+  isActive: boolean;
+  userData: EntityUserData;
+
+  constructor(id: string, name: string, position: Vector3, interactionType: string, data: any, prompt: string, scene: Scene | null = null) {
+    this.id = id;
+    this.name = name;
+    this.position = position.clone();
+    this.interactionType = interactionType;
+    this.data = data;
+    this.prompt = prompt;
+    this.mesh = null;
+    this.isActive = true;
+    this.userData = {
+      id: this.id,
+      entityReference: this,
+      isInteractable: true,
+      interactionType: this.interactionType,
+      prompt: this.prompt,
+      data: this.data,
+      isSimpleObject: true,
+      isEntity: false,
+      isPlayer: false,
+      isNPC: false,
+      isCollidable: false,
+    };
+  }
+
+  interact(player: Player, inventory: Inventory, eventLog: EventLog): InteractionResult | null {
+    if (!this.isActive) return { type: 'error', message: 'Already used.' };
+    switch (this.interactionType) {
+      case 'retrieve':
+        const itemName = this.data as string;
+        if (inventory.addItem(itemName, 1)) {
+          eventLog.addEntry(`You picked up: ${itemName}`);
+          this.removeFromWorld();
+          return { type: 'item_retrieved', item: { name: itemName, amount: 1 } };
+        } else {
+          eventLog.addEntry(`Your inventory is full.`);
+          return { type: 'error', message: 'Inventory full' };
+        }
+      case 'read_sign':
+        const signText = this.data as string || "The sign is worn and illegible.";
+        eventLog.addEntry(`Sign: "${signText}"`);
+        return { type: 'message', message: signText };
+      default:
+        return { type: 'message', message: 'You look at the object.' };
+    }
+  }
+
+  removeFromWorld(): void {
+    this.isActive = false;
+    this.userData.isInteractable = false;
+    if (this.mesh) {
+      this.mesh.visible = false;
+      this.userData.isCollidable = false;
+    }
+  }
+}
+
+export function createTree(position: Vector3): Group {
+  const trunkHeight = randomFloat(3, 5);
+  const trunkRadius = randomFloat(0.3, 0.5);
+  const foliageHeight = trunkHeight * 1.2 + randomFloat(0, 1);
+  const foliageRadius = trunkRadius * 3 + randomFloat(0, 1.5);
+  const treeGroup = new Group();
+  treeGroup.name = "Tree";
+  const trunkGeo = new CylinderGeometry(trunkRadius * 0.8, trunkRadius, trunkHeight, 8);
+  const trunkMesh = new Mesh(trunkGeo, treeTrunkMat);
+  trunkMesh.position.y = trunkHeight / 2;
+  trunkMesh.castShadow = true;
+  trunkMesh.receiveShadow = true;
+  treeGroup.add(trunkMesh);
+  const foliageGeo = new ConeGeometry(foliageRadius, foliageHeight, 6);
+  const foliageMesh = new Mesh(foliageGeo, treeFoliageMat);
+  foliageMesh.position.y = trunkHeight + foliageHeight / 3;
+  foliageMesh.castShadow = true;
+  treeGroup.add(foliageMesh);
+  treeGroup.position.copy(position).setY(0);
+  treeGroup.userData = {
+    isCollidable: true,
+    isInteractable: true,
+    interactionType: 'gather',
+    resource: 'wood',
+    gatherTime: 3000,
+    prompt: "Press E to gather Wood",
+    isDepletable: true,
+    respawnTime: 20000,
+    entityReference: treeGroup,
+    boundingBox: new Box3().setFromObject(treeGroup)
+  };
+  return treeGroup;
+}
+
+export function createRock(position: Vector3, size: number): Group {
+  const rockGroup = new Group();
+  rockGroup.name = "Rock";
+  const height = size * randomFloat(0.5, 1.0);
+  const geo = new BoxGeometry(size, height, size * randomFloat(0.8, 1.2));
+  const mesh = new Mesh(geo, rockMat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.rotation.set(randomFloat(-0.1, 0.1) * Math.PI, randomFloat(0, 2) * Math.PI, randomFloat(-0.1, 0.1) * Math.PI);
+  rockGroup.add(mesh);
+  rockGroup.position.copy(position).setY(0);
+  rockGroup.userData = {
+    isCollidable: true,
+    isInteractable: true,
+    interactionType: 'gather',
+    resource: 'stone',
+    gatherTime: 4000,
+    prompt: "Press E to gather Stone",
+    isDepletable: true,
+    respawnTime: 30000,
+    entityReference: rockGroup,
+    boundingBox: new Box3().setFromObject(rockGroup)
+  };
+  return rockGroup;
+}
+
+export function createHerb(position: Vector3): Group {
+  const herbGroup = new Group();
+  herbGroup.name = "Herb Plant";
+  const size = 0.25;
+  const geo = new SphereGeometry(size, 5, 4);
+  const mesh = new Mesh(geo, herbMat);
+  mesh.castShadow = true;
+  herbGroup.add(mesh);
+  herbGroup.position.copy(position).setY(size);
+  herbGroup.userData = {
+    isCollidable: false,
+    isInteractable: true,
+    interactionType: 'gather',
+    resource: 'herb',
+    gatherTime: 1500,
+    prompt: "Press E to gather Herb",
+    isDepletable: true,
+    respawnTime: 15000,
+    entityReference: herbGroup,
+    boundingBox: new Box3().setFromObject(herbGroup)
+  };
+  return herbGroup;
+}
