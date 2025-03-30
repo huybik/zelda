@@ -150,7 +150,7 @@ export class Player extends Entity {
     this.staminaDrainRate = 15;
     this.staminaRegenRate = 10;
     this.staminaJumpCost = 10;
-    this.canJump = false; 
+    this.canJump = false;
     this.isSprinting = false;
     this.isExhausted = false;
     this.exhaustionThreshold = 20;
