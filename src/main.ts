@@ -392,6 +392,7 @@ class Player extends Entity {
         this.isExhausted = true;
         this.eventLog?.addEntry("You are exhausted!");
       }
+      this.moveState.jump = false;
     }
   }
 
@@ -967,20 +968,30 @@ class InteractionSystem {
   }
 
   tryInteract(targetInstance: Entity | InteractableObject | Object3D): void {
-    if (!targetInstance || !targetInstance.userData?.isInteractable) return;
-    const distance = this.player.mesh!.position.distanceTo((targetInstance as any).mesh!.position);
-    if (distance > this.interactionDistance * 1.1) {
-      this.currentTarget = null;
-      this.currentTargetMesh = null;
-      this.hidePrompt();
-      return;
-    }
+  if (!targetInstance || !targetInstance.userData?.isInteractable) return;
+  let targetPosition: Vector3;
+  if (targetInstance instanceof Object3D && !(targetInstance instanceof Entity) && !(targetInstance instanceof InteractableObject)) {
+    targetPosition = targetInstance.position; // Direct Object3D (e.g., tree, rock)
+  } else if ((targetInstance as Entity | InteractableObject).mesh) {
+    targetPosition = (targetInstance as Entity | InteractableObject).mesh!.position; // Entity or InteractableObject with mesh
+  } else {
+    console.warn("Target instance has no mesh or position", targetInstance);
+    return;
+  }
+  const distance = this.player.mesh!.position.distanceTo(targetPosition);
+  if (distance > this.interactionDistance * 1.1) {
+    this.currentTarget = null;
+    this.currentTargetMesh = null;
+    this.hidePrompt();
+    return;
+  }
     let result: InteractionResult | null = null;
     if (typeof (targetInstance as any).interact === 'function') {
       result = (targetInstance as any).interact(this.player, this.inventory, this.eventLog);
     } else if (targetInstance.userData.interactionType === 'gather' && targetInstance.userData.resource) {
       this.startGatherAction(targetInstance);
       result = { type: 'gather_start' };
+      console.log(`Started gathering ${targetInstance.userData.resource}`);
     } else {
       result = { type: 'message', message: "You look at the object." };
     }
@@ -1442,10 +1453,10 @@ function createTerrain(size: number, segments: number = 150): Mesh {
   const geometry = new PlaneGeometry(size, size, segments, segments);
   const vertices = geometry.attributes.position.array as Float32Array;
   const numVertices = geometry.attributes.position.count;
-  const noiseStrength = 24;
+  const noiseStrength = 16;
   const noiseScale = 0.005;
-  const flattenRadius = 120;
-  const flattenStrength = 0.05;
+  const flattenRadius = 240;
+  const flattenStrength = 0.1;
   for (let i = 0; i < numVertices; i++) {
     const index = i * 3;
     const x = vertices[index];
@@ -1843,7 +1854,7 @@ class Minimap {
   const playerRotationY = this.player.mesh!.rotation.y;
   this.ctx.save();
   this.ctx.translate(this.halfMapSize, this.halfMapSize);
-  this.ctx.rotate(-playerRotationY);
+  this.ctx.rotate(playerRotationY);
   this.ctx.translate(-this.worldToMapX(this.playerPosition.x), -this.worldToMapZ(this.playerPosition.z));
   this.entities.forEach(entity => {
     if (!entity || entity === this.player || (entity instanceof Entity && entity.isDead)) return;
@@ -1886,7 +1897,7 @@ class Minimap {
   }
 
   worldToMapZ(worldZ: number): number {
-  return (this.halfWorldSize - worldZ) * this.mapScale; // Changed from (worldZ + this.halfWorldSize)
+  return (this.halfWorldSize - worldZ) * this.mapScale;
   }
 
   drawDot(mapX: number, mapY: number, color: string, size: number): void {
@@ -1899,9 +1910,9 @@ class Minimap {
   drawPlayerTriangle(centerX: number, centerY: number, color: string, size: number): void {
     this.ctx!.fillStyle = color;
     this.ctx!.beginPath();
-    this.ctx!.moveTo(centerX, centerY - size * 0.8); // Top vertex
-    this.ctx!.lineTo(centerX - size / 2, centerY + size * 0.3); // Bottom-left
-    this.ctx!.lineTo(centerX + size / 2, centerY + size * 0.3); // Bottom-right
+    this.ctx!.moveTo(centerX, centerY - size * 1.5); // Top vertex
+    this.ctx!.lineTo(centerX - size / 2, centerY + size * 0.4); // Bottom-left
+    this.ctx!.lineTo(centerX + size / 2, centerY + size * 0.4); // Bottom-right
     this.ctx!.closePath();
     this.ctx!.fill();
     
@@ -1910,7 +1921,7 @@ class Minimap {
 }
 
 const WORLD_SIZE = 100;
-const TERRAIN_SEGMENTS = 150;
+const TERRAIN_SEGMENTS = 15;
 
 (window as any).game = null;
 
