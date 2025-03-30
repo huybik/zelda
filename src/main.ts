@@ -1,7 +1,7 @@
 import {
   Scene, PerspectiveCamera, WebGLRenderer, Clock, Vector3, Color, Fog, Mesh,
   PlaneGeometry, MeshLambertMaterial, AmbientLight, DirectionalLight, HemisphereLight,
-  BoxGeometry, MeshBasicMaterial, DoubleSide, PCFSoftShadowMap, MathUtils,Object3D, Group,
+  BoxGeometry, MeshBasicMaterial, DoubleSide, PCFSoftShadowMap, MathUtils, Object3D, Group,
 } from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import WebGL from 'three/examples/jsm/capabilities/WebGL.js';
@@ -54,8 +54,8 @@ function setupLighting(scene: Scene): void {
   directionalLight.position.set(150, 200, 100);
   directionalLight.castShadow = true;
   directionalLight.target.position.set(0, 0, 0);
-  directionalLight.shadow.mapSize.width = 2048;
-  directionalLight.shadow.mapSize.height = 2048;
+  directionalLight.shadow.mapSize.width = 1024; // Reduced from 2048
+  directionalLight.shadow.mapSize.height = 1024; // Reduced from 2048
   directionalLight.shadow.camera.near = 10;
   directionalLight.shadow.camera.far = 500;
   const shadowCamSize = 150;
@@ -100,9 +100,9 @@ function populateEnvironment(scene: Scene, worldSize: number, collidableObjects:
       entities.push(obj);
     }
   };
-  addObject(createTree, 150, 25 * 25);
-  addObject(createRock, 80, 20 * 20, randomFloat(1, 2.5));
-  addObject(createHerb, 60, 10 * 10);
+  addObject(createTree, 100, 25 * 25); // Reduced from 150
+  addObject(createRock, 50, 20 * 20, randomFloat(1, 2.5)); // Reduced from 80
+  addObject(createHerb, 30, 10 * 10); // Reduced from 60
 }
 
 function createWorldBoundary(scene: Scene, worldSize: number, collidableObjects: Object3D[]): void {
@@ -148,6 +148,7 @@ class Game {
   collidableObjects: Object3D[] = [];
   interactableObjects: Array<any> = [];
   isPaused: boolean = false;
+  
 
   constructor() {}
 

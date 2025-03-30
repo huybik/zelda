@@ -5,8 +5,8 @@ import {
 import { Player } from './entities';
 import { InteractableObject } from './objects';
 import {
-  Inventory, EventLog,  InteractionResult, TargetInfo, ActiveGather,
-  MoveState,  smoothVectorLerp, KeyState, MouseState,
+  Inventory, EventLog, InteractionResult, TargetInfo, ActiveGather,
+  MoveState, smoothVectorLerp, KeyState, MouseState,
 } from './ultils';
 
 export class InteractionSystem {
@@ -68,9 +68,14 @@ export class InteractionSystem {
   findInteractableTarget(): TargetInfo | null {
     this.raycaster.setFromCamera(new Vector2(0, 0), this.camera);
     this.raycaster.far = this.interactionDistance;
+    const playerPosition = this.player.mesh!.position;
     const meshesToCheck = this.interactableEntities
       .map(item => (item as any).mesh ?? item)
-      .filter((mesh): mesh is Object3D => mesh instanceof Object3D && mesh.userData?.isInteractable && mesh.visible);
+      .filter((mesh): mesh is Object3D => {
+        if (!(mesh instanceof Object3D) || !mesh.userData?.isInteractable || !mesh.visible) return false;
+        const distSq = playerPosition.distanceToSquared(mesh.position);
+        return distSq < 100; // Only check objects within 10 units (10^2 = 100)
+      });
     let closestHit: TargetInfo | null = null;
     const intersects = this.raycaster.intersectObjects(meshesToCheck, true);
     if (intersects.length > 0) {
