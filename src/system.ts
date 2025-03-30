@@ -385,7 +385,7 @@ export class Physics {
 export class ThirdPersonCamera {
   camera: PerspectiveCamera;
   target: Object3D;
-  idealOffset: Vector3 = new Vector3(0, 2.5, 5.0);
+  idealOffset: Vector3 = new Vector3(0, 2.5, -2.5);
   minOffsetDistance: number = 1.5;
   maxOffsetDistance: number = 12.0;
   pitchAngle: number = 0.15;
@@ -587,7 +587,7 @@ export class Controls {
     const A = this.keys['KeyA'] || this.keys['ArrowLeft'];
     const Sprint = this.keys['ShiftLeft'] || this.keys['ShiftRight'];
     this.moveState.forward = (W ? 1 : 0) - (S ? 1 : 0);
-    this.moveState.right = (D ? 1 : 0) - (A ? 1 : 0);
+    this.moveState.right =  (A ? 1 : 0) - (D ? 1 : 0);
     this.moveState.sprint = Sprint ?? false;
   }
 
@@ -602,7 +602,7 @@ export class Controls {
       this.player.mesh!.rotateY(yawDelta);
     }
     if (this.cameraController && Math.abs(this.mouse.dy) > 0) {
-      this.cameraController.handleMouseInput(this.mouse.dx, this.mouse.dy);
+      this.cameraController.handleMouseInput(this.mouse.dx, -this.mouse.dy);
     }
     this.mouse.dx = 0;
     this.mouse.dy = 0;
