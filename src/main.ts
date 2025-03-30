@@ -2,7 +2,7 @@ import {
   AmbientLight, Box3, BoxGeometry, Color, ConeGeometry, CylinderGeometry, DirectionalLight,
   DoubleSide, Fog, Group, HemisphereLight, Material, Matrix4, Mesh, MeshBasicMaterial,
   MeshLambertMaterial,  PCFSoftShadowMap, PerspectiveCamera, PlaneGeometry, Quaternion,
-  Raycaster, Scene, SphereGeometry, Vector2, Vector3, WebGLRenderer, MathUtils, Object3D
+  Raycaster, Scene, SphereGeometry, Vector2, Vector3, WebGLRenderer, MathUtils, Object3D, Object3DEventMap
 } from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import { Clock } from 'three';
@@ -75,6 +75,12 @@ interface MoveState {
   jump: boolean;
   sprint: boolean;
   interact: boolean;
+}
+
+interface UpdateOptions {
+  moveState?: MoveState;
+  player?: Entity;
+  collidables?: Object3D<Object3DEventMap>[];
 }
 
 function degreesToRadians(degrees: number): number {
@@ -152,7 +158,9 @@ class Entity {
     }
   }
 
-  update(deltaTime: number, player?: Entity, collidables?: Object3D[]): void {}
+  update(deltaTime: number, options: UpdateOptions = {}): void {
+    // Base implementation (empty or default behavior)
+  }
 
   updateBoundingBox(): void {
     if (!this.mesh) return;
@@ -325,8 +333,13 @@ class Player extends Entity {
     this.userData.radius = PLAYER_RADIUS;
   }
 
-  update(deltaTime: number, moveState: MoveState, collidables: Object3D[]): void {
-    if (this.isDead) return;
+  update(deltaTime: number, options: UpdateOptions = {}): void {
+      if (this.isDead) return;
+    const { moveState, collidables } = options;
+    if (!moveState || !collidables) {
+      console.warn('Missing moveState or collidables for Player update');
+      return;
+    }
     this.moveState = moveState;
     const wasOnGround = this.isOnGround;
     this.handleStamina(deltaTime);
@@ -341,7 +354,6 @@ class Player extends Entity {
     this.animateMovement(deltaTime);
     this.updateBoundingBox();
   }
-
   handleStamina(deltaTime: number): void {
     const isMoving = this.moveState.forward !== 0 || this.moveState.right !== 0;
     this.isSprinting = this.moveState.sprint && isMoving && !this.isExhausted && this.stamina > 0;
@@ -604,7 +616,17 @@ class NPC extends Entity {
     return dialogues[Math.floor(Math.random() * dialogues.length)];
   }
 
-  update(deltaTime: number, player: Player): void {
+  update(deltaTime: number, options: UpdateOptions = {}): void {
+    const { player } = options;
+    if (!player) {
+      console.warn('Missing player for NPC update');
+      return;
+    }
+    // Ensure player is of type Player (since NPC expects Player, not just Entity)
+    if (!(player instanceof Player)) {
+      console.warn('Provided player is not an instance of Player for NPC update');
+      return;
+    }
     this.idleTimer -= deltaTime;
     if (this.idleTimer <= 0) {
       this.idleTimer = 3 + Math.random() * 4;
@@ -632,6 +654,7 @@ class NPC extends Entity {
       smoothQuaternionSlerp(this.mesh!.quaternion, targetQuaternion, 0.05, deltaTime);
     }
   }
+
 
   updateBoundingBox(): void {
     if (!this.mesh) return;
@@ -783,6 +806,7 @@ const size = new Vector3();
 
 class InteractableObject {
   id: string;
+  name: string; // Added
   position: Vector3;
   interactionType: string;
   data: any;
@@ -791,8 +815,9 @@ class InteractableObject {
   isActive: boolean;
   userData: EntityUserData;
 
-  constructor(id: string, position: Vector3, interactionType: string, data: any, prompt: string, scene: Scene | null = null) {
+  constructor(id: string, name: string, position: Vector3, interactionType: string, data: any, prompt: string, scene: Scene | null = null) {
     this.id = id;
+    this.name = name; // Initialize
     this.position = position.clone();
     this.interactionType = interactionType;
     this.data = data;
@@ -2103,14 +2128,18 @@ class Game {
     if (!this.clock || !this.renderer || !this.scene || !this.camera || !this.player) return;
     const deltaTime = Math.min(this.clock.getDelta(), 0.05);
     this.controls!.update(deltaTime);
-    if (!this.isPaused) {
-      this.player.update(deltaTime, this.controls!.moveState, this.collidableObjects);
-      this.physics!.update(deltaTime);
-      this.entities.forEach(entity => {
-        if (entity !== this.player && typeof (entity as any).update === 'function') {
-          (entity as any).update(deltaTime, this.player);
-        }
-      });
+     if (!this.isPaused) {
+    this.player.update(deltaTime, {
+      moveState: this.controls!.moveState,
+      collidables: this.collidableObjects
+    });
+    this.physics!.update(deltaTime);
+    this.entities.forEach(entity => {
+  if (entity instanceof Entity && entity === this.player) return; // Skip player
+  if (typeof (entity as any).update === 'function') {
+    (entity as any).update(deltaTime, { player: this.player });
+    }
+  });
       this.interactionSystem!.update(deltaTime);
       this.thirdPersonCamera!.update(deltaTime, this.collidableObjects);
       if (this.player.isDead) this.respawnPlayer();
