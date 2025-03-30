@@ -236,7 +236,7 @@ export class Minimap {
     this.player.mesh.getWorldPosition(this.playerPosition);
     this.player.mesh.getWorldDirection(this.playerForward);
 
-    const playerRotationAngle = Math.atan2(-this.playerForward.x, -this.playerForward.z);
+    const playerRotationAngle = Math.atan2(this.playerForward.x, this.playerForward.z);
 
     this.ctx.save();
 

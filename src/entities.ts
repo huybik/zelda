@@ -4,6 +4,7 @@ import {
 } from 'three';
 import { EventLog, Inventory, EntityUserData, UpdateOptions, smoothQuaternionSlerp, getNextEntityId, MoveState, } from './ultils';
 import { Raycaster } from 'three';
+import { updateNPCAI } from './ai'; // Import the AI function
 
 export class Entity {
   id: string;
@@ -175,11 +176,9 @@ export class Player extends Entity {
 
     // Set up animations
     this.mixer = new AnimationMixer(model);
-    const idleAnim = animations.find(anim => anim.name.toLowerCase().includes('idle'));
     const walkAnim = animations.find(anim => anim.name.toLowerCase().includes('walk'));
     const runAnim = animations.find(anim => anim.name.toLowerCase().includes('run'));
     const jumpAnim = animations.find(anim => anim.name.toLowerCase().includes('jump'));
-    if (idleAnim) this.idleAction = this.mixer.clipAction(idleAnim);
     if (walkAnim) this.walkAction = this.mixer.clipAction(walkAnim);
     if (runAnim) this.runAction = this.mixer.clipAction(runAnim);
     if (jumpAnim) {
@@ -378,6 +377,19 @@ export class NPC extends Entity {
   private targetQuaternion = new Quaternion();
   private lookAtMatrix = new Matrix4();
 
+  // New properties for AI
+  state: string = 'idle';
+  homePosition: Vector3;
+  roamRadius: number = 10;
+  moveSpeed: number = 2;
+  destination: Vector3 | null = null;
+  targetResource: Object3D | null = null;
+  gatherTimer: number = 0;
+  gatherDuration: number = 0;
+  actionTimer: number = 5;
+  interactionDistance: number = 3;
+  searchRadius: number = 120;
+
   constructor(scene: Scene, position: Vector3, name: string, model: Group, animations: AnimationClip[], inventory: Inventory | null) {
     super(scene, position, name);
     this.userData.isNPC = true;
@@ -412,6 +424,7 @@ export class NPC extends Entity {
     this.baseQuaternion = this.mesh!.quaternion.clone();
     this.baseForward = new Vector3(0, 0, 1).applyQuaternion(this.baseQuaternion);
     this.idleLookTarget.copy(this.mesh!.position).addScaledVector(this.baseForward, 5);
+    this.homePosition = position.clone(); // Set initial position as home
     this.updateBoundingBox();
   }
 
@@ -447,31 +460,6 @@ export class NPC extends Entity {
       return;
     }
     this.mixer.update(deltaTime);
-    this.idleTimer -= deltaTime;
-    if (this.idleTimer <= 0) {
-      this.idleTimer = 3 + Math.random() * 4;
-      const distanceToPlayerSq = this.mesh!.position.distanceToSquared(player.mesh!.position);
-      if (distanceToPlayerSq < 15 * 15 && Math.random() < 0.3) {
-        this.targetLookAt.copy(player.mesh!.position).setY(this.mesh!.position.y);
-        this.idleLookTarget.copy(this.targetLookAt);
-      } else {
-        if (Math.random() < 0.5) {
-          const randomAngleOffset = (Math.random() - 0.5) * Math.PI * 1.5;
-          const randomDirection = this.baseForward.clone().applyAxisAngle(new Vector3(0, 1, 0), randomAngleOffset);
-          this.idleLookTarget.copy(this.mesh!.position).addScaledVector(randomDirection, 5);
-        } else {
-          this.idleLookTarget.copy(this.mesh!.position).addScaledVector(this.baseForward, 5);
-        }
-      }
-    }
-    this.targetDirection.copy(this.idleLookTarget).sub(this.mesh!.position);
-    this.targetDirection.y = 0;
-    if (this.targetDirection.lengthSq() > 0.01) {
-      this.targetDirection.normalize();
-      this.targetLookAt.copy(this.mesh!.position).add(this.targetDirection);
-      this.lookAtMatrix.lookAt(this.targetLookAt, this.mesh!.position, this.mesh!.up);
-      this.targetQuaternion.setFromRotationMatrix(this.lookAtMatrix);
-      smoothQuaternionSlerp(this.mesh!.quaternion, this.targetQuaternion, 0.05, deltaTime);
-    }
+    updateNPCAI(this, deltaTime, options); // Delegate AI logic to ai.ts
   }
 }
