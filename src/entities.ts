@@ -1,8 +1,8 @@
 import {
   Scene, Vector3, Box3, Quaternion, Group, Mesh,  Material, Object3D, Matrix4,
-  AnimationMixer, AnimationClip, AnimationAction
+  AnimationMixer, AnimationClip, AnimationAction, LoopOnce
 } from 'three';
-import { EventLog, Inventory, EntityUserData, UpdateOptions, smoothQuaternionSlerp, getNextEntityId, MoveState } from './ultils';
+import { EventLog, Inventory, EntityUserData, UpdateOptions, smoothQuaternionSlerp, getNextEntityId, MoveState, } from './ultils';
 import { Raycaster } from 'three';
 
 export class Entity {
@@ -136,6 +136,7 @@ export class Player extends Entity {
   idleAction?: AnimationAction;
   walkAction?: AnimationAction;
   runAction?: AnimationAction;
+  jumpAction?: AnimationAction;
   private groundCheckOrigin = new Vector3();
   private groundCheckDirection = new Vector3(0, -1, 0);
 
@@ -170,15 +171,23 @@ export class Player extends Entity {
     model.scale.set(scale, scale, scale);
     model.position.y = -box.min.y * scale;
     this.mesh!.add(model);
+    
 
     // Set up animations
     this.mixer = new AnimationMixer(model);
     const idleAnim = animations.find(anim => anim.name.toLowerCase().includes('idle'));
     const walkAnim = animations.find(anim => anim.name.toLowerCase().includes('walk'));
     const runAnim = animations.find(anim => anim.name.toLowerCase().includes('run'));
+    const jumpAnim = animations.find(anim => anim.name.toLowerCase().includes('jump'));
     if (idleAnim) this.idleAction = this.mixer.clipAction(idleAnim);
     if (walkAnim) this.walkAction = this.mixer.clipAction(walkAnim);
     if (runAnim) this.runAction = this.mixer.clipAction(runAnim);
+    if (jumpAnim) {
+      this.jumpAction = this.mixer.clipAction(jumpAnim);
+      this.jumpAction.setLoop(LoopOnce, 1); // Play once
+      this.jumpAction.clampWhenFinished = true; // Hold the last frame
+    }
+  
     if (this.idleAction) this.idleAction.play();
 
     this.userData.height = PLAYER_HEIGHT;
@@ -241,7 +250,7 @@ export class Player extends Entity {
     const moveDirection = new Vector3();
     const moveVelocity = new Vector3();
     const currentSpeed = this.isSprinting ? this.runSpeed : this.walkSpeed;
-    forward.set(0, 0, -1).applyQuaternion(this.mesh!.quaternion);
+    forward.set(0, 0, 1).applyQuaternion(this.mesh!.quaternion);
     right.set(1, 0, 0).applyQuaternion(this.mesh!.quaternion);
     moveDirection.set(this.moveState.right, 0, this.moveState.forward).normalize();
     moveVelocity.set(0, 0, 0)
@@ -253,16 +262,19 @@ export class Player extends Entity {
     this.velocity.x = moveVelocity.x;
     this.velocity.z = moveVelocity.z;
     if (this.moveState.jump && this.canJump && this.stamina >= this.staminaJumpCost) {
-      this.velocity.y = this.jumpForce;
-      this.stamina -= this.staminaJumpCost;
-      this.canJump = false;
-      this.isOnGround = false;
-      if (this.stamina <= 0 && !this.isExhausted) {
-        this.isExhausted = true;
-        this.eventLog?.addEntry("You are exhausted!");
-      }
-      this.moveState.jump = false;
+    this.velocity.y = this.jumpForce;
+    this.stamina -= this.staminaJumpCost;
+    this.canJump = false;
+    this.isOnGround = false;
+    if (this.stamina <= 0 && !this.isExhausted) {
+      this.isExhausted = true;
+      this.eventLog?.addEntry("You are exhausted!");
     }
+    this.moveState.jump = false;
+    if (this.jumpAction) {
+      this.jumpAction.reset().play(); // Start the jump animation
+    }
+  }
   }
 
   applyGravity(deltaTime: number): void {
