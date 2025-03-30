@@ -347,3 +347,17 @@ body::after {
 body:has(.ui-panel:not(.hidden))::after {
    /* display: none; */ /* Uncomment to hide crosshair when panels are open */
 }
+
+
+
+#fps-display {
+  position: relative;
+  top: 10px;
+  /* right: 10px; */
+  color: white;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  /* background-color: rgba(0, 0, 0, 0.5); */
+  padding: 2px 5px;
+}
+

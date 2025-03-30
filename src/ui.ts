@@ -6,15 +6,38 @@ export class HUD {
   player: Player;
   healthBarElement: HTMLElement | null;
   staminaBarElement: HTMLElement | null;
+  fpsDisplayElement: HTMLElement | null; // New property for FPS display
+  frameTimes: number[] = []; // Array to store frame times
+  MAX_SAMPLES: number = 60; // Number of frames to average (e.g., ~1 second at 60 FPS)
+  lastUpdateTime: number; // Timestamp of the last update
 
   constructor(player: Player) {
     this.player = player;
     this.healthBarElement = document.getElementById('health-bar');
     this.staminaBarElement = document.getElementById('stamina-bar');
-    this.update();
+    this.fpsDisplayElement = document.getElementById('fps-display'); // Initialize FPS element
+    this.lastUpdateTime = performance.now(); // Set initial time in milliseconds
+    this.update(); // Initial call (existing behavior)
   }
 
   update(): void {
+    // Calculate time since last frame
+    const currentTime = performance.now(); // Current time in milliseconds
+    const deltaTime = (currentTime - this.lastUpdateTime) / 1000; // Convert to seconds
+    this.lastUpdateTime = currentTime; // Update last time
+
+    // Update FPS calculation
+    this.frameTimes.push(deltaTime); // Add new frame time
+    if (this.frameTimes.length > this.MAX_SAMPLES) {
+      this.frameTimes.shift(); // Remove oldest if exceeding sample limit
+    }
+    const averageDelta = this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length; // Average frame time
+    const fps = 1 / averageDelta; // FPS = 1 / average time per frame
+    if (this.fpsDisplayElement) {
+      this.fpsDisplayElement.textContent = `FPS: ${Math.round(fps)}`; // Update display
+    }
+
+    // Existing health and stamina update logic
     if (this.player.isDead) {
       if (this.healthBarElement) this.healthBarElement.style.width = `0%`;
       if (this.staminaBarElement) this.staminaBarElement.style.width = `0%`;
@@ -300,3 +323,4 @@ export class Minimap {
     this.ctx.fill();
   }
 }
+
