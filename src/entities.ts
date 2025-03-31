@@ -1,10 +1,11 @@
+// src/entities.ts
 import {
-  Scene, Vector3, Box3, Quaternion, Group, Mesh,  Material, Object3D, Matrix4,
-  AnimationMixer, AnimationClip, AnimationAction, LoopOnce
+  Scene, Vector3, Box3, Quaternion, Group, Mesh, Material, Object3D, Matrix4,
+  AnimationMixer, AnimationClip, AnimationAction, LoopOnce, LoopRepeat
 } from 'three';
-import { EventLog, Inventory, EntityUserData, UpdateOptions, smoothQuaternionSlerp, getNextEntityId, MoveState, } from './ultils';
+import { EventLog, Inventory, EntityUserData, UpdateOptions, smoothQuaternionSlerp, getNextEntityId, MoveState } from './ultils';
 import { Raycaster } from 'three';
-import { updateNPCAI } from './ai'; // Import the AI function
+import { updateNPCAI } from './ai';
 
 export class Entity {
   id: string;
@@ -138,8 +139,15 @@ export class Player extends Entity {
   walkAction?: AnimationAction;
   runAction?: AnimationAction;
   jumpAction?: AnimationAction;
+  attackAction?: AnimationAction; // Added attack action
+  isGathering: boolean = false; // Added for gathering state
+  isAttacking: boolean = false;
+  gatherAttackTimer: number = 0; // Timer for periodic attack animation
+  private gatherAttackInterval: number = 1.0; // Interval between attack animations (seconds)
+  private attackTriggered: boolean = false; // Flag to detect attack key press
   private groundCheckOrigin = new Vector3();
   private groundCheckDirection = new Vector3(0, -1, 0);
+  
 
   constructor(scene: Scene, position: Vector3, model: Group, animations: AnimationClip[]) {
     super(scene, position, 'Player');
@@ -159,7 +167,7 @@ export class Player extends Entity {
     this.isSprinting = false;
     this.isExhausted = false;
     this.exhaustionThreshold = 20;
-    this.moveState = { forward: 0, right: 0, jump: false, sprint: false, interact: false };
+    this.moveState = { forward: 0, right: 0, jump: false, sprint: false, interact: false, attack: false };
     this.gravity = -25;
     this.isOnGround = false;
     this.groundCheckDistance = 0.15;
@@ -172,26 +180,47 @@ export class Player extends Entity {
     model.scale.set(scale, scale, scale);
     model.position.y = -box.min.y * scale;
     this.mesh!.add(model);
-    
 
     // Set up animations
     this.mixer = new AnimationMixer(model);
     const walkAnim = animations.find(anim => anim.name.toLowerCase().includes('walk'));
     const runAnim = animations.find(anim => anim.name.toLowerCase().includes('run'));
     const jumpAnim = animations.find(anim => anim.name.toLowerCase().includes('jump'));
+    const attackAnim = animations.find(anim => anim.name.toLowerCase().includes('attack')); // Load attack animation
     if (walkAnim) this.walkAction = this.mixer.clipAction(walkAnim);
     if (runAnim) this.runAction = this.mixer.clipAction(runAnim);
     if (jumpAnim) {
       this.jumpAction = this.mixer.clipAction(jumpAnim);
-      this.jumpAction.setLoop(LoopOnce, 1); // Play once
-      this.jumpAction.clampWhenFinished = true; // Hold the last frame
+      this.jumpAction.setLoop(LoopOnce, 1);
+      this.jumpAction.clampWhenFinished = true;
     }
-  
+    if (attackAnim) {
+      this.attackAction = this.mixer.clipAction(attackAnim);
+      this.attackAction.setLoop(LoopOnce, 1); // Attack is a one-time action
+      this.attackAction.clampWhenFinished = true;
+    }
     if (this.idleAction) this.idleAction.play();
 
     this.userData.height = PLAYER_HEIGHT;
     this.userData.radius = PLAYER_RADIUS;
     this.updateBoundingBox();
+    
+    this.mixer.addEventListener('finished', (e) => {
+      if (e.action === this.attackAction) {
+        this.isAttacking = false;
+        // Resume the appropriate animation based on movement
+        const isMoving = Math.abs(this.moveState.forward) > 0.1 || Math.abs(this.moveState.right) > 0.1;
+        if (isMoving) {
+          if (this.isSprinting && this.runAction) {
+            this.runAction.play();
+          } else if (this.walkAction) {
+            this.walkAction.play();
+          }
+        } else {
+          if (this.idleAction) this.idleAction.play();
+        }
+      }
+    });
   }
 
   setEventLog(eventLog: EventLog): void {
@@ -206,14 +235,41 @@ export class Player extends Entity {
       return;
     }
     this.moveState = moveState;
-    const wasOnGround = this.isOnGround;
+
+    // Handle stamina, gravity, and movement
     this.handleStamina(deltaTime);
-    this.handleMovement(deltaTime);
+    if (!this.isAttacking && !this.isGathering) {
+      this.handleMovement(deltaTime); // Only move if not attacking or gathering
+    } else {
+      // Stop horizontal movement during attack or gather
+      this.velocity.x = 0;
+      this.velocity.z = 0;
+    }
     this.applyGravity(deltaTime);
     this.mesh!.position.x += this.velocity.x * deltaTime;
     this.mesh!.position.z += this.velocity.z * deltaTime;
     this.checkGround(collidables);
     this.mesh!.position.y += this.velocity.y * deltaTime;
+
+    // Trigger attack when 'F' is pressed
+    if (moveState.attack && !this.attackTriggered) {
+      this.attackTriggered = true;
+      this.triggerAttack();
+    } else if (!moveState.attack) {
+      this.attackTriggered = false;
+    }
+
+    // Handle gathering attack animation (already working)
+    if (this.isGathering) {
+      this.gatherAttackTimer += deltaTime;
+      if (this.gatherAttackTimer >= this.gatherAttackInterval) {
+        this.gatherAttackTimer = 0;
+        if (this.attackAction) {
+          this.attackAction.reset().play();
+        }
+      }
+    }
+
     this.lastVelocityY = this.velocity.y;
     this.updateAnimations(deltaTime);
     this.updateBoundingBox();
@@ -261,19 +317,19 @@ export class Player extends Entity {
     this.velocity.x = moveVelocity.x;
     this.velocity.z = moveVelocity.z;
     if (this.moveState.jump && this.canJump && this.stamina >= this.staminaJumpCost) {
-    this.velocity.y = this.jumpForce;
-    this.stamina -= this.staminaJumpCost;
-    this.canJump = false;
-    this.isOnGround = false;
-    if (this.stamina <= 0 && !this.isExhausted) {
-      this.isExhausted = true;
-      this.eventLog?.addEntry("You are exhausted!");
+      this.velocity.y = this.jumpForce;
+      this.stamina -= this.staminaJumpCost;
+      this.canJump = false;
+      this.isOnGround = false;
+      if (this.stamina <= 0 && !this.isExhausted) {
+        this.isExhausted = true;
+        this.eventLog?.addEntry("You are exhausted!");
+      }
+      this.moveState.jump = false;
+      if (this.jumpAction) {
+        this.jumpAction.reset().play();
+      }
     }
-    this.moveState.jump = false;
-    if (this.jumpAction) {
-      this.jumpAction.reset().play(); // Start the jump animation
-    }
-  }
   }
 
   applyGravity(deltaTime: number): void {
@@ -322,21 +378,42 @@ export class Player extends Entity {
 
   updateAnimations(deltaTime: number): void {
     this.mixer.update(deltaTime);
-    const isMoving = Math.abs(this.moveState.forward) > 0.1 || Math.abs(this.moveState.right) > 0.1;
-    if (isMoving) {
-      if (this.isSprinting && this.runAction) {
-        this.runAction.play();
-        if (this.walkAction) this.walkAction.stop();
-        if (this.idleAction) this.idleAction.stop();
-      } else if (this.walkAction) {
-        this.walkAction.play();
-        if (this.runAction) this.runAction.stop();
-        if (this.idleAction) this.idleAction.stop();
-      }
-    } else {
+
+    if (this.isGathering) {
+      // Existing gathering logic (already works)
       if (this.idleAction) this.idleAction.play();
+      // Attack animation is triggered periodically in update()
+    } else if (!this.isAttacking) {
+      // Only update movement animations if not attacking
+      const isMoving = Math.abs(this.moveState.forward) > 0.1 || Math.abs(this.moveState.right) > 0.1;
+      if (isMoving) {
+        if (this.isSprinting && this.runAction) {
+          this.runAction.play();
+          if (this.walkAction) this.walkAction.stop();
+          if (this.idleAction) this.idleAction.stop();
+        } else if (this.walkAction) {
+          this.walkAction.play();
+          if (this.runAction) this.runAction.stop();
+          if (this.idleAction) this.idleAction.stop();
+        }
+      } else {
+        if (this.idleAction) this.idleAction.play();
+        if (this.walkAction) this.walkAction.stop();
+        if (this.runAction) this.runAction.stop();
+      }
+    }
+      // Jump animation is triggered in handleMovement
+    }
+  
+
+  triggerAttack(): void {
+    if (this.attackAction) {
+      this.isAttacking = true; // Set attack state
+      // Stop all movement animations
       if (this.walkAction) this.walkAction.stop();
       if (this.runAction) this.runAction.stop();
+      if (this.idleAction) this.idleAction.stop();
+      this.attackAction.reset().play(); // Play attack animation
     }
   }
 
@@ -356,6 +433,8 @@ export class Player extends Entity {
     this.isOnGround = false;
     this.canJump = false;
     this.lastVelocityY = 0;
+    this.isGathering = false; // Reset gathering state
+    this.gatherAttackTimer = 0; // Reset timer
     this.eventLog?.addEntry("You feel slightly disoriented but alive.");
     this.updateBoundingBox();
   }
@@ -371,13 +450,20 @@ export class NPC extends Entity {
   baseForward: Vector3;
   mixer: AnimationMixer;
   idleAction?: AnimationAction;
+  walkAction?: AnimationAction;
+  runAction?: AnimationAction;
+  jumpAction?: AnimationAction;
+  attackAction?: AnimationAction; // Added attack action
+  isGathering: boolean = false; // Added for gathering state
+  private gatherAttackTimer: number = 0; // Timer for periodic attack animation
+  private gatherAttackInterval: number = 1.0; // Interval between attack animations
   private playerPosition = new Vector3();
   private targetLookAt = new Vector3();
   private targetDirection = new Vector3();
   private targetQuaternion = new Quaternion();
   private lookAtMatrix = new Matrix4();
 
-  // New properties for AI
+  // AI properties
   state: string = 'idle';
   homePosition: Vector3;
   roamRadius: number = 10;
@@ -403,7 +489,7 @@ export class NPC extends Entity {
     // Scale and position the GLTF model
     const box = new Box3().setFromObject(model);
     const currentHeight = box.max.y - box.min.y;
-    const scale = 1.7 / currentHeight; // NPC height set to 1.7
+    const scale = 1.7 / currentHeight;
     model.scale.set(scale, scale, scale);
     model.position.y = -box.min.y * scale;
     this.mesh!.add(model);
@@ -411,10 +497,24 @@ export class NPC extends Entity {
     // Set up animations
     this.mixer = new AnimationMixer(model);
     const idleAnim = animations.find(anim => anim.name.toLowerCase().includes('idle'));
-    if (idleAnim) {
-      this.idleAction = this.mixer.clipAction(idleAnim);
-      this.idleAction.play();
+    const walkAnim = animations.find(anim => anim.name.toLowerCase().includes('walk'));
+    const runAnim = animations.find(anim => anim.name.toLowerCase().includes('run'));
+    const jumpAnim = animations.find(anim => anim.name.toLowerCase().includes('jump'));
+    const attackAnim = animations.find(anim => anim.name.toLowerCase().includes('attack'));
+    if (idleAnim) this.idleAction = this.mixer.clipAction(idleAnim);
+    if (walkAnim) this.walkAction = this.mixer.clipAction(walkAnim);
+    if (runAnim) this.runAction = this.mixer.clipAction(runAnim);
+    if (jumpAnim) {
+      this.jumpAction = this.mixer.clipAction(jumpAnim);
+      this.jumpAction.setLoop(LoopOnce, 1);
+      this.jumpAction.clampWhenFinished = true;
     }
+    if (attackAnim) {
+      this.attackAction = this.mixer.clipAction(attackAnim);
+      this.attackAction.setLoop(LoopOnce, 1);
+      this.attackAction.clampWhenFinished = true;
+    }
+    if (this.idleAction) this.idleAction.play();
 
     this.userData.height = 1.7;
     this.userData.radius = 0.4;
@@ -424,7 +524,7 @@ export class NPC extends Entity {
     this.baseQuaternion = this.mesh!.quaternion.clone();
     this.baseForward = new Vector3(0, 0, 1).applyQuaternion(this.baseQuaternion);
     this.idleLookTarget.copy(this.mesh!.position).addScaledVector(this.baseForward, 5);
-    this.homePosition = position.clone(); // Set initial position as home
+    this.homePosition = position.clone();
     this.updateBoundingBox();
   }
 
@@ -460,6 +560,19 @@ export class NPC extends Entity {
       return;
     }
     this.mixer.update(deltaTime);
-    updateNPCAI(this, deltaTime, options); // Delegate AI logic to ai.ts
+
+    // Handle gathering attack animation
+    if (this.isGathering) {
+      this.gatherAttackTimer += deltaTime;
+      if (this.gatherAttackTimer >= this.gatherAttackInterval) {
+        this.gatherAttackTimer = 0;
+        if (this.attackAction) {
+          this.attackAction.reset().play();
+        }
+      }
+    }
+
+    updateNPCAI(this, deltaTime, options);
   }
 }
+

@@ -1,3 +1,4 @@
+// src/system.ts
 import {
   PerspectiveCamera, Object3D, Vector3, Quaternion, Raycaster, Box3, Matrix4,
   Vector2, MathUtils,
@@ -230,6 +231,11 @@ export class InteractionSystem {
     this.eventLog.addEntry(`Started gathering ${resource}...`);
     this.player.velocity.x = 0;
     this.player.velocity.z = 0;
+    this.player.isGathering = true; // Set gathering state
+    this.player.gatherAttackTimer = 0; // Reset timer
+    if (this.player.attackAction) {
+      this.player.attackAction.reset().play(); // Start attack animation
+    }
   }
 
   updateGatherAction(deltaTime: number): void {
@@ -269,6 +275,11 @@ export class InteractionSystem {
     } else {
       this.eventLog.addEntry(`Inventory full, could not gather ${resource}.`);
     }
+    this.player.isGathering = false; // Reset gathering state
+    this.player.gatherAttackTimer = 0; // Reset timer
+    if (this.player.attackAction) {
+      this.player.attackAction.stop(); // Stop attack animation
+    }
     this.activeGather = null;
     this.hidePrompt();
     this.currentTarget = null;
@@ -278,6 +289,11 @@ export class InteractionSystem {
   cancelGatherAction(): void {
     if (!this.activeGather) return;
     this.eventLog.addEntry(`Gathering ${this.activeGather.resource} cancelled.`);
+    this.player.isGathering = false; // Reset gathering state
+    this.player.gatherAttackTimer = 0; // Reset timer
+    if (this.player.attackAction) {
+      this.player.attackAction.stop(); // Stop attack animation
+    }
     this.activeGather = null;
     this.hidePrompt();
   }
@@ -464,7 +480,7 @@ export class Controls {
   mouse: MouseState = { x: 0, y: 0, dx: 0, dy: 0, buttons: {} };
   isPointerLocked: boolean = false;
   playerRotationSensitivity: number = 0.0025;
-  moveState: MoveState = { forward: 0, right: 0, jump: false, sprint: false, interact: false };
+  moveState: MoveState = { forward: 0, right: 0, jump: false, sprint: false, interact: false, attack: false };
   keyDownListeners: Record<string, Array<() => void>> = {};
   mouseClickListeners: Record<number, Array<(event: MouseEvent) => void>> = {};
   boundOnKeyDown: (event: KeyboardEvent) => void;
@@ -529,11 +545,14 @@ export class Controls {
     this.keyDownListeners[keyCode]?.forEach(cb => cb());
     if (keyCode === 'Space') this.moveState.jump = true;
     if (keyCode === 'KeyE') this.moveState.interact = true;
+    if (keyCode === 'KeyF') this.moveState.attack = true; // Handle 'F' key press for attack
     this.updateContinuousMoveState();
   }
 
   onKeyUp(event: KeyboardEvent): void {
-    this.keys[event.code] = false;
+    const keyCode = event.code;
+    this.keys[keyCode] = false;
+    if (keyCode === 'KeyF') this.moveState.attack = false; // Reset attack on key release
     this.updateContinuousMoveState();
   }
 
@@ -587,7 +606,7 @@ export class Controls {
     const A = this.keys['KeyA'] || this.keys['ArrowLeft'];
     const Sprint = this.keys['ShiftLeft'] || this.keys['ShiftRight'];
     this.moveState.forward = (W ? 1 : 0) - (S ? 1 : 0);
-    this.moveState.right =  (A ? 1 : 0) - (D ? 1 : 0);
+    this.moveState.right = (A ? 1 : 0) - (D ? 1 : 0); // Note: Swapped A and D to match typical WASD controls
     this.moveState.sprint = Sprint ?? false;
   }
 

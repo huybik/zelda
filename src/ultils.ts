@@ -1,5 +1,6 @@
+// src/ultils.ts
 import {
-  Vector3, Quaternion, Mesh, Scene, Object3D, Raycaster,  Box3
+  Vector3, Quaternion, Mesh, Scene, Object3D, Raycaster, Box3
 } from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 
@@ -70,6 +71,7 @@ export interface MoveState {
   jump: boolean;
   sprint: boolean;
   interact: boolean;
+  attack: boolean; // Added attack property
 }
 
 export interface UpdateOptions {
@@ -78,6 +80,7 @@ export interface UpdateOptions {
   collidables?: Object3D[];
 }
 
+// ... (rest of the file remains unchanged)
 
 export function degreesToRadians(degrees: number): number {
   return degrees * (Math.PI / 180);
