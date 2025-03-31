@@ -1,3 +1,5 @@
+// src/objects.ts
+
 import {
   Vector3, Mesh, Group, CylinderGeometry, ConeGeometry, BoxGeometry, SphereGeometry,
   MeshLambertMaterial,Scene,Box3,
@@ -47,22 +49,38 @@ export class InteractableObject {
 
   interact(player: Character, inventory: Inventory, eventLog: EventLog): InteractionResult | null {
     if (!this.isActive) return { type: 'error', message: 'Already used.' };
+    let message = '';
+    let action = 'interact';
+    let details: Record<string, any> = {};
+
     switch (this.interactionType) {
       case 'retrieve':
         const itemName = this.data as string;
         if (inventory.addItem(itemName, 1)) {
-          eventLog.addEntry(`You picked up: ${itemName}`);
+          message = `Picked up: ${itemName}`;
+          action = 'retrieve';
+          details = { item: itemName, amount: 1 };
           this.removeFromWorld();
+          if (player.game) player.game.logEvent(player, action, message, this.name, details, this.position);
           return { type: 'item_retrieved', item: { name: itemName, amount: 1 } };
         } else {
-          eventLog.addEntry(`Your inventory is full.`);
+          message = `Inventory is full. Cannot pick up ${itemName}.`;
+          action = 'retrieve_fail';
+          details = { item: itemName };
+          if (player.game) player.game.logEvent(player, action, message, this.name, details, this.position);
           return { type: 'error', message: 'Inventory full' };
         }
       case 'read_sign':
         const signText = this.data as string || "The sign is worn and illegible.";
-        eventLog.addEntry(`Sign: "${signText}"`);
+        message = `Read sign: "${signText}"`;
+        action = 'read';
+        details = { text: signText };
+        if (player.game) player.game.logEvent(player, action, message, this.name, details, this.position);
         return { type: 'message', message: signText };
       default:
+        message = `Looked at ${this.name}.`;
+        action = 'examine';
+        if (player.game) player.game.logEvent(player, action, message, this.name, details, this.position);
         return { type: 'message', message: 'You look at the object.' };
     }
   }

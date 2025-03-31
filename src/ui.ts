@@ -1,5 +1,7 @@
+// src/ui.ts
+
 import { Character } from './entities';
-import { Inventory, EventLog, InventoryItem } from './ultils';
+import { Inventory, EventLog, InventoryItem, EventEntry } from './ultils'; // Added EventEntry
 import { Object3D, Vector3 } from 'three';
 
 export class HUD {
@@ -98,7 +100,7 @@ export class InventoryDisplay {
       const iconElement = slotElement.querySelector<HTMLElement>('.item-icon');
       const countElement = slotElement.querySelector<HTMLElement>('.item-count');
       if (item && iconElement && countElement) {
-        const iconClass = item.icon || 'default_icon';
+        const iconClass = item.icon || item.name.toLowerCase().replace(/ /g, '_').replace(/'/g, ''); // Generate icon class if missing
         if (iconElement.dataset.currentIcon !== iconClass) {
           iconElement.className = `item-icon ${iconClass}`;
           iconElement.dataset.currentIcon = iconClass;
@@ -141,25 +143,51 @@ export class JournalDisplay {
   displayElement: HTMLElement | null;
   eventListElement: HTMLElement | null;
   isOpen: boolean = false;
-  boundUpdateEvents: (entries: string[]) => void;
+  boundUpdateEvents: (entries: EventEntry[]) => void; // Changed to accept EventEntry[]
 
   constructor(eventLog: EventLog) {
     this.eventLog = eventLog;
     this.displayElement = document.getElementById('journal-display');
     this.eventListElement = document.getElementById('event-log');
     this.boundUpdateEvents = this.updateEvents.bind(this);
-    this.eventLog.onChange(this.boundUpdateEvents);
+    this.eventLog.onChange(this.boundUpdateEvents); // Register listener
     if (this.displayElement) this.displayElement.classList.add('hidden');
   }
 
-  updateEvents(entries: string[]): void {
+  // Method to change the event log being displayed
+  setEventLog(newEventLog: EventLog): void {
+    if (this.eventLog === newEventLog) return;
+
+    // Remove listener from the old event log
+    if (this.eventLog) {
+      this.eventLog.onChangeCallbacks = this.eventLog.onChangeCallbacks.filter(
+        cb => cb !== this.boundUpdateEvents
+      );
+    }
+
+    this.eventLog = newEventLog;
+
+    // Add listener to the new event log
+    this.eventLog.onChange(this.boundUpdateEvents);
+
+    // Update display if open
+    if (this.isOpen) {
+      this.updateEvents(this.eventLog.entries);
+    }
+  }
+
+
+  updateEvents(entries: EventEntry[]): void { // Changed parameter type
     if (!this.isOpen || !this.eventListElement) return;
     this.eventListElement.innerHTML = entries.length === 0 ? '<li>No events recorded yet.</li>' : '';
-    entries.forEach(entryText => {
+    // Display entries in chronological order (newest at the bottom)
+    entries.forEach(entry => {
       const li = document.createElement('li');
-      li.textContent = entryText;
+      // Use the message field for display
+      li.textContent = `[${entry.timestamp}] ${entry.message}`;
       this.eventListElement!.appendChild(li);
     });
+    // Scroll to the bottom to show the latest entries
     this.eventListElement.scrollTop = this.eventListElement.scrollHeight;
   }
 
@@ -170,7 +198,7 @@ export class JournalDisplay {
   show(): void {
     if (!this.displayElement || this.isOpen) return;
     this.isOpen = true;
-    this.updateEvents(this.eventLog.getFormattedEntries());
+    this.updateEvents(this.eventLog.entries); // Pass raw entries
     this.displayElement.classList.remove('hidden');
   }
 
@@ -253,7 +281,7 @@ export class Minimap {
             return;
         }
 
-        const mesh = (entity instanceof Character || entity instanceof Object3D) ? entity : entity.mesh;
+        const mesh = (entity instanceof Character || entity instanceof Object3D) ? (entity as any).mesh ?? entity : null; // Handle non-mesh entities better
         if (!mesh || !(mesh instanceof Object3D) || !mesh.parent || !mesh.visible) {
             return;
         }
@@ -275,15 +303,19 @@ export class Minimap {
                 default: color = 'white';
             }
             draw = true;
-        } else if (entity.userData?.isNPC) {
+        } else if (entity.userData?.isNPC) { // Use isNPC flag
             color = this.npcColor;
             size += 1;
             draw = true;
-        } else if (entity.userData?.isEnemy) {
+        } else if (entity.userData?.isEnemy) { // Assuming an isEnemy flag might exist
             color = 'red';
             size += 1;
             draw = true;
+        } else if (entity.userData?.isInteractable) { // Generic interactable
+             color = 'lightblue';
+             draw = true;
         }
+
 
         if (draw) {
             this.drawDot(entityMapX, entityMapZ, color, size);
@@ -296,10 +328,12 @@ export class Minimap {
  }
 
   worldToMapX(worldX: number): number {
+    // Invert Z axis for map coordinates (positive Z world is down on map)
     return (worldX + this.halfWorldSize) * this.mapScale;
   }
 
   worldToMapZ(worldZ: number): number {
+    // Invert Z axis for map coordinates (positive Z world is down on map)
     return (this.halfWorldSize - worldZ) * this.mapScale;
   }
 
@@ -316,6 +350,7 @@ export class Minimap {
 
     this.ctx.fillStyle = color;
     this.ctx.beginPath();
+    // Point triangle upwards (representing forward direction in rotated view)
     this.ctx.moveTo(centerX, centerY - height * 0.6);
     this.ctx.lineTo(centerX - width / 2, centerY + height * 0.4);
     this.ctx.lineTo(centerX + width / 2, centerY + height * 0.4);
@@ -323,4 +358,3 @@ export class Minimap {
     this.ctx.fill();
   }
 }
-

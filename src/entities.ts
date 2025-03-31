@@ -3,8 +3,29 @@ import {
   Scene, Vector3, Box3, Quaternion, Group, Mesh, Material, Object3D, Matrix4,
   AnimationMixer, AnimationClip, AnimationAction, LoopOnce
 } from 'three';
-import { EventLog, Inventory, EntityUserData, UpdateOptions, smoothQuaternionSlerp, getNextEntityId, MoveState, getTerrainHeight } from './ultils';
+import { EventLog, Inventory, EntityUserData, UpdateOptions, smoothQuaternionSlerp, getNextEntityId, MoveState, getTerrainHeight, EventEntry, GameEvent } from './ultils'; // Added GameEvent
 import { Raycaster } from 'three';
+import type { Game } from './main'; // Import Game type for game property
+
+// Define Observation interface
+export interface Observation {
+  timestamp: number;
+  nearbyCharacters: Array<{
+    id: string;
+    position: Vector3;
+    health: number;
+    isDead: boolean;
+    currentAction: string;
+  }>;
+  nearbyObjects: Array<{
+    id: string;
+    type: string;
+    position: Vector3;
+    isInteractable: boolean;
+    resource?: string;
+  }>;
+}
+
 
 export class Entity {
   id: string;
@@ -17,7 +38,7 @@ export class Entity {
   maxHealth: number;
   isDead: boolean;
   userData: EntityUserData;
-  
+
 
   constructor(scene: Scene, position: Vector3, name: string = 'Entity') {
     this.id = `${name}_${getNextEntityId()}`;
@@ -76,7 +97,7 @@ export class Entity {
   takeDamage(amount: number, attacker: Entity | null = null): void {
     if (this.isDead || amount <= 0) return;
     this.health = Math.max(0, this.health - amount);
-    if (this.health <= 0) this.die();
+    if (this.health <= 0) this.die(attacker); // Pass attacker to die
   }
 
   heal(amount: number): void {
@@ -84,7 +105,7 @@ export class Entity {
     this.health = Math.min(this.maxHealth, this.health + amount);
   }
 
-  die(): void {
+  die(attacker: Entity | null = null): void { // Accept attacker
     if (this.isDead) return;
     this.isDead = true;
     this.velocity.set(0, 0, 0);
@@ -110,8 +131,8 @@ export class Entity {
     this.scene = null;
     this.userData.entityReference = null;
   }
-  
-  
+
+
 }
 
 const CHARACTER_HEIGHT = 1.8;
@@ -136,7 +157,7 @@ export class Character extends Entity {
   isOnGround: boolean;
   groundCheckDistance: number;
   lastVelocityY: number;
-  eventLog: EventLog | null = null;
+  eventLog: EventLog; // Changed to non-null
   mixer: AnimationMixer;
   idleAction?: AnimationAction;
   walkAction?: AnimationAction;
@@ -152,6 +173,7 @@ export class Character extends Entity {
 
   // AI properties from NPC
   aiState: string = 'idle';
+  previousAiState: string = 'idle'; // Added for state change logging
   homePosition: Vector3;
   roamRadius: number = 10;
   destination: Vector3 | null = null;
@@ -163,6 +185,10 @@ export class Character extends Entity {
   searchRadius: number = 120;
   target: Entity | null = null;
 
+  // New properties
+  game: Game | null = null; // Reference to the Game instance
+  observation: Observation | null = null; // Observation object
+
   private groundCheckOrigin = new Vector3();
   private groundCheckDirection = new Vector3(0, -1, 0);
 
@@ -171,6 +197,7 @@ export class Character extends Entity {
     this.userData.isCollidable = true;
     this.userData.isInteractable = true; // All characters are interactable
     this.userData.interactionType = 'talk';
+    this.userData.isNPC = true; // Assume NPC unless player
     this.maxHealth = 100;
     this.health = this.maxHealth;
     this.maxStamina = 100;
@@ -193,6 +220,9 @@ export class Character extends Entity {
     this.inventory = inventory;
     this.homePosition = position.clone();
 
+    // Initialize independent event log
+    this.eventLog = new EventLog(50);
+
     // Model setup
     const box = new Box3().setFromObject(model);
     const currentHeight = box.max.y - box.min.y;
@@ -203,7 +233,7 @@ export class Character extends Entity {
 
     // Animation setup
     this.mixer = new AnimationMixer(model);
-    const idleAnim = animations.find(anim => anim.name.toLowerCase().includes('idle'));
+    const idleAnim = animations.find(anim => anim.name.toLowerCase().includes('idle');
     if (idleAnim) this.idleAction = this.mixer.clipAction(idleAnim);
     const walkAnim = animations.find(anim => anim.name.toLowerCase().includes('walk'));
     if (walkAnim) this.walkAction = this.mixer.clipAction(walkAnim);
@@ -254,20 +284,27 @@ export class Character extends Entity {
     const intersects = raycaster.intersectObjects(entities, true);
     if (intersects.length > 0) {
       const hit = intersects[0];
-      const target = hit.object.userData.entityReference as Entity;
-      if (target && target.takeDamage) {
-        target.takeDamage(damage, this);
-        if (this.eventLog) {
-          this.eventLog.addEntry(`You hit ${target.name} for ${damage} damage.`);
-          if (target.isDead) this.eventLog.addEntry(`${target.name} has been defeated.`);
+      let targetEntity: Entity | null = null;
+      let hitObject = hit.object;
+      while(hitObject && !targetEntity) {
+          if (hitObject.userData?.entityReference instanceof Entity) {
+              targetEntity = hitObject.userData.entityReference;
+          }
+          hitObject = hitObject.parent!;
+      }
+
+      if (targetEntity && targetEntity.takeDamage) {
+        targetEntity.takeDamage(damage, this);
+        if (this.game) {
+          const message = `${this.name} hit ${targetEntity.name} for ${damage} damage.`;
+          this.game.logEvent(this, "attack", message, targetEntity.name, { damage }, this.mesh!.position);
+          // Death is handled in takeDamage -> die -> logEvent
         }
       }
     }
   }
 
-  setEventLog(eventLog: EventLog): void {
-    this.eventLog = eventLog;
-  }
+  // Removed setEventLog as each character has its own log now
 
   handleStamina(deltaTime: number): void {
     const isMoving = this.moveState.forward !== 0 || this.moveState.right !== 0;
@@ -278,7 +315,7 @@ export class Character extends Entity {
         this.stamina = 0;
         this.isExhausted = true;
         this.isSprinting = false;
-        if (this.eventLog) this.eventLog.addEntry("You are exhausted!");
+        if (this.game) this.game.logEvent(this, "exhausted", `${this.name} is exhausted!`, undefined, {}, this.mesh!.position);
       }
     } else {
       let regenRate = this.staminaRegenRate;
@@ -286,7 +323,7 @@ export class Character extends Entity {
         regenRate /= 2;
         if (this.stamina >= this.exhaustionThreshold) {
           this.isExhausted = false;
-          if (this.eventLog) this.eventLog.addEntry("You feel recovered.");
+          if (this.game) this.game.logEvent(this, "recovered", `${this.name} feels recovered.`, undefined, {}, this.mesh!.position);
         }
       }
       this.stamina = Math.min(this.maxStamina, this.stamina + regenRate * deltaTime);
@@ -313,10 +350,11 @@ export class Character extends Entity {
       this.isOnGround = false;
       if (this.stamina <= 0 && !this.isExhausted) {
         this.isExhausted = true;
-        if (this.eventLog) this.eventLog.addEntry("You are exhausted!");
+        if (this.game) this.game.logEvent(this, "exhausted", `${this.name} is exhausted!`, undefined, {}, this.mesh!.position);
       }
       this.moveState.jump = false;
       if (this.jumpAction) this.jumpAction.reset().play();
+      if (this.game) this.game.logEvent(this, "jump", `${this.name} jumped.`, undefined, {}, this.mesh!.position);
     }
   }
 
@@ -435,12 +473,38 @@ export class Character extends Entity {
     this.lastVelocityY = this.velocity.y;
     this.updateAnimations(deltaTime);
     this.updateBoundingBox();
+
+    // Log AI state changes
+    if (this.aiState !== this.previousAiState) {
+      if (this.game) {
+        let message = '';
+        switch (this.aiState) {
+          case 'idle': message = `${this.name} is now idle.`; break;
+          case 'roaming': message = `${this.name} is roaming.`; break;
+          case 'movingToResource': message = `${this.name} is moving to a resource.`; break;
+          case 'gathering': message = `${this.name} started gathering.`; break;
+          // Add other states as needed
+        }
+        if (message) {
+          this.game.logEvent(this, this.aiState, message, undefined, {}, this.mesh!.position);
+        }
+      }
+      this.previousAiState = this.aiState;
+    }
   }
 
-  die(): void {
+  die(attacker: Entity | null = null): void { // Accept attacker
     if (this.isDead) return;
-    super.die();
-    if (this.eventLog) this.eventLog.addEntry(`${this.name} has died!`);
+    super.die(attacker); // Pass attacker to super
+    if (this.game) {
+        const message = `${this.name} has died!`;
+        const details = attacker ? { killedBy: attacker.name } : {};
+        this.game.logEvent(this, "death", message, undefined, details, this.mesh!.position);
+        if (attacker instanceof Character) {
+            const defeatMessage = `${attacker.name} defeated ${this.name}.`;
+            this.game.logEvent(attacker, "defeat", defeatMessage, this.name, {}, attacker.mesh!.position);
+        }
+    }
   }
 
   respawn(position: Vector3): void {
@@ -456,7 +520,8 @@ export class Character extends Entity {
     this.isGathering = false;
     this.gatherAttackTimer = 0;
     this.aiState = 'idle';
-    if (this.eventLog) this.eventLog.addEntry(`${this.name} feels slightly disoriented but alive.`);
+    this.previousAiState = 'idle'; // Reset previous state
+    if (this.game) this.game.logEvent(this, "respawn", `${this.name} feels slightly disoriented but alive.`, undefined, {}, position);
     this.updateBoundingBox();
   }
 
@@ -483,6 +548,7 @@ export class Character extends Entity {
             const angle = Math.random() * Math.PI * 2;
             const distance = Math.random() * this.roamRadius;
             this.destination = this.homePosition.clone().add(new Vector3(Math.cos(angle) * distance, 0, Math.sin(angle) * distance));
+            this.destination.y = getTerrainHeight(this.scene!, this.destination.x, this.destination.z); // Ensure destination is on terrain
             this.aiState = 'roaming';
           }
         }
@@ -501,6 +567,8 @@ export class Character extends Entity {
             this.aiState = 'idle';
             this.destination = null;
           }
+        } else {
+             this.aiState = 'idle'; // Go idle if no destination
         }
         break;
 
@@ -529,16 +597,23 @@ export class Character extends Entity {
         this.gatherTimer += deltaTime * 1000;
         if (this.gatherTimer >= this.gatherDuration) {
           if (this.targetResource && this.inventory) {
-            this.inventory.addItem(this.targetResource.userData.resource, 1);
+            const resourceName = this.targetResource.userData.resource;
+            this.inventory.addItem(resourceName, 1);
+            // Log gather event
+            if (this.game) {
+              this.game.logEvent(this, "gather", `${this.name} gathered 1 ${resourceName}.`, undefined, { resource: resourceName }, this.mesh!.position);
+            }
           }
           if (this.targetResource?.userData.isDepletable) {
             this.targetResource.visible = false;
             this.targetResource.userData.isInteractable = false;
             const respawnTime = this.targetResource.userData.respawnTime || 15000;
+            const resourceToRespawn = this.targetResource; // Capture the resource
             setTimeout(() => {
-              if (this.targetResource) {
-                this.targetResource.visible = true;
-                this.targetResource.userData.isInteractable = true;
+              if (resourceToRespawn && resourceToRespawn.userData) {
+                resourceToRespawn.visible = true;
+                resourceToRespawn.userData.isInteractable = true;
+                // Log respawn event? Maybe not necessary for AI observation
               }
             }, respawnTime);
           }
@@ -556,8 +631,8 @@ export class Character extends Entity {
   interact(player: Character): { type: string; text: string; state: string; options?: string[] } | null {
     this.lookAt(player.mesh!.position);
     const dialogue = this.getRandomIdleDialogue();
-    this.aiState = 'idle';
-    if (this.eventLog) this.eventLog.addEntry(`${this.name}: "${dialogue}"`);
+    this.aiState = 'idle'; // Go idle when interacted with
+    if (this.game) this.game.logEvent(this, "interact", `${this.name}: "${dialogue}"`, player.name, { dialogue }, this.mesh!.position);
     return { type: 'dialogue', text: dialogue, state: 'greeting', options: ['Switch Control'] };
   }
 
@@ -568,5 +643,49 @@ export class Character extends Entity {
       "Don't wander too far from the village."
     ];
     return dialogues[Math.floor(Math.random() * dialogues.length)];
+  }
+
+  // New method to update observation
+  updateObservation(allEntities: Array<any>, searchRadius: number): void {
+    const nearbyCharacters: Observation['nearbyCharacters'] = [];
+    const nearbyObjects: Observation['nearbyObjects'] = [];
+    const selfPosition = this.mesh!.position;
+    const searchRadiusSq = searchRadius * searchRadius;
+
+    for (const entity of allEntities) {
+      if (entity === this || entity === this.mesh) continue; // Skip self
+
+      const entityMesh = (entity instanceof Entity || entity instanceof Object3D) ? (entity as any).mesh ?? entity : null;
+      if (!entityMesh || !entityMesh.parent) continue; // Skip entities without mesh or not in scene
+
+      const entityPosition = entityMesh.position;
+      const distanceSq = selfPosition.distanceToSquared(entityPosition);
+
+      if (distanceSq > searchRadiusSq) continue; // Skip entities outside radius
+
+      if (entity instanceof Character) {
+        nearbyCharacters.push({
+          id: entity.id,
+          position: entityPosition.clone(),
+          health: entity.health,
+          isDead: entity.isDead,
+          currentAction: entity.aiState || (entity === this.game?.activeCharacter ? 'player_controlled' : 'unknown'), // Use aiState or indicate player control
+        });
+      } else if (entity.userData?.isInteractable && entity.visible) { // Check visibility for objects
+        nearbyObjects.push({
+          id: entity.userData.id || entity.uuid, // Use userData.id or uuid
+          type: entity.name || 'unknown',
+          position: entityPosition.clone(),
+          isInteractable: entity.userData.isInteractable,
+          resource: entity.userData.resource,
+        });
+      }
+    }
+
+    this.observation = {
+      timestamp: Date.now(),
+      nearbyCharacters,
+      nearbyObjects,
+    };
   }
 }

@@ -1,4 +1,3 @@
-// src/ultils.ts
 import {
   Vector3, Quaternion, Mesh, Scene, Object3D, Raycaster, Box3
 } from 'three';
@@ -48,10 +47,27 @@ export interface InventoryItem {
   icon?: string;
 }
 
+// Interface for structured event data
+export interface GameEvent {
+  actor: string; // ID or name of the character performing the action
+  action: string; // e.g., "attack", "gather", "move", etc.
+  target?: string; // ID or name of the target, if applicable
+  details: Record<string, any>; // Additional details like damage, resource type, etc.
+  location: Vector3; // Position where the event occurred
+}
+
+
+// Updated EventEntry interface to include optional structured fields
 export interface EventEntry {
   timestamp: string;
   message: string;
+  actor?: string;
+  action?: string;
+  target?: string;
+  details?: Record<string, any>;
+  location?: Vector3;
 }
+
 
 export interface KeyState {
   [key: string]: boolean | undefined;
@@ -80,7 +96,6 @@ export interface UpdateOptions {
   collidables?: Object3D[];
 }
 
-// ... (rest of the file remains unchanged)
 
 export function degreesToRadians(degrees: number): number {
   return degrees * (Math.PI / 180);
@@ -228,7 +243,7 @@ export class Inventory {
 export class EventLog {
   entries: EventEntry[];
   maxEntries: number;
-  onChangeCallbacks: Array<(entries: string[]) => void>;
+  onChangeCallbacks: Array<(entries: EventEntry[]) => void>; // Changed to pass EventEntry[]
 
   constructor(maxEntries: number = 50) {
     this.entries = [];
@@ -236,24 +251,69 @@ export class EventLog {
     this.onChangeCallbacks = [];
   }
 
-  addEntry(message: string): void {
-    if (!message || typeof message !== 'string') return;
+  // Overload addEntry
+  addEntry(message: string): void;
+  addEntry(entry: EventEntry): void;
+  addEntry(actor: string, action: string, message: string, target?: string, details?: Record<string, any>, location?: Vector3): void;
+
+  addEntry(...args: any[]): void {
+    let entryToAdd: EventEntry;
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    this.entries.push({ timestamp, message });
+
+    if (args.length === 1 && typeof args[0] === 'string') {
+      // Simple message string
+      const message = args[0];
+      entryToAdd = {
+        timestamp,
+        message,
+        actor: undefined, // Or set default like 'System'
+        action: undefined,
+        target: undefined,
+        details: {},
+        location: undefined, // Or default Vector3
+      };
+    } else if (args.length === 1 && typeof args[0] === 'object' && args[0].message && args[0].timestamp) {
+       // Pre-constructed EventEntry object (used by game.logEvent distribution)
+       entryToAdd = args[0];
+       // Ensure timestamp is current if not provided or different format
+       if (!entryToAdd.timestamp || entryToAdd.timestamp.length !== 8) {
+           entryToAdd.timestamp = timestamp;
+       }
+    } else if (args.length >= 3 && typeof args[0] === 'string' && typeof args[1] === 'string' && typeof args[2] === 'string') {
+      // Structured event data
+      const [actor, action, message, target, details = {}, location = new Vector3()] = args;
+      entryToAdd = {
+        timestamp,
+        message,
+        actor,
+        action,
+        target,
+        details,
+        location,
+      };
+    } else {
+      console.warn("Invalid arguments passed to EventLog.addEntry:", args);
+      return; // Don't add invalid entries
+    }
+
+    this.entries.push(entryToAdd);
     if (this.entries.length > this.maxEntries) this.entries.shift();
     this.notifyChange();
   }
 
+
   getFormattedEntries(): string[] {
+    // Return only the message part for simple display compatibility
     return [...this.entries].reverse().map(entry => `[${entry.timestamp}] ${entry.message}`);
   }
 
-  onChange(callback: (entries: string[]) => void): void {
+  onChange(callback: (entries: EventEntry[]) => void): void { // Changed parameter type
     if (typeof callback === 'function') this.onChangeCallbacks.push(callback);
   }
 
   notifyChange(): void {
-    const formattedEntries = this.getFormattedEntries();
-    this.onChangeCallbacks.forEach(cb => cb(formattedEntries));
+    // Pass the raw entries array to callbacks
+    const entriesCopy = [...this.entries];
+    this.onChangeCallbacks.forEach(cb => cb(entriesCopy));
   }
 }

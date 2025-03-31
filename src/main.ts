@@ -1,3 +1,5 @@
+// src/main.ts
+
 import {
   Scene, PerspectiveCamera, WebGLRenderer, Clock, Vector3, Color, Fog, Mesh,
   PlaneGeometry, MeshLambertMaterial, AmbientLight, DirectionalLight, HemisphereLight,
@@ -6,11 +8,11 @@ import {
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import WebGL from 'three/examples/jsm/capabilities/WebGL.js';
-import { Character } from './entities'; // Updated import
+import { Character, Entity, Observation } from './entities'; // Updated import, added Entity, Observation
 import { createTree, createRock, createHerb } from './objects';
 import { InteractionSystem, Physics, ThirdPersonCamera, Controls } from './system';
 import { HUD, InventoryDisplay, JournalDisplay, Minimap } from './ui';
-import { Inventory, EventLog, getTerrainHeight, randomFloat, smoothstep } from './ultils';
+import { Inventory, EventLog, getTerrainHeight, randomFloat, smoothstep, EventEntry } from './ultils'; // Added EventEntry
 
 const WORLD_SIZE = 100;
 const TERRAIN_SEGMENTS = 15;
@@ -104,7 +106,11 @@ function populateEnvironment(
     const charInventory = new Inventory(9);
     const character = new Character(scene, pos, name, model.scene, model.animations, charInventory);
     character.mesh!.position.y = getTerrainHeight(scene, pos.x, pos.z);
-    if (isPlayer) character.name = 'Character'; // Ensure player retains name
+    if (isPlayer) {
+        character.name = 'Character'; // Ensure player retains name
+        character.userData.isPlayer = true;
+        character.userData.isNPC = false;
+    }
     entities.push(character);
     collidableObjects.push(character.mesh!);
     interactableObjects.push(character);
@@ -127,7 +133,8 @@ function populateEnvironment(
       scene.add(obj);
       if (obj.userData.isCollidable) collidableObjects.push(obj);
       if (obj.userData.isInteractable) interactableObjects.push(obj);
-      entities.push(obj);
+      entities.push(obj); // Add objects to entities list as well
+      obj.userData.id = `${obj.name}_${obj.uuid.substring(0, 6)}`; // Assign an ID
     }
   };
   addObject(createTree, 100, 25 * 25);
@@ -159,7 +166,7 @@ function createWorldBoundary(scene: Scene, worldSize: number, collidableObjects:
   createWall(0, -halfSize - thickness / 2, worldSize + thickness * 2, thickness, "Boundary-Z");
 }
 
-class Game {
+export class Game { // Export Game class
   scene: Scene | null = null;
   renderer: WebGLRenderer | null = null;
   camera: PerspectiveCamera | null = null;
@@ -169,7 +176,7 @@ class Game {
   controls: Controls | null = null;
   physics: Physics | null = null;
   inventory: Inventory | null = null;
-  eventLog: EventLog | null = null;
+  // eventLog: EventLog | null = null; // Removed game-level event log
   interactionSystem: InteractionSystem | null = null;
   hud: HUD | null = null;
   minimap: Minimap | null = null;
@@ -187,16 +194,24 @@ class Game {
     this.initRenderer();
     this.initScene();
     this.initCamera();
-    this.initInventoryAndEventLog();
+    this.initInventory(); // Separate inventory init
     const models = await loadModels();
-    this.initPlayer(models);
+    this.initPlayer(models); // Player needs inventory
     this.initControls();
     this.initPhysics();
-    this.initEnvironment(models);
-    this.initSystems();
-    this.initUI();
+    this.initEnvironment(models); // Environment needs inventory for NPCs
+    this.initSystems(); // Interaction system needs active character's log
+    this.initUI(); // UI needs active character's log
     this.setupUIControls();
-    this.eventLog!.addEntry("Welcome! Click window to lock controls. [I] Inventory, [J] Journal, [E] Interact, [C] Switch Control, [Esc] Unlock/Close UI");
+
+    // Set game reference for all characters
+    this.entities.forEach(entity => {
+      if (entity instanceof Character) {
+        entity.game = this;
+      }
+    });
+
+    this.activeCharacter!.eventLog.addEntry("Welcome! Click window to lock controls. [I] Inventory, [J] Journal, [E] Interact, [C] Switch Control, [Esc] Unlock/Close UI");
   }
 
   initRenderer(): void {
@@ -223,18 +238,19 @@ class Game {
     this.camera = new PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
   }
 
-  initInventoryAndEventLog(): void {
-    this.inventory = new Inventory(9);
-    this.eventLog = new EventLog(75);
+  initInventory(): void { // Renamed from initInventoryAndEventLog
+    this.inventory = new Inventory(9); // Player inventory
   }
 
   initPlayer(models: Record<string, { scene: Group; animations: AnimationClip[] }>): void {
     const playerSpawnPos = new Vector3(0, 0, 5);
     playerSpawnPos.y = getTerrainHeight(this.scene!, playerSpawnPos.x, playerSpawnPos.z);
     this.activeCharacter = new Character(this.scene!, playerSpawnPos, 'Character', models.player.scene, models.player.animations, this.inventory!);
+    this.activeCharacter.userData.isPlayer = true; // Mark as player
+    this.activeCharacter.userData.isNPC = false;
     this.entities.push(this.activeCharacter);
     this.collidableObjects.push(this.activeCharacter.mesh!);
-    this.activeCharacter.setEventLog(this.eventLog!);
+    // No need to set event log here, it's initialized in constructor
   }
 
   initControls(): void {
@@ -247,18 +263,21 @@ class Game {
   }
 
   initEnvironment(models: Record<string, { scene: Group; animations: AnimationClip[] }>): void {
+    // Pass player inventory for now, maybe NPCs need their own later
     populateEnvironment(this.scene!, WORLD_SIZE, this.collidableObjects, this.interactableObjects, this.entities, this.inventory!, models);
   }
 
   initSystems(): void {
-    this.interactionSystem = new InteractionSystem(this.activeCharacter!, this.camera!, this.interactableObjects, this.controls!, this.inventory!, this.eventLog!);
+    // Pass active character's event log
+    this.interactionSystem = new InteractionSystem(this.activeCharacter!, this.camera!, this.interactableObjects, this.controls!, this.inventory!, this.activeCharacter!.eventLog);
   }
-  
+
    initUI(): void {
     this.hud = new HUD(this.activeCharacter!);
     this.minimap = new Minimap(document.getElementById('minimap-canvas') as HTMLCanvasElement, this.activeCharacter!, this.entities, WORLD_SIZE);
     this.inventoryDisplay = new InventoryDisplay(this.inventory!);
-    this.journalDisplay = new JournalDisplay(this.eventLog!);
+    // Initialize JournalDisplay with the active character's event log
+    this.journalDisplay = new JournalDisplay(this.activeCharacter!.eventLog);
   }
 
 
@@ -301,8 +320,9 @@ class Game {
     if (index === -1) return;
     const item = this.inventory!.getItem(index);
     if (!item) return;
-    
-    this.eventLog!.addEntry(`You examine the ${item.name}.`);
+
+    // Use logEvent for examining items
+    this.logEvent(this.activeCharacter!, 'examine', `Examined ${item.name}.`, undefined, { item: item.name }, this.activeCharacter!.mesh!.position);
     event.stopPropagation();
   }
 
@@ -326,18 +346,33 @@ class Game {
     const deltaTime = Math.min(this.clock.getDelta(), 0.05);
     this.controls!.update(deltaTime);
     if (!this.isPaused) {
+      // Update active character first
       this.activeCharacter.update(deltaTime, {
         moveState: this.controls!.moveState,
         collidables: this.collidableObjects
       });
-      this.physics!.update(deltaTime);
+      this.physics!.update(deltaTime); // Physics update after active character moves
+
+      // Update other entities (NPCs)
       this.entities.forEach(entity => {
-        if (entity === this.activeCharacter) return;
+        if (entity === this.activeCharacter) return; // Skip active character
         if (entity instanceof Character) {
           const aiMoveState = entity.computeAIMoveState(deltaTime, { player: this.activeCharacter });
           entity.update(deltaTime, { moveState: aiMoveState, collidables: this.collidableObjects });
+        } else if (entity.update) {
+            // Update other non-character entities if they have an update method
+            entity.update(deltaTime);
         }
       });
+
+      // Update observations for all characters AFTER all entities have moved/updated
+      this.entities.forEach(entity => {
+        if (entity instanceof Character) {
+          entity.updateObservation(this.entities, entity.searchRadius);
+        }
+      });
+
+
       this.interactionSystem!.update(deltaTime);
       this.thirdPersonCamera!.update(deltaTime, this.collidableObjects);
       if (this.activeCharacter.isDead) this.respawnPlayer();
@@ -348,32 +383,55 @@ class Game {
   }
 
   respawnPlayer(): void {
-    this.eventLog!.addEntry(`${this.activeCharacter!.name} blacked out and woke up back near the village...`);
+    const respawnMessage = `${this.activeCharacter!.name} blacked out and woke up back near the village...`;
+    this.logEvent(this.activeCharacter!, 'respawn_start', respawnMessage, undefined, {}, this.activeCharacter!.mesh!.position);
+
     const goldCount = this.inventory!.countItem('gold');
     const goldPenalty = Math.min(10, Math.floor(goldCount * 0.1));
     if (goldPenalty > 0) {
       this.inventory!.removeItem('gold', goldPenalty);
-      this.eventLog!.addEntry(`You lost ${goldPenalty} gold.`);
+      const penaltyMessage = `Lost ${goldPenalty} gold.`;
+      this.logEvent(this.activeCharacter!, 'penalty', penaltyMessage, undefined, { item: 'gold', amount: goldPenalty }, this.activeCharacter!.mesh!.position);
     }
     const respawnPos = new Vector3(0, 0, 10);
     respawnPos.y = getTerrainHeight(this.scene!, respawnPos.x, respawnPos.z);
-    this.activeCharacter!.respawn(respawnPos);
+    this.activeCharacter!.respawn(respawnPos); // Respawn handles its own log message
     this.setPauseState(false);
     this.interactionSystem!.cancelGatherAction();
   }
 
   switchControlTo(targetCharacter: Character): void {
     if (targetCharacter === this.activeCharacter) return;
-    this.eventLog!.addEntry(`Switched control to ${targetCharacter.name}.`);
+
+    const switchMessage = `Switched control to ${targetCharacter.name}.`;
+    // Log to the outgoing character's log
+    this.logEvent(this.activeCharacter!, "control_switch_out", switchMessage, targetCharacter.name, {}, this.activeCharacter!.mesh!.position);
+    // Log to the incoming character's log
+    this.logEvent(targetCharacter, "control_switch_in", switchMessage, targetCharacter.name, {}, targetCharacter.mesh!.position);
+
+
     this.activeCharacter = targetCharacter;
     this.controls!.player = targetCharacter;
     this.thirdPersonCamera!.target = targetCharacter.mesh!;
     this.physics!.player = targetCharacter;
     this.interactionSystem!.player = targetCharacter;
+    this.interactionSystem!.eventLog = targetCharacter.eventLog; // Update interaction system log
     this.hud!.player = targetCharacter;
     this.minimap!.player = targetCharacter;
-    targetCharacter.setEventLog(this.eventLog!);
+    // Update Journal Display to use the new active character's log
+    this.journalDisplay!.setEventLog(this.activeCharacter.eventLog);
     targetCharacter.aiState = 'idle'; // Reset AI state for new active character
+    targetCharacter.previousAiState = 'idle'; // Reset previous state
+    targetCharacter.userData.isPlayer = true; // Mark as player
+    targetCharacter.userData.isNPC = false;
+
+    // Mark old character as NPC again (if needed)
+    // this.entities.forEach(e => {
+    //     if (e instanceof Character && e !== this.activeCharacter) {
+    //         e.userData.isPlayer = false;
+    //         e.userData.isNPC = true;
+    //     }
+    // });
   }
 
   onWindowResize(): void {
@@ -383,11 +441,47 @@ class Game {
       this.renderer.setSize(window.innerWidth, window.innerHeight);
     }
   }
+
+  // New method for logging events globally and distributing them
+  logEvent(actor: Character, action: string, message: string, target?: string, details: Record<string, any> = {}, location: Vector3 = actor.mesh!.position): void {
+    const eventEntry: EventEntry = {
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      message,
+      actor: actor.name,
+      action,
+      target,
+      details,
+      location: location.clone(), // Clone location to prevent mutation
+    };
+
+    // Add to actor's log directly using the structured entry
+    actor.eventLog.addEntry(eventEntry);
+
+    // Find nearby characters and add the event to their logs
+    this.entities.forEach(entity => {
+      if (entity instanceof Character && entity !== actor) {
+        const distanceSq = location.distanceToSquared(entity.mesh!.position);
+        // Use the *observing* character's search radius
+        if (distanceSq <= entity.searchRadius * entity.searchRadius) {
+           // Add the same structured entry to the observer's log
+           entity.eventLog.addEntry(eventEntry);
+        }
+      }
+    });
+  }
 }
+
+// Make game instance accessible globally for easier access in some places (like InteractionSystem)
+// Consider dependency injection or a better pattern for larger projects.
+declare global {
+    interface Window { game: Game; }
+}
+
 
 if (WebGL.isWebGL2Available()) {
   async function startGame() {
     const gameInstance = new Game();
+    window.game = gameInstance; // Assign to global window object
     await gameInstance.init();
     gameInstance.start();
     const onResize = () => gameInstance.onWindowResize();

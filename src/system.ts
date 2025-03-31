@@ -16,7 +16,7 @@ export class InteractionSystem {
   interactableEntities: Array<any>;
   controls: Controls;
   inventory: Inventory;
-  eventLog: EventLog;
+  eventLog: EventLog; // Now references the current player's event log
   raycaster: Raycaster;
   interactionDistance: number = 3.0;
   aimTolerance: number = Math.PI / 6;
@@ -36,7 +36,7 @@ export class InteractionSystem {
     this.interactableEntities = interactableEntities;
     this.controls = controls;
     this.inventory = inventory;
-    this.eventLog = eventLog;
+    this.eventLog = eventLog; // Initial event log
     this.raycaster = new Raycaster();
     this.interactionPromptElement = document.getElementById('interaction-prompt');
   }
@@ -116,7 +116,7 @@ export class InteractionSystem {
     let closestDistSq = this.interactionDistance * this.interactionDistance;
     let closestInstance: any | null = null;
     this.interactableEntities.forEach(item => {
-      if (!item?.userData?.isInteractable || item === this.player.mesh) return;
+      if (!item?.userData?.isInteractable || item === this.player || item === this.player.mesh) return; // Check against player and player mesh
       if (item.userData?.isSimpleObject && !(item as InteractableObject).isActive) return;
       const objMesh = (item as any).mesh ?? item;
       if (!objMesh || !objMesh.visible) return;
@@ -143,14 +143,14 @@ export class InteractionSystem {
    tryInteract(targetInstance: any): void {
     if (!targetInstance || !targetInstance.userData?.isInteractable) return;
     let targetPosition: Vector3;
-    if (targetInstance instanceof Object3D && !(targetInstance instanceof Character)) {
-      targetPosition = targetInstance.position;
-    } else if ((targetInstance as Character).mesh) {
-      targetPosition = (targetInstance as Character).mesh!.position;
+    const targetMesh = (targetInstance as any).mesh ?? targetInstance;
+    if (targetMesh instanceof Object3D) {
+        targetPosition = targetMesh.position;
     } else {
-      console.warn("Target instance has no mesh or position", targetInstance);
-      return;
+        console.warn("Target instance has no mesh or position", targetInstance);
+        return;
     }
+
     const distance = this.player.mesh!.position.distanceTo(targetPosition);
     if (distance > this.interactionDistance * 1.1) {
       this.currentTarget = null;
@@ -160,15 +160,16 @@ export class InteractionSystem {
     }
     let result: InteractionResult | null = null;
     if (typeof targetInstance.interact === 'function') {
-      result = targetInstance.interact(this.player);
-      if (this.controls.keys['KeyC']) {
-        (window as any).game.switchControlTo(targetInstance); // Assuming Game instance is global
-        result = { type: 'message', message: `Switched control to ${targetInstance.name}` };
-      }
+      // Pass player, inventory, and the *player's* event log
+      result = targetInstance.interact(this.player, this.inventory, this.player.eventLog);
+      // Switch control logic remains in Game class via key listener
     } else if (targetInstance.userData.interactionType === 'gather' && targetInstance.userData.resource) {
       this.startGatherAction(targetInstance);
       result = { type: 'gather_start' };
     } else {
+      // Default interaction: examine
+      const message = `Examined ${targetInstance.name || 'object'}.`;
+      if (this.player.game) this.player.game.logEvent(this.player, 'examine', message, targetInstance.name || targetInstance.id, {}, targetPosition);
       result = { type: 'message', message: "You look at the object." };
     }
     if (result) this.handleInteractionResult(result, targetInstance);
@@ -181,27 +182,19 @@ export class InteractionSystem {
   handleInteractionResult(result: InteractionResult, targetInstance: any): void {
     let promptDuration: number | null = 2000;
     let promptText: string | null = null;
+    // Logging is now handled within the interact methods or game.logEvent calls
     switch (result.type) {
       case 'reward':
-        if (result.item && this.inventory.addItem(result.item.name, result.item.amount)) {
+        if (result.item) {
           promptText = result.message || `Received ${result.item.amount} ${result.item.name}.`;
           promptDuration = 3000;
-          this.eventLog.addEntry(promptText);
-        } else if (result.item) {
-          promptText = `Found ${result.item.name}, but inventory is full!`;
-          promptDuration = 3000;
-          this.eventLog.addEntry(promptText);
         } else if (result.message) {
           promptText = result.message;
           promptDuration = 3000;
-          this.eventLog.addEntry(promptText);
         }
         break;
       case 'message':
-        if (result.message) {
-          promptText = result.message;
-          this.eventLog.addEntry(promptText);
-        }
+        if (result.message) promptText = result.message;
         break;
       case 'dialogue':
         if (result.text) {
@@ -210,16 +203,13 @@ export class InteractionSystem {
         }
         break;
       case 'item_retrieved':
-        promptDuration = null;
+        promptDuration = null; // No prompt needed, log handles it
         break;
       case 'error':
-        if (result.message) {
-          promptText = result.message;
-          this.eventLog.addEntry(`Error: ${result.message}`);
-        }
+        if (result.message) promptText = result.message;
         break;
       case 'gather_start':
-        promptDuration = null;
+        promptDuration = null; // Gather prompt handled separately
         break;
     }
     if (promptText) this.showPrompt(promptText, promptDuration);
@@ -231,7 +221,8 @@ export class InteractionSystem {
     const gatherTime = (targetInstance.userData.gatherTime as number) || 2000;
     this.activeGather = { targetInstance, startTime: performance.now(), duration: gatherTime, resource };
     this.showPrompt(`Gathering ${resource}... (0%)`);
-    this.eventLog.addEntry(`Started gathering ${resource}...`);
+    // Log gather start event
+    if (this.player.game) this.player.game.logEvent(this.player, 'gather_start', `Started gathering ${resource}...`, targetInstance.name || targetInstance.id, { resource }, this.player.mesh!.position);
     this.player.velocity.x = 0;
     this.player.velocity.z = 0;
     this.player.isGathering = true; // Set gathering state
@@ -252,31 +243,33 @@ export class InteractionSystem {
   completeGatherAction(): void {
     if (!this.activeGather) return;
     const { resource, targetInstance } = this.activeGather;
+    const targetName = targetInstance.name || targetInstance.id;
+    const targetPosition = (targetInstance.mesh ?? targetInstance).position;
+
     if (this.inventory.addItem(resource, 1)) {
-      this.eventLog.addEntry(`Gathered 1 ${resource}.`);
+      // Log gather success event
+      if (this.player.game) this.player.game.logEvent(this.player, 'gather_complete', `Gathered 1 ${resource}.`, targetName, { resource }, targetPosition);
+
       if (targetInstance.userData.isDepletable) {
         targetInstance.userData.isInteractable = false;
-        if (targetInstance instanceof Character || targetInstance instanceof InteractableObject) {
-          if (targetInstance.mesh) targetInstance.mesh.visible = false;
-        } else {
-          (targetInstance as Object3D).visible = false;
-        }
+        const meshToHide = targetInstance.mesh ?? targetInstance;
+        if (meshToHide instanceof Object3D) meshToHide.visible = false;
+
         const respawnTime = targetInstance.userData.respawnTime || 15000;
         setTimeout(() => {
           if (targetInstance.userData) {
             targetInstance.userData.isInteractable = true;
-            if (targetInstance instanceof Character || targetInstance instanceof InteractableObject) {
-              if (targetInstance.mesh) targetInstance.mesh.visible = true;
-            } else {
-              (targetInstance as Object3D).visible = true;
-            }
+            if (meshToHide instanceof Object3D) meshToHide.visible = true;
+            // Optional: Log respawn event
+            // if (this.player.game) this.player.game.logEvent(this.player, 'respawn_object', `${targetName} respawned.`, targetName, {}, targetPosition);
           }
         }, respawnTime);
       } else if (targetInstance.userData.isSimpleObject && typeof (targetInstance as InteractableObject).removeFromWorld === 'function') {
         (targetInstance as InteractableObject).removeFromWorld();
       }
     } else {
-      this.eventLog.addEntry(`Inventory full, could not gather ${resource}.`);
+      // Log gather fail (inventory full) event
+      if (this.player.game) this.player.game.logEvent(this.player, 'gather_fail', `Inventory full, could not gather ${resource}.`, targetName, { resource }, targetPosition);
     }
     this.player.isGathering = false; // Reset gathering state
     this.player.gatherAttackTimer = 0; // Reset timer
@@ -291,7 +284,11 @@ export class InteractionSystem {
 
   cancelGatherAction(): void {
     if (!this.activeGather) return;
-    this.eventLog.addEntry(`Gathering ${this.activeGather.resource} cancelled.`);
+    const targetName = this.activeGather.targetInstance.name || this.activeGather.targetInstance.id;
+    const targetPosition = (this.activeGather.targetInstance.mesh ?? this.activeGather.targetInstance).position;
+    // Log gather cancel event
+    if (this.player.game) this.player.game.logEvent(this.player, 'gather_cancel', `Gathering ${this.activeGather.resource} cancelled.`, targetName, { resource: this.activeGather.resource }, targetPosition);
+
     this.player.isGathering = false; // Reset gathering state
     this.player.gatherAttackTimer = 0; // Reset timer
     if (this.player.attackAction) {
@@ -339,13 +336,16 @@ export class Physics {
   }
 
   update(deltaTime: number): void {
-    if (this.player.isDead) return;
+    if (this.player.isDead || !this.player.mesh) return; // Check if player mesh exists
     const playerBox = this.player.boundingBox;
     if (!playerBox || playerBox.isEmpty()) this.player.updateBoundingBox();
     const playerPos = this.player.mesh!.position;
     this.collidableObjects.forEach(object => {
       if (!object || object === this.player.mesh || !object.userData?.isCollidable || object.userData?.isTerrain || !object.parent) return;
-      if (object.userData?.entityReference?.isDead) return;
+      // Check if the collidable object is a dead character's mesh
+      const entityRef = object.userData?.entityReference;
+      if (entityRef instanceof Character && entityRef.isDead) return;
+
       const objectPosition = object.getWorldPosition(new Vector3());
       if (playerPos.distanceToSquared(objectPosition) > this.collisionCheckRadiusSq) return;
       let objectBox = object.userData.boundingBox as Box3 | undefined;
@@ -444,7 +444,7 @@ export class ThirdPersonCamera {
   }
 
   update(deltaTime: number, collidables: Object3D[]): void {
-    if (!this.target) return;
+    if (!this.target || !this.target.parent) return; // Ensure target is still valid and in scene
     this.target.getWorldPosition(this.targetPosition);
     const targetQuaternion = this.target.quaternion;
     this.offset.copy(this.idealOffset)
@@ -614,12 +614,12 @@ export class Controls {
   }
 
   update(deltaTime: number): void {
-    if (!this.isPointerLocked) {
+    if (!this.isPointerLocked || !this.player || !this.player.mesh) { // Check player and mesh
       this.mouse.dx = 0;
       this.mouse.dy = 0;
       return;
     }
-    if (this.player && Math.abs(this.mouse.dx) > 0) {
+    if (Math.abs(this.mouse.dx) > 0) {
       const yawDelta = -this.mouse.dx * this.playerRotationSensitivity;
       this.player.mesh!.rotateY(yawDelta);
     }
