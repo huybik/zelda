@@ -220,6 +220,8 @@ export class Player extends Entity {
         }
       }
     });
+   
+    
   }
 
   setEventLog(eventLog: EventLog): void {
@@ -340,40 +342,44 @@ export class Player extends Entity {
   }
 
   checkGround(collidables: Object3D[]): void {
-    this.groundCheckOrigin.copy(this.mesh!.position).add(new Vector3(0, 0.1, 0));
-    const rayLength = 0.1 + this.groundCheckDistance;
-    const raycaster = new Raycaster(this.groundCheckOrigin, this.groundCheckDirection, 0, rayLength);
-    const checkAgainst = collidables.filter(obj => obj !== this.mesh && obj?.userData?.isCollidable);
-    const intersects = raycaster.intersectObjects(checkAgainst, true);
-    let foundGround = false;
-    let groundY = -Infinity;
-    if (intersects.length > 0) {
-      for (const intersect of intersects) {
-        if (intersect.distance > 0.01) {
-          groundY = Math.max(groundY, intersect.point.y);
-          foundGround = true;
-        }
+  this.groundCheckOrigin.copy(this.mesh!.position).add(new Vector3(0, 0.1, 0));
+  const rayLength = 0.1 + this.groundCheckDistance;
+  const raycaster = new Raycaster(this.groundCheckOrigin, this.groundCheckDirection, 0, rayLength);
+  const checkAgainst = collidables.filter(obj => obj !== this.mesh && obj?.userData?.isCollidable);
+  const intersects = raycaster.intersectObjects(checkAgainst, true);
+  let foundGround = false;
+  let groundY = -Infinity;
+  if (intersects.length > 0) {
+    for (const intersect of intersects) {
+      if (intersect.distance > 0.01) {
+        groundY = Math.max(groundY, intersect.point.y);
+        foundGround = true;
       }
     }
-    const playerBaseY = this.mesh!.position.y;
-    const snapThreshold = 0.05;
-    if (foundGround && playerBaseY <= groundY + this.groundCheckDistance + snapThreshold) {
-      if (!this.isOnGround && this.velocity.y <= 0) {
-        this.mesh!.position.y = groundY;
-        this.velocity.y = 0;
-        this.isOnGround = true;
-        this.canJump = true;
-      } else if (this.isOnGround) {
-        this.mesh!.position.y = Math.max(this.mesh!.position.y, groundY);
-      } else {
-        this.isOnGround = false;
-        this.canJump = false;
+  }
+  const playerBaseY = this.mesh!.position.y;
+  const snapThreshold = 0.05;
+  if (foundGround && playerBaseY <= groundY + this.groundCheckDistance + snapThreshold) {
+    if (!this.isOnGround && this.velocity.y <= 0) {
+      this.mesh!.position.y = groundY;
+      this.velocity.y = 0;
+      this.isOnGround = true;
+      this.canJump = true;
+      // Stop jump action if running
+      if (this.jumpAction && this.jumpAction.isRunning()) {
+        this.jumpAction.stop();
       }
+    } else if (this.isOnGround) {
+      this.mesh!.position.y = Math.max(this.mesh!.position.y, groundY);
     } else {
       this.isOnGround = false;
       this.canJump = false;
     }
+  } else {
+    this.isOnGround = false;
+    this.canJump = false;
   }
+}
 
   updateAnimations(deltaTime: number): void {
     this.mixer.update(deltaTime);
