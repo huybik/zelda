@@ -93,14 +93,15 @@ function populateEnvironment(
   collidableObjects: Object3D[],
   interactableObjects: Array<any>,
   entities: Array<any>,
-  inventory: Inventory,
+  inventory: Inventory, // This is the player's inventory, not used for NPCs here
   models: Record<string, { scene: Group; animations: AnimationClip[] }>
 ): void {
   const halfSize = worldSize / 2;
   const villageCenter = new Vector3(5, 0, 10);
   const addNpc = (pos: Vector3, name: string, modelKey: string): NPC => {
     const model = models[modelKey];
-    const npc = new NPC(scene, pos, name, model.scene, model.animations, inventory);
+    const npcInventory = new Inventory(9); // Create a new inventory with 9 slots for each NPC
+    const npc = new NPC(scene, pos, name, model.scene, model.animations, npcInventory);
     npc.mesh!.position.y = getTerrainHeight(scene, pos.x, pos.z);
     entities.push(npc);
     collidableObjects.push(npc.mesh!);
@@ -110,7 +111,7 @@ function populateEnvironment(
   addNpc(villageCenter.clone().add(new Vector3(-12, 0, 2)), 'Farmer Giles', 'tavernMan');
   addNpc(villageCenter.clone().add(new Vector3(10, 0, -3)), 'Blacksmith Brynn', 'woman');
   addNpc(new Vector3(halfSize * 0.4, 0, -halfSize * 0.3), 'Hunter Rex', 'oldMan');
-
+  
   const addObject = (creator: (pos: Vector3, ...args: any[]) => Group, count: number, minDistSq: number, ...args: any[]) => {
     for (let i = 0; i < count; i++) {
       const x = randomFloat(-halfSize * 0.95, halfSize * 0.95);
@@ -220,7 +221,7 @@ class Game {
   }
 
   initInventoryAndEventLog(): void {
-    this.inventory = new Inventory(24);
+    this.inventory = new Inventory(9);
     this.eventLog = new EventLog(75);
   }
 
