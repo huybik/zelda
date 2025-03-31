@@ -2,7 +2,7 @@ import {
   Vector3, Mesh, Group, CylinderGeometry, ConeGeometry, BoxGeometry, SphereGeometry,
   MeshLambertMaterial,Scene,Box3,
 } from 'three';
-import { Player } from './entities';
+import { Character } from './entities';
 import { Inventory, EventLog, EntityUserData, InteractionResult, Colors, randomFloat } from './ultils';
 
 const treeTrunkMat = new MeshLambertMaterial({ color: Colors.PASTEL_BROWN });
@@ -45,7 +45,7 @@ export class InteractableObject {
     };
   }
 
-  interact(player: Player, inventory: Inventory, eventLog: EventLog): InteractionResult | null {
+  interact(player: Character, inventory: Inventory, eventLog: EventLog): InteractionResult | null {
     if (!this.isActive) return { type: 'error', message: 'Already used.' };
     switch (this.interactionType) {
       case 'retrieve':

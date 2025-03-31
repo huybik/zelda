@@ -1,7 +1,7 @@
 // src/entities.ts
 import {
   Scene, Vector3, Box3, Quaternion, Group, Mesh, Material, Object3D, Matrix4,
-  AnimationMixer, AnimationClip, AnimationAction, LoopOnce, LoopRepeat
+  AnimationMixer, AnimationClip, AnimationAction, LoopOnce
 } from 'three';
 import { EventLog, Inventory, EntityUserData, UpdateOptions, smoothQuaternionSlerp, getNextEntityId, MoveState, getTerrainHeight } from './ultils';
 import { Raycaster } from 'three';
@@ -114,10 +114,11 @@ export class Entity {
   
 }
 
-const PLAYER_HEIGHT = 1.8;
-const PLAYER_RADIUS = 0.4;
+const CHARACTER_HEIGHT = 1.8;
+const CHARACTER_RADIUS = 0.4;
 
-export class Player extends Entity {
+export class Character extends Entity {
+  // Core properties from Character
   maxStamina: number;
   stamina: number;
   walkSpeed: number;
@@ -141,20 +142,35 @@ export class Player extends Entity {
   walkAction?: AnimationAction;
   runAction?: AnimationAction;
   jumpAction?: AnimationAction;
-  attackAction?: AnimationAction; // Added attack action
-  isGathering: boolean = false; // Added for gathering state
+  attackAction?: AnimationAction;
+  isGathering: boolean = false;
   isAttacking: boolean = false;
-  gatherAttackTimer: number = 0; // Timer for periodic attack animation
-  private gatherAttackInterval: number = 1.0; // Interval between attack animations (seconds)
-  attackTriggered: boolean = false; // Flag to detect attack key press
+  gatherAttackTimer: number = 0;
+  gatherAttackInterval: number = 1.0;
+  attackTriggered: boolean = false;
+  inventory: Inventory | null;
+
+  // AI properties from NPC
+  aiState: string = 'idle';
+  homePosition: Vector3;
+  roamRadius: number = 10;
+  destination: Vector3 | null = null;
+  targetResource: Object3D | null = null;
+  gatherTimer: number = 0;
+  gatherDuration: number = 0;
+  actionTimer: number = 5;
+  interactionDistance: number = 3;
+  searchRadius: number = 120;
+  target: Entity | null = null;
+
   private groundCheckOrigin = new Vector3();
   private groundCheckDirection = new Vector3(0, -1, 0);
-  
 
-  constructor(scene: Scene, position: Vector3, model: Group, animations: AnimationClip[]) {
-    super(scene, position, 'Player');
-    this.userData.isPlayer = true;
+  constructor(scene: Scene, position: Vector3, name: string, model: Group, animations: AnimationClip[], inventory: Inventory | null) {
+    super(scene, position, name);
     this.userData.isCollidable = true;
+    this.userData.isInteractable = true; // All characters are interactable
+    this.userData.interactionType = 'talk';
     this.maxHealth = 100;
     this.health = this.maxHealth;
     this.maxStamina = 100;
@@ -174,66 +190,63 @@ export class Player extends Entity {
     this.isOnGround = false;
     this.groundCheckDistance = 0.15;
     this.lastVelocityY = 0;
+    this.inventory = inventory;
+    this.homePosition = position.clone();
 
-    // Scale and position the GLTF model
+    // Model setup
     const box = new Box3().setFromObject(model);
     const currentHeight = box.max.y - box.min.y;
-    const scale = PLAYER_HEIGHT / currentHeight;
+    const scale = CHARACTER_HEIGHT / currentHeight;
     model.scale.set(scale, scale, scale);
     model.position.y = -box.min.y * scale;
     this.mesh!.add(model);
 
-    // Set up animations
+    // Animation setup
     this.mixer = new AnimationMixer(model);
-    const idleAnim = animations.find(anim => anim.name.toLowerCase().includes('hugajaga'));
-    if (this.idleAction) this.idleAction.play();
+    const idleAnim = animations.find(anim => anim.name.toLowerCase().includes('idle') || anim.name.toLowerCase().includes('hugajaga') || anim.name.toLowerCase().includes('hugajaka'));
     if (idleAnim) this.idleAction = this.mixer.clipAction(idleAnim);
-    
     const walkAnim = animations.find(anim => anim.name.toLowerCase().includes('walk'));
-    const runAnim = animations.find(anim => anim.name.toLowerCase().includes('run'));
-    const jumpAnim = animations.find(anim => anim.name.toLowerCase().includes('jump'));
-    const attackAnim = animations.find(anim => anim.name.toLowerCase().includes('attack')); // Load attack animation
     if (walkAnim) this.walkAction = this.mixer.clipAction(walkAnim);
+    const runAnim = animations.find(anim => anim.name.toLowerCase().includes('run'));
     if (runAnim) this.runAction = this.mixer.clipAction(runAnim);
+    const jumpAnim = animations.find(anim => anim.name.toLowerCase().includes('jump'));
     if (jumpAnim) {
       this.jumpAction = this.mixer.clipAction(jumpAnim);
       this.jumpAction.setLoop(LoopOnce, 1);
       this.jumpAction.clampWhenFinished = true;
     }
+    const attackAnim = animations.find(anim => anim.name.toLowerCase().includes('attack'));
     if (attackAnim) {
       this.attackAction = this.mixer.clipAction(attackAnim);
-      this.attackAction.setLoop(LoopOnce, 1); // Attack is a one-time action
+      this.attackAction.setLoop(LoopOnce, 1);
       this.attackAction.clampWhenFinished = true;
     }
     if (this.idleAction) this.idleAction.play();
 
-    this.userData.height = PLAYER_HEIGHT;
-    this.userData.radius = PLAYER_RADIUS;
+    this.userData.height = CHARACTER_HEIGHT;
+    this.userData.radius = CHARACTER_RADIUS;
     this.updateBoundingBox();
-    
-     this.mixer.addEventListener('finished', (e) => {
+
+    // Animation event listener
+    this.mixer.addEventListener('finished', (e) => {
       if (e.action === this.attackAction) {
-        this.performAttack(); // Perform attack when animation finishes
+        this.performAttack();
         this.isAttacking = false;
         const isMoving = Math.abs(this.moveState.forward) > 0.1 || Math.abs(this.moveState.right) > 0.1;
         if (isMoving) {
-          if (this.isSprinting && this.runAction) {
-            this.runAction.play();
-          } else if (this.walkAction) {
-            this.walkAction.play();
-          }
+          if (this.isSprinting && this.runAction) this.runAction.play();
+          else if (this.walkAction) this.walkAction.play();
         } else {
           if (this.idleAction) this.idleAction.play();
         }
       }
     });
   }
-  
-  
-  
+
+  // Methods from Character
   performAttack(): void {
-    const range = 2.0; // Attack range
-    const damage = 10; // Player damage
+    const range = 2.0;
+    const damage = this.name === 'Character' ? 10 : 5; // Character deals more damage
     const raycaster = new Raycaster();
     raycaster.set(this.mesh!.position, this.mesh!.getWorldDirection(new Vector3()));
     raycaster.far = range;
@@ -243,10 +256,10 @@ export class Player extends Entity {
       const hit = intersects[0];
       const target = hit.object.userData.entityReference as Entity;
       if (target && target.takeDamage) {
-        target.takeDamage(damage, this); // Pass this player as attacker
-        this.eventLog?.addEntry(`You hit ${target.name} for ${damage} damage.`);
-        if (target.isDead) {
-          this.eventLog?.addEntry(`${target.name} has been defeated.`);
+        target.takeDamage(damage, this);
+        if (this.eventLog) {
+          this.eventLog.addEntry(`You hit ${target.name} for ${damage} damage.`);
+          if (target.isDead) this.eventLog.addEntry(`${target.name} has been defeated.`);
         }
       }
     }
@@ -254,54 +267,6 @@ export class Player extends Entity {
 
   setEventLog(eventLog: EventLog): void {
     this.eventLog = eventLog;
-  }
-
-  update(deltaTime: number, options: UpdateOptions = {}): void {
-    if (this.isDead) return;
-    const { moveState, collidables } = options;
-    if (!moveState || !collidables) {
-      console.warn('Missing moveState or collidables for Player update');
-      return;
-    }
-    this.moveState = moveState;
-
-    // Handle stamina, gravity, and movement
-    this.handleStamina(deltaTime);
-    if (!this.isAttacking && !this.isGathering) {
-      this.handleMovement(deltaTime); // Only move if not attacking or gathering
-    } else {
-      // Stop horizontal movement during attack or gather
-      this.velocity.x = 0;
-      this.velocity.z = 0;
-    }
-    this.applyGravity(deltaTime);
-    this.mesh!.position.x += this.velocity.x * deltaTime;
-    this.mesh!.position.z += this.velocity.z * deltaTime;
-    this.checkGround(collidables);
-    this.mesh!.position.y += this.velocity.y * deltaTime;
-
-    // Trigger attack when 'F' is pressed
-    if (moveState.attack && !this.attackTriggered) {
-      this.attackTriggered = true;
-      this.triggerAttack();
-    } else if (!moveState.attack) {
-      this.attackTriggered = false;
-    }
-
-    // Handle gathering attack animation (already working)
-    if (this.isGathering) {
-      this.gatherAttackTimer += deltaTime;
-      if (this.gatherAttackTimer >= this.gatherAttackInterval) {
-        this.gatherAttackTimer = 0;
-        if (this.attackAction) {
-          this.attackAction.reset().play();
-        }
-      }
-    }
-
-    this.lastVelocityY = this.velocity.y;
-    this.updateAnimations(deltaTime);
-    this.updateBoundingBox();
   }
 
   handleStamina(deltaTime: number): void {
@@ -313,7 +278,7 @@ export class Player extends Entity {
         this.stamina = 0;
         this.isExhausted = true;
         this.isSprinting = false;
-        this.eventLog?.addEntry("You are exhausted!");
+        if (this.eventLog) this.eventLog.addEntry("You are exhausted!");
       }
     } else {
       let regenRate = this.staminaRegenRate;
@@ -321,7 +286,7 @@ export class Player extends Entity {
         regenRate /= 2;
         if (this.stamina >= this.exhaustionThreshold) {
           this.isExhausted = false;
-          this.eventLog?.addEntry("You feel recovered.");
+          if (this.eventLog) this.eventLog.addEntry("You feel recovered.");
         }
       }
       this.stamina = Math.min(this.maxStamina, this.stamina + regenRate * deltaTime);
@@ -329,17 +294,13 @@ export class Player extends Entity {
   }
 
   handleMovement(deltaTime: number): void {
-    const forward = new Vector3();
-    const right = new Vector3();
-    const moveDirection = new Vector3();
-    const moveVelocity = new Vector3();
-    const currentSpeed = this.isSprinting ? this.runSpeed : this.walkSpeed;
-    forward.set(0, 0, 1).applyQuaternion(this.mesh!.quaternion);
-    right.set(1, 0, 0).applyQuaternion(this.mesh!.quaternion);
-    moveDirection.set(this.moveState.right, 0, this.moveState.forward).normalize();
-    moveVelocity.set(0, 0, 0)
+    const forward = new Vector3(0, 0, 1).applyQuaternion(this.mesh!.quaternion);
+    const right = new Vector3(1, 0, 0).applyQuaternion(this.mesh!.quaternion);
+    const moveDirection = new Vector3(this.moveState.right, 0, this.moveState.forward).normalize();
+    const moveVelocity = new Vector3()
       .addScaledVector(forward, moveDirection.z)
       .addScaledVector(right, moveDirection.x);
+    const currentSpeed = this.isSprinting ? this.runSpeed : this.walkSpeed;
     if (moveDirection.lengthSq() > 0) {
       moveVelocity.normalize().multiplyScalar(currentSpeed);
     }
@@ -352,12 +313,10 @@ export class Player extends Entity {
       this.isOnGround = false;
       if (this.stamina <= 0 && !this.isExhausted) {
         this.isExhausted = true;
-        this.eventLog?.addEntry("You are exhausted!");
+        if (this.eventLog) this.eventLog.addEntry("You are exhausted!");
       }
       this.moveState.jump = false;
-      if (this.jumpAction) {
-        this.jumpAction.reset().play();
-      }
+      if (this.jumpAction) this.jumpAction.reset().play();
     }
   }
 
@@ -370,54 +329,47 @@ export class Player extends Entity {
   }
 
   checkGround(collidables: Object3D[]): void {
-  this.groundCheckOrigin.copy(this.mesh!.position).add(new Vector3(0, 0.1, 0));
-  const rayLength = 0.1 + this.groundCheckDistance;
-  const raycaster = new Raycaster(this.groundCheckOrigin, this.groundCheckDirection, 0, rayLength);
-  const checkAgainst = collidables.filter(obj => obj !== this.mesh && obj?.userData?.isCollidable);
-  const intersects = raycaster.intersectObjects(checkAgainst, true);
-  let foundGround = false;
-  let groundY = -Infinity;
-  if (intersects.length > 0) {
-    for (const intersect of intersects) {
-      if (intersect.distance > 0.01) {
-        groundY = Math.max(groundY, intersect.point.y);
-        foundGround = true;
+    this.groundCheckOrigin.copy(this.mesh!.position).add(new Vector3(0, 0.1, 0));
+    const rayLength = 0.1 + this.groundCheckDistance;
+    const raycaster = new Raycaster(this.groundCheckOrigin, this.groundCheckDirection, 0, rayLength);
+    const checkAgainst = collidables.filter(obj => obj !== this.mesh && obj?.userData?.isCollidable);
+    const intersects = raycaster.intersectObjects(checkAgainst, true);
+    let foundGround = false;
+    let groundY = -Infinity;
+    if (intersects.length > 0) {
+      for (const intersect of intersects) {
+        if (intersect.distance > 0.01) {
+          groundY = Math.max(groundY, intersect.point.y);
+          foundGround = true;
+        }
       }
     }
-  }
-  const playerBaseY = this.mesh!.position.y;
-  const snapThreshold = 0.05;
-  if (foundGround && playerBaseY <= groundY + this.groundCheckDistance + snapThreshold) {
-    if (!this.isOnGround && this.velocity.y <= 0) {
-      this.mesh!.position.y = groundY;
-      this.velocity.y = 0;
-      this.isOnGround = true;
-      this.canJump = true;
-      // Stop jump action if running
-      if (this.jumpAction && this.jumpAction.isRunning()) {
-        this.jumpAction.stop();
+    const baseY = this.mesh!.position.y;
+    const snapThreshold = 0.05;
+    if (foundGround && baseY <= groundY + this.groundCheckDistance + snapThreshold) {
+      if (!this.isOnGround && this.velocity.y <= 0) {
+        this.mesh!.position.y = groundY;
+        this.velocity.y = 0;
+        this.isOnGround = true;
+        this.canJump = true;
+        if (this.jumpAction?.isRunning()) this.jumpAction.stop();
+      } else if (this.isOnGround) {
+        this.mesh!.position.y = Math.max(this.mesh!.position.y, groundY);
+      } else {
+        this.isOnGround = false;
+        this.canJump = false;
       }
-    } else if (this.isOnGround) {
-      this.mesh!.position.y = Math.max(this.mesh!.position.y, groundY);
     } else {
       this.isOnGround = false;
       this.canJump = false;
     }
-  } else {
-    this.isOnGround = false;
-    this.canJump = false;
   }
-}
 
   updateAnimations(deltaTime: number): void {
     this.mixer.update(deltaTime);
-
     if (this.isGathering) {
-      // Existing gathering logic (already works)
       if (this.idleAction) this.idleAction.play();
-      // Attack animation is triggered periodically in update()
     } else if (!this.isAttacking) {
-      // Only update movement animations if not attacking
       const isMoving = Math.abs(this.moveState.forward) > 0.1 || Math.abs(this.moveState.right) > 0.1;
       if (isMoving) {
         if (this.isSprinting && this.runAction) {
@@ -435,9 +387,7 @@ export class Player extends Entity {
         if (this.runAction) this.runAction.stop();
       }
     }
-      // Jump animation is triggered in handleMovement
-    }
-  
+  }
 
   triggerAttack(): void {
     if (this.attackAction) {
@@ -449,10 +399,48 @@ export class Player extends Entity {
     }
   }
 
+  update(deltaTime: number, options: UpdateOptions = {}): void {
+    if (this.isDead) return;
+    const { moveState, collidables } = options;
+    if (!moveState || !collidables) {
+      console.warn('Missing moveState or collidables for Character update');
+      return;
+    }
+    this.moveState = moveState;
+    this.handleStamina(deltaTime);
+    if (!this.isAttacking && !this.isGathering) {
+      this.handleMovement(deltaTime);
+    } else {
+      this.velocity.x = 0;
+      this.velocity.z = 0;
+    }
+    this.applyGravity(deltaTime);
+    this.mesh!.position.x += this.velocity.x * deltaTime;
+    this.mesh!.position.z += this.velocity.z * deltaTime;
+    this.checkGround(collidables);
+    this.mesh!.position.y += this.velocity.y * deltaTime;
+    if (moveState.attack && !this.attackTriggered) {
+      this.attackTriggered = true;
+      this.triggerAttack();
+    } else if (!moveState.attack) {
+      this.attackTriggered = false;
+    }
+    if (this.isGathering) {
+      this.gatherAttackTimer += deltaTime;
+      if (this.gatherAttackTimer >= this.gatherAttackInterval) {
+        this.gatherAttackTimer = 0;
+        if (this.attackAction) this.attackAction.reset().play();
+      }
+    }
+    this.lastVelocityY = this.velocity.y;
+    this.updateAnimations(deltaTime);
+    this.updateBoundingBox();
+  }
+
   die(): void {
     if (this.isDead) return;
     super.die();
-    this.eventLog?.addEntry("You have died!");
+    if (this.eventLog) this.eventLog.addEntry(`${this.name} has died!`);
   }
 
   respawn(position: Vector3): void {
@@ -465,425 +453,120 @@ export class Player extends Entity {
     this.isOnGround = false;
     this.canJump = false;
     this.lastVelocityY = 0;
-    this.isGathering = false; // Reset gathering state
-    this.gatherAttackTimer = 0; // Reset timer
-    this.eventLog?.addEntry("You feel slightly disoriented but alive.");
+    this.isGathering = false;
+    this.gatherAttackTimer = 0;
+    this.aiState = 'idle';
+    if (this.eventLog) this.eventLog.addEntry(`${this.name} feels slightly disoriented but alive.`);
     this.updateBoundingBox();
   }
-}
 
-export class NPC extends Entity {
-  inventory: Inventory | null;
-  dialogueState: 'idle' | 'greeting';
-  interactionPrompt: string;
-  idleTimer: number;
-  idleLookTarget: Vector3;
-  baseQuaternion: Quaternion;
-  baseForward: Vector3;
-  mixer: AnimationMixer;
-  idleAction?: AnimationAction;
-  walkAction?: AnimationAction;
-  runAction?: AnimationAction;
-  jumpAction?: AnimationAction;
-  attackAction?: AnimationAction;
-  private gatherAttackTimer: number = 0;
-  private gatherAttackInterval: number = 1.0; // Seconds between attack animations
-  private playerPosition = new Vector3();
-  private targetLookAt = new Vector3();
-  private targetDirection = new Vector3();
-  private targetQuaternion = new Quaternion();
-  private lookAtMatrix = new Matrix4();
-  
-
-  // AI properties
-  state: string = 'idle';
-  homePosition: Vector3;
-  roamRadius: number = 10;
-  moveSpeed: number = 2;
-  destination: Vector3 | null = null;
-  targetResource: Object3D | null = null;
-  gatherTimer: number = 0;
-  gatherDuration: number = 0;
-  actionTimer: number = 5;
-  interactionDistance: number = 3;
-  searchRadius: number = 120;
-  target: Entity | null = null; // Target to attack
-  isAttacking: boolean = false;
-  
-   // New properties for movement
-  velocity: Vector3 = new Vector3(); // Already exists in Entity, but re-emphasized
-  gravity: number = -25;
-  isOnGround: boolean = false;
-  canJump: boolean = false;
-  jumpForce: number = 8.0;
-  walkSpeed: number = 2;
-  runSpeed: number = 4;
-
-
-  constructor(scene: Scene, position: Vector3, name: string, model: Group, animations: AnimationClip[], inventory: Inventory | null) {
-    super(scene, position, name);
-    this.userData.isNPC = true;
-    this.userData.isInteractable = true;
-    this.userData.interactionType = 'talk';
-    this.inventory = inventory;
-    this.dialogueState = 'idle';
-    this.interactionPrompt = `Press E to talk to ${this.name}`;
-    this.userData.prompt = this.interactionPrompt;
-
-    // Scale and position the GLTF model
-    const box = new Box3().setFromObject(model);
-    const currentHeight = box.max.y - box.min.y;
-    const scale = 1.7 / currentHeight;
-    model.scale.set(scale, scale, scale);
-    model.position.y = -box.min.y * scale;
-    this.mesh!.add(model);
-
-    // Set up animations
-    this.mixer = new AnimationMixer(model);
-    const idleAnim = animations.find(anim => anim.name.toLowerCase().includes('hugajaka'));
-    if (this.idleAction) this.idleAction.play();
-    if (idleAnim) this.idleAction = this.mixer.clipAction(idleAnim);
-    const walkAnim = animations.find(anim => anim.name.toLowerCase().includes('walk'));
-    const runAnim = animations.find(anim => anim.name.toLowerCase().includes('run'));
-    const jumpAnim = animations.find(anim => anim.name.toLowerCase().includes('jump'));
-    const attackAnim = animations.find(anim => anim.name.toLowerCase().includes('attack'));
-    
-    if (walkAnim) this.walkAction = this.mixer.clipAction(walkAnim);
-    if (runAnim) this.runAction = this.mixer.clipAction(runAnim);
-    if (jumpAnim) {
-      this.jumpAction = this.mixer.clipAction(jumpAnim);
-      this.jumpAction.setLoop(LoopOnce, 1);
-      this.jumpAction.clampWhenFinished = true;
-    }
-    if (attackAnim) {
-      this.attackAction = this.mixer.clipAction(attackAnim);
-      this.attackAction.setLoop(LoopOnce, 1);
-      this.attackAction.clampWhenFinished = true;
-    }
-    
-
-    this.userData.height = 1.7;
-    this.userData.radius = 0.4;
-    this.idleTimer = 2 + Math.random() * 3;
-    this.idleLookTarget = new Vector3();
-    this.mesh!.updateMatrixWorld();
-    this.baseQuaternion = this.mesh!.quaternion.clone();
-    this.baseForward = new Vector3(0, 0, 1).applyQuaternion(this.baseQuaternion);
-    this.idleLookTarget.copy(this.mesh!.position).addScaledVector(this.baseForward, 5);
-    this.homePosition = position.clone();
-    this.updateBoundingBox();
-    
-    this.mixer.addEventListener('finished', (e) => {
-      if (e.action === this.attackAction) {
-        this.performAttack();
-        this.isAttacking = false;
-        if (this.state === 'attacking' && this.target && !this.target.isDead) {
-          this.triggerAttack(); // Continue attacking if target is alive
-        } else {
-          this.state = 'idle';
-          this.target = null;
-        }
-      }
-    });
-  }
-  takeDamage(amount: number, attacker: Entity | null = null): void {
-    super.takeDamage(amount, attacker);
-    if (!this.isDead && attacker) {
-      this.target = attacker;
-      this.state = 'attacking';
-    }
-  }
-  
-  private handleAttacking(deltaTime: number): void {
-    if (!this.target || this.target.isDead) {
-      this.state = 'idle';
-      this.target = null;
-      this.velocity.set(0, 0, 0);
-      return;
-    }
-    const direction = this.target.mesh!.position.clone().sub(this.mesh!.position);
-    direction.y = 0;
-    const distance = direction.length();
-    if (distance < 1.5) { // Attack range
-      this.velocity.set(0, 0, 0);
-      this.lookAt(this.target.mesh!.position);
-      if (!this.isAttacking) {
-        this.triggerAttack();
-      }
-    } else {
-      direction.normalize();
-      this.velocity.copy(direction).multiplyScalar(this.runSpeed);
-      this.lookAt(this.target.mesh!.position);
-    }
-  }
-
-  triggerAttack(): void {
-    if (this.attackAction) {
-      this.isAttacking = true;
-      if (this.walkAction) this.walkAction.stop();
-      if (this.runAction) this.runAction.stop();
-      if (this.idleAction) this.idleAction.stop();
-      this.attackAction.reset().play();
-    }
-  }
-
-  performAttack(): void {
-    if (!this.target || this.target.isDead) return;
-    const distance = this.mesh!.position.distanceTo(this.target.mesh!.position);
-    if (distance < 1.5) {
-      const damage = 5; // NPC damage
-      this.target.takeDamage(damage, this);
-      // Note: No eventLog for NPCs, but player will log when hit
-    }
-  }
-  
-  updateAI(deltaTime: number, options: UpdateOptions = {}): void {
+  // AI Logic
+  computeAIMoveState(deltaTime: number, options: UpdateOptions = {}): MoveState {
+    const moveState: MoveState = { forward: 0, right: 0, jump: false, sprint: false, interact: false, attack: false };
     const { player } = options;
-    if (!player || !this.scene) return;
 
-    // Check if player is within interaction distance
-    const distanceToPlayer = this.mesh!.position.distanceTo(player.mesh.position);
-    if (distanceToPlayer < this.interactionDistance) {
-      if (this.state !== 'interacting') {
-        this.state = 'interacting';
-        this.velocity.set(0, 0, 0);
-        this.destination = null;
-        this.targetResource = null;
-      }
-      this.lookAt(player.mesh.position);
-    } else {
-      if (this.state === 'interacting') {
-        this.state = 'idle';
-      }
-      // Handle NPC behavior based on state
-      switch (this.state) {
-        case 'idle':
-          this.handleIdle(deltaTime);
-          break;
-        case 'roaming':
-          this.handleRoaming(deltaTime);
-          break;
-        case 'movingToResource':
-          this.handleMovingToResource(deltaTime);
-          break;
-        case 'gathering':
-          this.handleGathering(deltaTime);
-          break;
-      }
-    }
-
-    // Handle idle looking behavior
-    if (this.state === 'idle') {
-      this.idleTimer -= deltaTime;
-      if (this.idleTimer <= 0) {
-        this.idleTimer = 3 + Math.random() * 4;
-        const distanceToPlayerSq = this.mesh!.position.distanceToSquared(player.mesh.position);
-        if (distanceToPlayerSq < 15 * 15 && Math.random() < 0.3) {
-          this.targetLookAt.copy(player.mesh.position).setY(this.mesh!.position.y);
-          this.idleLookTarget.copy(this.targetLookAt);
-        } else {
-          if (Math.random() < 0.5) {
-            const randomAngleOffset = (Math.random() - 0.5) * Math.PI * 1.5;
-            const randomDirection = this.baseForward.clone().applyAxisAngle(new Vector3(0, 1, 0), randomAngleOffset);
-            this.idleLookTarget.copy(this.mesh!.position).addScaledVector(randomDirection, 5);
+    switch (this.aiState) {
+      case 'idle':
+        this.actionTimer -= deltaTime;
+        if (this.actionTimer <= 0) {
+          this.actionTimer = 5 + Math.random() * 5;
+          const resources = this.scene!.children.filter(child =>
+            child.userData.isInteractable &&
+            child.userData.interactionType === 'gather' &&
+            child.visible &&
+            this.mesh!.position.distanceTo(child.position) < this.searchRadius
+          );
+          if (resources.length > 0) {
+            this.targetResource = resources[Math.floor(Math.random() * resources.length)];
+            this.aiState = 'movingToResource';
           } else {
-            this.idleLookTarget.copy(this.mesh!.position).addScaledVector(this.baseForward, 5);
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.random() * this.roamRadius;
+            this.destination = this.homePosition.clone().add(new Vector3(Math.cos(angle) * distance, 0, Math.sin(angle) * distance));
+            this.aiState = 'roaming';
           }
         }
-      }
-      // Smoothly rotate towards idleLookTarget
-      const targetDirection = this.idleLookTarget.clone().sub(this.mesh!.position);
-      targetDirection.y = 0;
-      if (targetDirection.lengthSq() > 0.01) {
-        targetDirection.normalize();
-        const targetLookAt = this.mesh!.position.clone().add(targetDirection);
-        const lookAtMatrix = new Matrix4().lookAt(targetLookAt, this.mesh!.position, this.mesh!.up);
-        const targetQuaternion = new Quaternion().setFromRotationMatrix(lookAtMatrix);
-        smoothQuaternionSlerp(this.mesh!.quaternion, targetQuaternion, 0.05, deltaTime);
-      }
-    }
-  }
+        break;
 
-  private handleIdle(deltaTime: number): void {
-    this.actionTimer -= deltaTime;
-    if (this.actionTimer <= 0) {
-      this.actionTimer = 5 + Math.random() * 5; // Reset timer between 5-10 seconds
-      // Search for nearby gatherable resources
-      const resources = this.scene!.children.filter(child =>
-        child.userData.isInteractable &&
-        child.userData.interactionType === 'gather' &&
-        child.visible &&
-        this.mesh!.position.distanceTo(child.position) < this.searchRadius
-      ) as Object3D[];
-      if (resources.length > 0) {
-        // Find the closest resource
-        const closestResource = resources.reduce((closest, current) => {
-          const distCurrent = this.mesh!.position.distanceTo(current.position);
-          const distClosest = this.mesh!.position.distanceTo(closest.position);
-          return distCurrent < distClosest ? current : closest;
-        });
-        this.targetResource = closestResource;
-        this.state = 'movingToResource';
-      } else {
-        // Roam to a random point within roamRadius
-        const angle = Math.random() * Math.PI * 2;
-        const distance = Math.random() * this.roamRadius;
-        const offset = new Vector3(Math.cos(angle) * distance, 0, Math.sin(angle) * distance);
-        this.destination = this.homePosition.clone().add(offset);
-        this.state = 'roaming';
-      }
-    }
-  }
-
-  private handleRoaming(deltaTime: number): void {
-    if (!this.destination) {
-      this.state = 'idle';
-      return;
-    }
-    const direction = this.destination.clone().sub(this.mesh!.position);
-    direction.y = 0;
-    const distance = direction.length();
-    if (distance < 0.5) {
-      this.velocity.set(0, 0, 0);
-      this.state = 'idle';
-      return;
-    }
-    direction.normalize();
-    this.lookAt(this.destination);
-    this.updateBoundingBox();
-  }
-
-  private handleMovingToResource(deltaTime: number): void {
-    if (!this.targetResource || !this.targetResource.visible || !this.targetResource.userData.isInteractable) {
-      this.targetResource = null;
-      this.state = 'idle';
-      return;
-    }
-    const direction = this.targetResource.position.clone().sub(this.mesh!.position);
-    direction.y = 0;
-    const distance = direction.length();
-    if (distance < 1) {
-      this.velocity.set(0, 0, 0);
-      this.lookAt(this.targetResource.position);
-      this.state = 'gathering';
-      this.gatherTimer = 0;
-      this.gatherDuration = this.targetResource.userData.gatherTime || 3000;
-      return;
-    }
-    direction.normalize();
-    this.velocity.copy(direction).multiplyScalar(this.moveSpeed);
-    this.mesh!.position.addScaledVector(this.velocity, deltaTime);
-    this.mesh!.position.y = getTerrainHeight(this.scene!, this.mesh!.position.x, this.mesh!.position.z);
-    this.lookAt(this.targetResource.position);
-    this.updateBoundingBox();
-  }
-
-  private handleGathering(deltaTime: number): void {
-    if (!this.targetResource || !this.targetResource.visible || !this.targetResource.userData.isInteractable) {
-      this.targetResource = null;
-      this.state = 'idle';
-      return;
-    }
-    this.gatherTimer += deltaTime * 1000; // Convert to milliseconds
-    if (this.gatherTimer >= this.gatherDuration) {
-      const resourceName = this.targetResource.userData.resource;
-      if (resourceName && this.inventory) {
-        this.inventory.addItem(resourceName, 1); // Add resource to inventory
-      }
-      // Handle resource depletion if applicable
-      if (this.targetResource.userData.isDepletable) {
-        this.targetResource.visible = false;
-        this.targetResource.userData.isInteractable = false;
-        const respawnTime = this.targetResource.userData.respawnTime || 15000;
-        setTimeout(() => {
-          if (this.targetResource) {
-            this.targetResource.visible = true;
-            this.targetResource.userData.isInteractable = true;
+      case 'roaming':
+        if (this.destination) {
+          const direction = this.destination.clone().sub(this.mesh!.position);
+          direction.y = 0;
+          const distance = direction.length();
+          if (distance > 0.5) {
+            direction.normalize();
+            this.lookAt(this.mesh!.position.clone().add(direction));
+            moveState.forward = 1;
+          } else {
+            this.aiState = 'idle';
+            this.destination = null;
           }
-        }, respawnTime);
-      }
-      this.targetResource = null;
-      this.state = 'idle';
+        }
+        break;
+
+      case 'movingToResource':
+        if (this.targetResource && this.targetResource.visible && this.targetResource.userData.isInteractable) {
+          const direction = this.targetResource.position.clone().sub(this.mesh!.position);
+          direction.y = 0;
+          const distance = direction.length();
+          if (distance > 1) {
+            direction.normalize();
+            this.lookAt(this.targetResource.position);
+            moveState.forward = 1;
+          } else {
+            this.aiState = 'gathering';
+            this.gatherTimer = 0;
+            this.gatherDuration = this.targetResource.userData.gatherTime || 3000;
+            this.isGathering = true;
+          }
+        } else {
+          this.aiState = 'idle';
+          this.targetResource = null;
+        }
+        break;
+
+      case 'gathering':
+        this.gatherTimer += deltaTime * 1000;
+        if (this.gatherTimer >= this.gatherDuration) {
+          if (this.targetResource && this.inventory) {
+            this.inventory.addItem(this.targetResource.userData.resource, 1);
+          }
+          if (this.targetResource?.userData.isDepletable) {
+            this.targetResource.visible = false;
+            this.targetResource.userData.isInteractable = false;
+            const respawnTime = this.targetResource.userData.respawnTime || 15000;
+            setTimeout(() => {
+              if (this.targetResource) {
+                this.targetResource.visible = true;
+                this.targetResource.userData.isInteractable = true;
+              }
+            }, respawnTime);
+          }
+          this.targetResource = null;
+          this.aiState = 'idle';
+          this.isGathering = false;
+        }
+        break;
     }
+
+    return moveState;
   }
 
-
-  interact(player: Player): { type: string; text: string; state: string } | null {
-    this.playerPosition.copy(player.mesh!.position);
-    this.playerPosition.y = this.mesh!.position.y;
-    this.mesh!.lookAt(this.playerPosition);
-    this.idleLookTarget.copy(this.playerPosition);
-    this.idleTimer = 3.0;
+  // Interaction (from NPC)
+  interact(player: Character): { type: string; text: string; state: string; options?: string[] } | null {
+    this.lookAt(player.mesh!.position);
     const dialogue = this.getRandomIdleDialogue();
-    this.dialogueState = 'greeting';
-    player.eventLog?.addEntry(`${this.name}: "${dialogue}"`);
-    return { type: 'dialogue', text: dialogue, state: this.dialogueState };
+    this.aiState = 'idle';
+    if (this.eventLog) this.eventLog.addEntry(`${this.name}: "${dialogue}"`);
+    return { type: 'dialogue', text: dialogue, state: 'greeting', options: ['Switch Control'] };
   }
 
   getRandomIdleDialogue(): string {
     const dialogues = [
-      "Nice weather today.", "Be careful out there.", "Seen any trouble makers around?",
+      "Nice weather today.", "Be careful out there.", "Seen any troublemakers around?",
       "The wilderness holds many secrets.", "Welcome to our village.", "Need something?",
-      "Don't wander too far from the village.",
+      "Don't wander too far from the village."
     ];
     return dialogues[Math.floor(Math.random() * dialogues.length)];
   }
-
-  update(deltaTime: number, options: UpdateOptions = {}): void {
-    const { player } = options;
-    if (!player) {
-      console.warn('Missing player for NPC update');
-      return;
-    }
-    if (!(player instanceof Player)) {
-      console.warn('Provided player is not an instance of Player for NPC update');
-      return;
-    }
-    // Update AI (existing behavior)
-    this.updateAI(deltaTime, options);
-
-    // Apply gravity
-    if (!this.isOnGround) {
-      this.velocity.y += this.gravity * deltaTime;
-    }
-
-    // Move
-    this.mesh!.position.addScaledVector(this.velocity, deltaTime);
-
-    // Check ground
-    const terrainHeight = getTerrainHeight(this.scene!, this.mesh!.position.x, this.mesh!.position.z);
-    if (this.mesh!.position.y <= terrainHeight + 0.1) {
-      this.mesh!.position.y = terrainHeight;
-      this.velocity.y = 0;
-      this.isOnGround = true;
-      this.canJump = true;
-    } else {
-      this.isOnGround = false;
-      this.canJump = false;
-    }
-
-    // Update animations based on movement
-    const horizontalSpeed = Math.sqrt(this.velocity.x ** 2 + this.velocity.z ** 2);
-    if (horizontalSpeed > this.runSpeed * 0.5) {
-      if (this.runAction) this.runAction.play();
-      if (this.walkAction) this.walkAction.stop();
-      if (this.idleAction) this.idleAction.stop();
-    } else if (horizontalSpeed > 0.1) {
-      if (this.walkAction) this.walkAction.play();
-      if (this.runAction) this.runAction.stop();
-      if (this.idleAction) this.idleAction.stop();
-    } else {
-      if (this.idleAction) this.idleAction.play();
-      if (this.walkAction) this.walkAction.stop();
-      if (this.runAction) this.runAction.stop();
-    }
-
-    // Play jump animation when jumping
-    if (!this.isOnGround && this.velocity.y > 0) {
-      if (this.jumpAction) this.jumpAction.play();
-    }
-
-    this.mixer.update(deltaTime);
-  }
 }
-

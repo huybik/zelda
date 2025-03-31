@@ -3,7 +3,7 @@ import {
   PerspectiveCamera, Object3D, Vector3, Quaternion, Raycaster, Box3, Matrix4,
   Vector2, MathUtils,
 } from 'three';
-import { Player } from './entities';
+import { Character } from './entities';
 import { InteractableObject } from './objects';
 import {
   Inventory, EventLog, InteractionResult, TargetInfo, ActiveGather,
@@ -11,7 +11,7 @@ import {
 } from './ultils';
 
 export class InteractionSystem {
-  player: Player;
+  player: Character;
   camera: PerspectiveCamera;
   interactableEntities: Array<any>;
   controls: Controls;
@@ -30,7 +30,7 @@ export class InteractionSystem {
   private playerDirection = new Vector3();
   private objectPosition = new Vector3();
 
-  constructor(player: Player, camera: PerspectiveCamera, interactableEntities: Array<any>, controls: Controls, inventory: Inventory, eventLog: EventLog) {
+  constructor(player: Character, camera: PerspectiveCamera, interactableEntities: Array<any>, controls: Controls, inventory: Inventory, eventLog: EventLog) {
     this.player = player;
     this.camera = camera;
     this.interactableEntities = interactableEntities;
@@ -140,13 +140,13 @@ export class InteractionSystem {
     return null;
   }
 
-  tryInteract(targetInstance: any): void {
+   tryInteract(targetInstance: any): void {
     if (!targetInstance || !targetInstance.userData?.isInteractable) return;
     let targetPosition: Vector3;
-    if (targetInstance instanceof Object3D && !(targetInstance instanceof Player) && !(targetInstance instanceof InteractableObject)) {
+    if (targetInstance instanceof Object3D && !(targetInstance instanceof Character)) {
       targetPosition = targetInstance.position;
-    } else if ((targetInstance as Player | InteractableObject).mesh) {
-      targetPosition = (targetInstance as Player | InteractableObject).mesh!.position;
+    } else if ((targetInstance as Character).mesh) {
+      targetPosition = (targetInstance as Character).mesh!.position;
     } else {
       console.warn("Target instance has no mesh or position", targetInstance);
       return;
@@ -159,12 +159,15 @@ export class InteractionSystem {
       return;
     }
     let result: InteractionResult | null = null;
-    if (typeof (targetInstance as any).interact === 'function') {
-      result = (targetInstance as any).interact(this.player, this.inventory, this.eventLog);
+    if (typeof targetInstance.interact === 'function') {
+      result = targetInstance.interact(this.player);
+      if (this.controls.keys['KeyC']) {
+        (window as any).game.switchControlTo(targetInstance); // Assuming Game instance is global
+        result = { type: 'message', message: `Switched control to ${targetInstance.name}` };
+      }
     } else if (targetInstance.userData.interactionType === 'gather' && targetInstance.userData.resource) {
       this.startGatherAction(targetInstance);
       result = { type: 'gather_start' };
-      console.log(`Started gathering ${targetInstance.userData.resource}`);
     } else {
       result = { type: 'message', message: "You look at the object." };
     }
@@ -253,7 +256,7 @@ export class InteractionSystem {
       this.eventLog.addEntry(`Gathered 1 ${resource}.`);
       if (targetInstance.userData.isDepletable) {
         targetInstance.userData.isInteractable = false;
-        if (targetInstance instanceof Player || targetInstance instanceof InteractableObject) {
+        if (targetInstance instanceof Character || targetInstance instanceof InteractableObject) {
           if (targetInstance.mesh) targetInstance.mesh.visible = false;
         } else {
           (targetInstance as Object3D).visible = false;
@@ -262,7 +265,7 @@ export class InteractionSystem {
         setTimeout(() => {
           if (targetInstance.userData) {
             targetInstance.userData.isInteractable = true;
-            if (targetInstance instanceof Player || targetInstance instanceof InteractableObject) {
+            if (targetInstance instanceof Character || targetInstance instanceof InteractableObject) {
               if (targetInstance.mesh) targetInstance.mesh.visible = true;
             } else {
               (targetInstance as Object3D).visible = true;
@@ -319,7 +322,7 @@ export class InteractionSystem {
 }
 
 export class Physics {
-  player: Player;
+  player: Character;
   collidableObjects: Object3D[];
   collisionCheckRadiusSq: number = 20 * 20;
   private overlap = new Vector3();
@@ -330,7 +333,7 @@ export class Physics {
   private pushVector = new Vector3();
   private objectBoundingBox = new Box3();
 
-  constructor(player: Player, collidableObjects: Object3D[]) {
+  constructor(player: Character, collidableObjects: Object3D[]) {
     this.player = player;
     this.collidableObjects = collidableObjects;
   }
@@ -473,7 +476,7 @@ export class ThirdPersonCamera {
 }
 
 export class Controls {
-  player: Player | null;
+  player: Character | null;
   cameraController: ThirdPersonCamera | null;
   domElement: HTMLElement;
   keys: KeyState = {};
@@ -492,7 +495,7 @@ export class Controls {
   boundOnPointerLockChange: () => void;
   boundOnPointerLockError: () => void;
 
-  constructor(player: Player | null, cameraController: ThirdPersonCamera | null, domElement: HTMLElement | null) {
+  constructor(player: Character | null, cameraController: ThirdPersonCamera | null, domElement: HTMLElement | null) {
     this.player = player;
     this.cameraController = cameraController;
     this.domElement = domElement ?? document.body;

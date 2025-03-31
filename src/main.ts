@@ -1,12 +1,12 @@
 import {
   Scene, PerspectiveCamera, WebGLRenderer, Clock, Vector3, Color, Fog, Mesh,
   PlaneGeometry, MeshLambertMaterial, AmbientLight, DirectionalLight, HemisphereLight,
-  BoxGeometry, MeshBasicMaterial, DoubleSide, PCFSoftShadowMap, MathUtils, Object3D, Group,AnimationClip
+  BoxGeometry, MeshBasicMaterial, DoubleSide, PCFSoftShadowMap, MathUtils, Object3D, Group, AnimationClip
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import WebGL from 'three/examples/jsm/capabilities/WebGL.js';
-import { Player, NPC } from './entities';
+import { Character } from './entities'; // Updated import
 import { createTree, createRock, createHerb } from './objects';
 import { InteractionSystem, Physics, ThirdPersonCamera, Controls } from './system';
 import { HUD, InventoryDisplay, JournalDisplay, Minimap } from './ui';
@@ -14,6 +14,7 @@ import { Inventory, EventLog, getTerrainHeight, randomFloat, smoothstep } from '
 
 const WORLD_SIZE = 100;
 const TERRAIN_SEGMENTS = 15;
+
 
 async function loadModels(): Promise<Record<string, { scene: Group; animations: AnimationClip[] }>> {
   const loader = new GLTFLoader();
@@ -93,27 +94,28 @@ function populateEnvironment(
   collidableObjects: Object3D[],
   interactableObjects: Array<any>,
   entities: Array<any>,
-  inventory: Inventory, // This is the player's inventory, not used for NPCs here
+  inventory: Inventory,
   models: Record<string, { scene: Group; animations: AnimationClip[] }>
 ): void {
   const halfSize = worldSize / 2;
   const villageCenter = new Vector3(5, 0, 10);
-  const addNpc = (pos: Vector3, name: string, modelKey: string): NPC => {
+  const addCharacter = (pos: Vector3, name: string, modelKey: string, isPlayer: boolean = false): Character => {
     const model = models[modelKey];
-    const npcInventory = new Inventory(9); // Create a new inventory with 9 slots for each NPC
-    const npc = new NPC(scene, pos, name, model.scene, model.animations, npcInventory);
-    npc.mesh!.position.y = getTerrainHeight(scene, pos.x, pos.z);
-    entities.push(npc);
-    collidableObjects.push(npc.mesh!);
-    interactableObjects.push(npc);
-    return npc;
+    const charInventory = new Inventory(9);
+    const character = new Character(scene, pos, name, model.scene, model.animations, charInventory);
+    character.mesh!.position.y = getTerrainHeight(scene, pos.x, pos.z);
+    if (isPlayer) character.name = 'Character'; // Ensure player retains name
+    entities.push(character);
+    collidableObjects.push(character.mesh!);
+    interactableObjects.push(character);
+    return character;
   };
-  addNpc(villageCenter.clone().add(new Vector3(-12, 0, 2)), 'Farmer Giles', 'tavernMan');
-  addNpc(villageCenter.clone().add(new Vector3(10, 0, -3)), 'Blacksmith Brynn', 'woman');
-  addNpc(new Vector3(halfSize * 0.4, 0, -halfSize * 0.3), 'Hunter Rex', 'oldMan');
-  
+  addCharacter(villageCenter.clone().add(new Vector3(-12, 0, 2)), 'Farmer Giles', 'tavernMan');
+  addCharacter(villageCenter.clone().add(new Vector3(10, 0, -3)), 'Blacksmith Brynn', 'woman');
+  addCharacter(new Vector3(halfSize * 0.4, 0, -halfSize * 0.3), 'Hunter Rex', 'oldMan');
+
   const addObject = (creator: (pos: Vector3, ...args: any[]) => Group, count: number, minDistSq: number, ...args: any[]) => {
-    for (let i = 0; i < count; i++) {
+     for (let i = 0; i < count; i++) {
       const x = randomFloat(-halfSize * 0.95, halfSize * 0.95);
       const z = randomFloat(-halfSize * 0.95, halfSize * 0.95);
       const distSq = (x - villageCenter.x) ** 2 + (z - villageCenter.z) ** 2;
@@ -132,6 +134,7 @@ function populateEnvironment(
   addObject(createRock, 50, 20 * 20, randomFloat(1, 2.5));
   addObject(createHerb, 30, 10 * 10);
 }
+
 
 function createWorldBoundary(scene: Scene, worldSize: number, collidableObjects: Object3D[]): void {
   const thickness = 20;
@@ -161,7 +164,7 @@ class Game {
   renderer: WebGLRenderer | null = null;
   camera: PerspectiveCamera | null = null;
   clock: Clock | null = null;
-  player: Player | null = null;
+  activeCharacter: Character | null = null; // Replaces player
   thirdPersonCamera: ThirdPersonCamera | null = null;
   controls: Controls | null = null;
   physics: Physics | null = null;
@@ -193,7 +196,7 @@ class Game {
     this.initSystems();
     this.initUI();
     this.setupUIControls();
-    this.eventLog!.addEntry("Welcome! Click window to lock controls. [I] Inventory, [J] Journal, [E] Interact, [Esc] Unlock/Close UI");
+    this.eventLog!.addEntry("Welcome! Click window to lock controls. [I] Inventory, [J] Journal, [E] Interact, [C] Switch Control, [Esc] Unlock/Close UI");
   }
 
   initRenderer(): void {
@@ -228,19 +231,19 @@ class Game {
   initPlayer(models: Record<string, { scene: Group; animations: AnimationClip[] }>): void {
     const playerSpawnPos = new Vector3(0, 0, 5);
     playerSpawnPos.y = getTerrainHeight(this.scene!, playerSpawnPos.x, playerSpawnPos.z);
-    this.player = new Player(this.scene!, playerSpawnPos, models.player.scene, models.player.animations);
-    this.entities.push(this.player);
-    this.collidableObjects.push(this.player.mesh!);
-    this.player.setEventLog(this.eventLog!);
+    this.activeCharacter = new Character(this.scene!, playerSpawnPos, 'Character', models.player.scene, models.player.animations, this.inventory!);
+    this.entities.push(this.activeCharacter);
+    this.collidableObjects.push(this.activeCharacter.mesh!);
+    this.activeCharacter.setEventLog(this.eventLog!);
   }
 
   initControls(): void {
-    this.thirdPersonCamera = new ThirdPersonCamera(this.camera!, this.player!.mesh!);
-    this.controls = new Controls(this.player, this.thirdPersonCamera, this.renderer!.domElement);
+    this.thirdPersonCamera = new ThirdPersonCamera(this.camera!, this.activeCharacter!.mesh!);
+    this.controls = new Controls(this.activeCharacter, this.thirdPersonCamera, this.renderer!.domElement);
   }
 
   initPhysics(): void {
-    this.physics = new Physics(this.player!, this.collidableObjects);
+    this.physics = new Physics(this.activeCharacter!, this.collidableObjects);
   }
 
   initEnvironment(models: Record<string, { scene: Group; animations: AnimationClip[] }>): void {
@@ -248,15 +251,16 @@ class Game {
   }
 
   initSystems(): void {
-    this.interactionSystem = new InteractionSystem(this.player!, this.camera!, this.interactableObjects, this.controls!, this.inventory!, this.eventLog!);
+    this.interactionSystem = new InteractionSystem(this.activeCharacter!, this.camera!, this.interactableObjects, this.controls!, this.inventory!, this.eventLog!);
   }
-
-  initUI(): void {
-    this.hud = new HUD(this.player!);
-    this.minimap = new Minimap(document.getElementById('minimap-canvas') as HTMLCanvasElement, this.player!, this.entities, WORLD_SIZE);
+  
+   initUI(): void {
+    this.hud = new HUD(this.activeCharacter!);
+    this.minimap = new Minimap(document.getElementById('minimap-canvas') as HTMLCanvasElement, this.activeCharacter!, this.entities, WORLD_SIZE);
     this.inventoryDisplay = new InventoryDisplay(this.inventory!);
     this.journalDisplay = new JournalDisplay(this.eventLog!);
   }
+
 
   setupUIControls(): void {
     this.controls!.addKeyDownListener('KeyI', () => {
@@ -268,6 +272,11 @@ class Game {
       this.inventoryDisplay!.hide();
       this.journalDisplay!.toggle();
       this.setPauseState(this.journalDisplay!.isOpen);
+    });
+    this.controls!.addKeyDownListener('KeyC', () => { // Switch control key
+      if (this.interactionSystem!.currentTarget instanceof Character && this.interactionSystem!.currentTarget !== this.activeCharacter) {
+        this.switchControlTo(this.interactionSystem!.currentTarget);
+      }
     });
     this.controls!.addKeyDownListener('Escape', () => {
       if (this.inventoryDisplay!.isOpen) {
@@ -292,16 +301,8 @@ class Game {
     if (index === -1) return;
     const item = this.inventory!.getItem(index);
     if (!item) return;
-    if (item.name === 'Health Potion') {
-      if (this.player!.health < this.player!.maxHealth) {
-        this.player!.heal(25);
-        if (this.inventory!.removeItemByIndex(index, 1)) this.eventLog!.addEntry(`Used a Health Potion. Ahh, refreshing!`);
-      } else {
-        this.eventLog!.addEntry(`Your health is already full.`);
-      }
-    } else {
-      this.eventLog!.addEntry(`You examine the ${item.name}.`);
-    }
+    
+    this.eventLog!.addEntry(`You examine the ${item.name}.`);
     event.stopPropagation();
   }
 
@@ -320,25 +321,26 @@ class Game {
     this.renderer.setAnimationLoop(this.update.bind(this));
   }
 
-  update(): void {
-    if (!this.clock || !this.renderer || !this.scene || !this.camera || !this.player) return;
+   update(): void {
+    if (!this.clock || !this.renderer || !this.scene || !this.camera || !this.activeCharacter) return;
     const deltaTime = Math.min(this.clock.getDelta(), 0.05);
     this.controls!.update(deltaTime);
     if (!this.isPaused) {
-      this.player.update(deltaTime, {
+      this.activeCharacter.update(deltaTime, {
         moveState: this.controls!.moveState,
         collidables: this.collidableObjects
       });
       this.physics!.update(deltaTime);
       this.entities.forEach(entity => {
-        if (entity instanceof Player && entity === this.player) return;
-        if (typeof (entity as any).update === 'function') {
-          (entity as any).update(deltaTime, { player: this.player });
+        if (entity === this.activeCharacter) return;
+        if (entity instanceof Character) {
+          const aiMoveState = entity.computeAIMoveState(deltaTime, { player: this.activeCharacter });
+          entity.update(deltaTime, { moveState: aiMoveState, collidables: this.collidableObjects });
         }
       });
       this.interactionSystem!.update(deltaTime);
       this.thirdPersonCamera!.update(deltaTime, this.collidableObjects);
-      if (this.player.isDead) this.respawnPlayer();
+      if (this.activeCharacter.isDead) this.respawnPlayer();
     }
     this.hud!.update();
     this.minimap!.update();
@@ -346,7 +348,7 @@ class Game {
   }
 
   respawnPlayer(): void {
-    this.eventLog!.addEntry("You blacked out and woke up back near the village...");
+    this.eventLog!.addEntry(`${this.activeCharacter!.name} blacked out and woke up back near the village...`);
     const goldCount = this.inventory!.countItem('gold');
     const goldPenalty = Math.min(10, Math.floor(goldCount * 0.1));
     if (goldPenalty > 0) {
@@ -355,9 +357,23 @@ class Game {
     }
     const respawnPos = new Vector3(0, 0, 10);
     respawnPos.y = getTerrainHeight(this.scene!, respawnPos.x, respawnPos.z);
-    this.player!.respawn(respawnPos);
+    this.activeCharacter!.respawn(respawnPos);
     this.setPauseState(false);
     this.interactionSystem!.cancelGatherAction();
+  }
+
+  switchControlTo(targetCharacter: Character): void {
+    if (targetCharacter === this.activeCharacter) return;
+    this.eventLog!.addEntry(`Switched control to ${targetCharacter.name}.`);
+    this.activeCharacter = targetCharacter;
+    this.controls!.player = targetCharacter;
+    this.thirdPersonCamera!.target = targetCharacter.mesh!;
+    this.physics!.player = targetCharacter;
+    this.interactionSystem!.player = targetCharacter;
+    this.hud!.player = targetCharacter;
+    this.minimap!.player = targetCharacter;
+    targetCharacter.setEventLog(this.eventLog!);
+    targetCharacter.aiState = 'idle'; // Reset AI state for new active character
   }
 
   onWindowResize(): void {

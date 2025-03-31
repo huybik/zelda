@@ -1,9 +1,9 @@
-import { Player } from './entities';
+import { Character } from './entities';
 import { Inventory, EventLog, InventoryItem } from './ultils';
 import { Object3D, Vector3 } from 'three';
 
 export class HUD {
-  player: Player;
+  player: Character;
   healthBarElement: HTMLElement | null;
   staminaBarElement: HTMLElement | null;
   fpsDisplayElement: HTMLElement | null; // New property for FPS display
@@ -11,7 +11,7 @@ export class HUD {
   MAX_SAMPLES: number = 60; // Number of frames to average (e.g., ~1 second at 60 FPS)
   lastUpdateTime: number; // Timestamp of the last update
 
-  constructor(player: Player) {
+  constructor(player: Character) {
     this.player = player;
     this.healthBarElement = document.getElementById('health-bar');
     this.staminaBarElement = document.getElementById('stamina-bar');
@@ -184,7 +184,7 @@ export class JournalDisplay {
 export class Minimap {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
-  player: Player;
+  player: Character;
   entities: Array<any>;
   worldSize: number;
   mapSize: number;
@@ -202,7 +202,7 @@ export class Minimap {
   private playerPosition = new Vector3();
   private playerForward = new Vector3();
 
-  constructor(canvasElement: HTMLCanvasElement | null, player: Player, entities: Array<any>, worldSize: number) {
+  constructor(canvasElement: HTMLCanvasElement | null, player: Character, entities: Array<any>, worldSize: number) {
     if (!canvasElement) {
         throw new Error("Minimap requires a valid canvas element.");
     }
@@ -249,11 +249,11 @@ export class Minimap {
     this.ctx.translate(-playerMapX, -playerMapZ);
 
     this.entities.forEach(entity => {
-        if (!entity || entity === this.player || (entity instanceof Player && entity.isDead)) {
+        if (!entity || entity === this.player || (entity instanceof Character && entity.isDead)) {
             return;
         }
 
-        const mesh = (entity instanceof Player || entity instanceof Object3D) ? entity : entity.mesh;
+        const mesh = (entity instanceof Character || entity instanceof Object3D) ? entity : entity.mesh;
         if (!mesh || !(mesh instanceof Object3D) || !mesh.parent || !mesh.visible) {
             return;
         }
