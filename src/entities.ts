@@ -203,7 +203,7 @@ export class Character extends Entity {
 
     // Animation setup
     this.mixer = new AnimationMixer(model);
-    const idleAnim = animations.find(anim => anim.name.toLowerCase().includes('idle') || anim.name.toLowerCase().includes('hugajaga') || anim.name.toLowerCase().includes('hugajaka'));
+    const idleAnim = animations.find(anim => anim.name.toLowerCase().includes('idle'));
     if (idleAnim) this.idleAction = this.mixer.clipAction(idleAnim);
     const walkAnim = animations.find(anim => anim.name.toLowerCase().includes('walk'));
     if (walkAnim) this.walkAction = this.mixer.clipAction(walkAnim);
