@@ -3,9 +3,8 @@ import {
   Scene, Vector3, Box3, Quaternion, Group, Mesh, Material, Object3D, Matrix4,
   AnimationMixer, AnimationClip, AnimationAction, LoopOnce, LoopRepeat
 } from 'three';
-import { EventLog, Inventory, EntityUserData, UpdateOptions, smoothQuaternionSlerp, getNextEntityId, MoveState } from './ultils';
+import { EventLog, Inventory, EntityUserData, UpdateOptions, smoothQuaternionSlerp, getNextEntityId, MoveState, getTerrainHeight } from './ultils';
 import { Raycaster } from 'three';
-import { updateNPCAI } from './ai';
 
 export class Entity {
   id: string;
@@ -453,10 +452,9 @@ export class NPC extends Entity {
   walkAction?: AnimationAction;
   runAction?: AnimationAction;
   jumpAction?: AnimationAction;
-  attackAction?: AnimationAction; // Added attack action
-  isGathering: boolean = false; // Added for gathering state
-  private gatherAttackTimer: number = 0; // Timer for periodic attack animation
-  private gatherAttackInterval: number = 1.0; // Interval between attack animations
+  attackAction?: AnimationAction;
+  private gatherAttackTimer: number = 0;
+  private gatherAttackInterval: number = 1.0; // Seconds between attack animations
   private playerPosition = new Vector3();
   private targetLookAt = new Vector3();
   private targetDirection = new Vector3();
@@ -527,6 +525,180 @@ export class NPC extends Entity {
     this.homePosition = position.clone();
     this.updateBoundingBox();
   }
+  
+  updateAI(deltaTime: number, options: UpdateOptions = {}): void {
+    const { player } = options;
+    if (!player || !this.scene) return;
+
+    // Check if player is within interaction distance
+    const distanceToPlayer = this.mesh!.position.distanceTo(player.mesh.position);
+    if (distanceToPlayer < this.interactionDistance) {
+      if (this.state !== 'interacting') {
+        this.state = 'interacting';
+        this.velocity.set(0, 0, 0);
+        this.destination = null;
+        this.targetResource = null;
+      }
+      this.lookAt(player.mesh.position);
+    } else {
+      if (this.state === 'interacting') {
+        this.state = 'idle';
+      }
+      // Handle NPC behavior based on state
+      switch (this.state) {
+        case 'idle':
+          this.handleIdle(deltaTime);
+          break;
+        case 'roaming':
+          this.handleRoaming(deltaTime);
+          break;
+        case 'movingToResource':
+          this.handleMovingToResource(deltaTime);
+          break;
+        case 'gathering':
+          this.handleGathering(deltaTime);
+          break;
+      }
+    }
+
+    // Handle idle looking behavior
+    if (this.state === 'idle') {
+      this.idleTimer -= deltaTime;
+      if (this.idleTimer <= 0) {
+        this.idleTimer = 3 + Math.random() * 4;
+        const distanceToPlayerSq = this.mesh!.position.distanceToSquared(player.mesh.position);
+        if (distanceToPlayerSq < 15 * 15 && Math.random() < 0.3) {
+          this.targetLookAt.copy(player.mesh.position).setY(this.mesh!.position.y);
+          this.idleLookTarget.copy(this.targetLookAt);
+        } else {
+          if (Math.random() < 0.5) {
+            const randomAngleOffset = (Math.random() - 0.5) * Math.PI * 1.5;
+            const randomDirection = this.baseForward.clone().applyAxisAngle(new Vector3(0, 1, 0), randomAngleOffset);
+            this.idleLookTarget.copy(this.mesh!.position).addScaledVector(randomDirection, 5);
+          } else {
+            this.idleLookTarget.copy(this.mesh!.position).addScaledVector(this.baseForward, 5);
+          }
+        }
+      }
+      // Smoothly rotate towards idleLookTarget
+      const targetDirection = this.idleLookTarget.clone().sub(this.mesh!.position);
+      targetDirection.y = 0;
+      if (targetDirection.lengthSq() > 0.01) {
+        targetDirection.normalize();
+        const targetLookAt = this.mesh!.position.clone().add(targetDirection);
+        const lookAtMatrix = new Matrix4().lookAt(targetLookAt, this.mesh!.position, this.mesh!.up);
+        const targetQuaternion = new Quaternion().setFromRotationMatrix(lookAtMatrix);
+        smoothQuaternionSlerp(this.mesh!.quaternion, targetQuaternion, 0.05, deltaTime);
+      }
+    }
+  }
+
+  private handleIdle(deltaTime: number): void {
+    this.actionTimer -= deltaTime;
+    if (this.actionTimer <= 0) {
+      this.actionTimer = 5 + Math.random() * 5; // Reset timer between 5-10 seconds
+      // Search for nearby gatherable resources
+      const resources = this.scene!.children.filter(child =>
+        child.userData.isInteractable &&
+        child.userData.interactionType === 'gather' &&
+        child.visible &&
+        this.mesh!.position.distanceTo(child.position) < this.searchRadius
+      ) as Object3D[];
+      if (resources.length > 0) {
+        // Find the closest resource
+        const closestResource = resources.reduce((closest, current) => {
+          const distCurrent = this.mesh!.position.distanceTo(current.position);
+          const distClosest = this.mesh!.position.distanceTo(closest.position);
+          return distCurrent < distClosest ? current : closest;
+        });
+        this.targetResource = closestResource;
+        this.state = 'movingToResource';
+      } else {
+        // Roam to a random point within roamRadius
+        const angle = Math.random() * Math.PI * 2;
+        const distance = Math.random() * this.roamRadius;
+        const offset = new Vector3(Math.cos(angle) * distance, 0, Math.sin(angle) * distance);
+        this.destination = this.homePosition.clone().add(offset);
+        this.state = 'roaming';
+      }
+    }
+  }
+
+  private handleRoaming(deltaTime: number): void {
+    if (!this.destination) {
+      this.state = 'idle';
+      return;
+    }
+    const direction = this.destination.clone().sub(this.mesh!.position);
+    direction.y = 0;
+    const distance = direction.length();
+    if (distance < 0.5) {
+      this.velocity.set(0, 0, 0);
+      this.state = 'idle';
+      return;
+    }
+    direction.normalize();
+    this.velocity.copy(direction).multiplyScalar(this.moveSpeed);
+    this.mesh!.position.addScaledVector(this.velocity, deltaTime);
+    this.mesh!.position.y = getTerrainHeight(this.scene!, this.mesh!.position.x, this.mesh!.position.z);
+    this.lookAt(this.destination);
+    this.updateBoundingBox();
+  }
+
+  private handleMovingToResource(deltaTime: number): void {
+    if (!this.targetResource || !this.targetResource.visible || !this.targetResource.userData.isInteractable) {
+      this.targetResource = null;
+      this.state = 'idle';
+      return;
+    }
+    const direction = this.targetResource.position.clone().sub(this.mesh!.position);
+    direction.y = 0;
+    const distance = direction.length();
+    if (distance < 1) {
+      this.velocity.set(0, 0, 0);
+      this.lookAt(this.targetResource.position);
+      this.state = 'gathering';
+      this.gatherTimer = 0;
+      this.gatherDuration = this.targetResource.userData.gatherTime || 3000;
+      return;
+    }
+    direction.normalize();
+    this.velocity.copy(direction).multiplyScalar(this.moveSpeed);
+    this.mesh!.position.addScaledVector(this.velocity, deltaTime);
+    this.mesh!.position.y = getTerrainHeight(this.scene!, this.mesh!.position.x, this.mesh!.position.z);
+    this.lookAt(this.targetResource.position);
+    this.updateBoundingBox();
+  }
+
+  private handleGathering(deltaTime: number): void {
+    if (!this.targetResource || !this.targetResource.visible || !this.targetResource.userData.isInteractable) {
+      this.targetResource = null;
+      this.state = 'idle';
+      return;
+    }
+    this.gatherTimer += deltaTime * 1000; // Convert to milliseconds
+    if (this.gatherTimer >= this.gatherDuration) {
+      const resourceName = this.targetResource.userData.resource;
+      if (resourceName && this.inventory) {
+        this.inventory.addItem(resourceName, 1); // Add resource to inventory
+      }
+      // Handle resource depletion if applicable
+      if (this.targetResource.userData.isDepletable) {
+        this.targetResource.visible = false;
+        this.targetResource.userData.isInteractable = false;
+        const respawnTime = this.targetResource.userData.respawnTime || 15000;
+        setTimeout(() => {
+          if (this.targetResource) {
+            this.targetResource.visible = true;
+            this.targetResource.userData.isInteractable = true;
+          }
+        }, respawnTime);
+      }
+      this.targetResource = null;
+      this.state = 'idle';
+    }
+  }
+
 
   interact(player: Player): { type: string; text: string; state: string } | null {
     this.playerPosition.copy(player.mesh!.position);
@@ -559,20 +731,8 @@ export class NPC extends Entity {
       console.warn('Provided player is not an instance of Player for NPC update');
       return;
     }
-    this.mixer.update(deltaTime);
-
-    // Handle gathering attack animation
-    if (this.isGathering) {
-      this.gatherAttackTimer += deltaTime;
-      if (this.gatherAttackTimer >= this.gatherAttackInterval) {
-        this.gatherAttackTimer = 0;
-        if (this.attackAction) {
-          this.attackAction.reset().play();
-        }
-      }
-    }
-
-    updateNPCAI(this, deltaTime, options);
+    // Animation and mixer updates will be added in Task 2
+    this.updateAI(deltaTime, options);
   }
 }
 
