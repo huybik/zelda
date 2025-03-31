@@ -182,6 +182,10 @@ export class Player extends Entity {
 
     // Set up animations
     this.mixer = new AnimationMixer(model);
+    const idleAnim = animations.find(anim => anim.name.toLowerCase().includes('hugajaga'));
+    if (this.idleAction) this.idleAction.play();
+    if (idleAnim) this.idleAction = this.mixer.clipAction(idleAnim);
+    
     const walkAnim = animations.find(anim => anim.name.toLowerCase().includes('walk'));
     const runAnim = animations.find(anim => anim.name.toLowerCase().includes('run'));
     const jumpAnim = animations.find(anim => anim.name.toLowerCase().includes('jump'));
@@ -220,8 +224,6 @@ export class Player extends Entity {
         }
       }
     });
-   
-    
   }
 
   setEventLog(eventLog: EventLog): void {
@@ -500,12 +502,14 @@ export class NPC extends Entity {
 
     // Set up animations
     this.mixer = new AnimationMixer(model);
-    const idleAnim = animations.find(anim => anim.name.toLowerCase().includes('idle'));
+    const idleAnim = animations.find(anim => anim.name.toLowerCase().includes('hugajaka'));
+    if (this.idleAction) this.idleAction.play();
+    if (idleAnim) this.idleAction = this.mixer.clipAction(idleAnim);
     const walkAnim = animations.find(anim => anim.name.toLowerCase().includes('walk'));
     const runAnim = animations.find(anim => anim.name.toLowerCase().includes('run'));
     const jumpAnim = animations.find(anim => anim.name.toLowerCase().includes('jump'));
     const attackAnim = animations.find(anim => anim.name.toLowerCase().includes('attack'));
-    if (idleAnim) this.idleAction = this.mixer.clipAction(idleAnim);
+    
     if (walkAnim) this.walkAction = this.mixer.clipAction(walkAnim);
     if (runAnim) this.runAction = this.mixer.clipAction(runAnim);
     if (jumpAnim) {
@@ -518,7 +522,7 @@ export class NPC extends Entity {
       this.attackAction.setLoop(LoopOnce, 1);
       this.attackAction.clampWhenFinished = true;
     }
-    if (this.idleAction) this.idleAction.play();
+    
 
     this.userData.height = 1.7;
     this.userData.radius = 0.4;
@@ -728,17 +732,43 @@ export class NPC extends Entity {
   }
 
   update(deltaTime: number, options: UpdateOptions = {}): void {
-    const { player } = options;
-    if (!player) {
-      console.warn('Missing player for NPC update');
-      return;
-    }
-    if (!(player instanceof Player)) {
-      console.warn('Provided player is not an instance of Player for NPC update');
-      return;
-    }
-    // Animation and mixer updates will be added in Task 2
-    this.updateAI(deltaTime, options);
+  const { player } = options;
+  if (!player) {
+    console.warn('Missing player for NPC update');
+    return;
   }
+  if (!(player instanceof Player)) {
+    console.warn('Provided player is not an instance of Player for NPC update');
+    return;
+  }
+  // Update AI
+  this.updateAI(deltaTime, options);
+
+  // Update animation mixer
+  this.mixer.update(deltaTime);
+
+  // Update animations based on state
+  if (this.state === 'idle' || this.state === 'interacting') {
+    if (this.idleAction) this.idleAction.play();
+    if (this.walkAction) this.walkAction.stop();
+    if (this.runAction) this.runAction.stop();
+  } else if (this.state === 'roaming' || this.state === 'movingToResource') {
+    if (this.walkAction) this.walkAction.play();
+    if (this.idleAction) this.idleAction.stop();
+    if (this.runAction) this.runAction.stop();
+  } else if (this.state === 'gathering') {
+    if (this.idleAction) this.idleAction.play();
+    if (this.walkAction) this.walkAction.stop();
+    if (this.runAction) this.runAction.stop();
+    // Play attack animation periodically for gathering
+    this.gatherAttackTimer += deltaTime;
+    if (this.gatherAttackTimer >= this.gatherAttackInterval) {
+      this.gatherAttackTimer = 0;
+      if (this.attackAction) {
+        this.attackAction.reset().play();
+      }
+    }
+  }
+}
 }
 
