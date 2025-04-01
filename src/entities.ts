@@ -3,11 +3,11 @@ import {
   Scene, Vector3, Box3, Quaternion, Group, Mesh, Material, Object3D, Matrix4,
   AnimationMixer, AnimationClip, AnimationAction, LoopOnce
 } from 'three';
-import { EventLog, Inventory, EntityUserData, UpdateOptions, smoothQuaternionSlerp, getNextEntityId, MoveState, getTerrainHeight, EventEntry, GameEvent } from './ultils'; // Added GameEvent
+import { EventLog, Inventory, EntityUserData, UpdateOptions, smoothQuaternionSlerp, getNextEntityId, MoveState, getTerrainHeight, EventEntry, GameEvent } from './ultils';
 import { Raycaster } from 'three';
-import type { Game } from './main'; // Import Game type for game property
+import type { Game } from './main';
+// import  { sendToGemini } from './main';
 
-// Define Observation interface
 export interface Observation {
   timestamp: number;
   nearbyCharacters: Array<{
@@ -97,7 +97,7 @@ export class Entity {
   takeDamage(amount: number, attacker: Entity | null = null): void {
     if (this.isDead || amount <= 0) return;
     this.health = Math.max(0, this.health - amount);
-    if (this.health <= 0) this.die(attacker); // Pass attacker to die
+    if (this.health <= 0) this.die(attacker);
   }
 
   heal(amount: number): void {
@@ -105,7 +105,7 @@ export class Entity {
     this.health = Math.min(this.maxHealth, this.health + amount);
   }
 
-  die(attacker: Entity | null = null): void { // Accept attacker
+  die(attacker: Entity | null = null): void {
     if (this.isDead) return;
     this.isDead = true;
     this.velocity.set(0, 0, 0);
@@ -139,7 +139,6 @@ const CHARACTER_HEIGHT = 1.8;
 const CHARACTER_RADIUS = 0.4;
 
 export class Character extends Entity {
-  // Core properties from Character
   maxStamina: number;
   stamina: number;
   walkSpeed: number;
@@ -157,7 +156,7 @@ export class Character extends Entity {
   isOnGround: boolean;
   groundCheckDistance: number;
   lastVelocityY: number;
-  eventLog: EventLog; // Changed to non-null
+  eventLog: EventLog;
   mixer: AnimationMixer;
   idleAction?: AnimationAction;
   walkAction?: AnimationAction;
@@ -170,10 +169,8 @@ export class Character extends Entity {
   gatherAttackInterval: number = 1.0;
   attackTriggered: boolean = false;
   inventory: Inventory | null;
-
-  // AI properties from NPC
   aiState: string = 'idle';
-  previousAiState: string = 'idle'; // Added for state change logging
+  previousAiState: string = 'idle';
   homePosition: Vector3;
   roamRadius: number = 10;
   destination: Vector3 | null = null;
@@ -184,20 +181,19 @@ export class Character extends Entity {
   interactionDistance: number = 3;
   searchRadius: number = 120;
   target: Entity | null = null;
-
-  // New properties
-  game: Game | null = null; // Reference to the Game instance
-  observation: Observation | null = null; // Observation object
-
+  game: Game | null = null;
+  observation: Observation | null = null;
+  persona: string = "";
+  currentIntent: string = "";
   private groundCheckOrigin = new Vector3();
   private groundCheckDirection = new Vector3(0, -1, 0);
 
   constructor(scene: Scene, position: Vector3, name: string, model: Group, animations: AnimationClip[], inventory: Inventory | null) {
     super(scene, position, name);
     this.userData.isCollidable = true;
-    this.userData.isInteractable = true; // All characters are interactable
+    this.userData.isInteractable = true;
     this.userData.interactionType = 'talk';
-    this.userData.isNPC = true; // Assume NPC unless player
+    this.userData.isNPC = true;
     this.maxHealth = 100;
     this.health = this.maxHealth;
     this.maxStamina = 100;
@@ -219,19 +215,13 @@ export class Character extends Entity {
     this.lastVelocityY = 0;
     this.inventory = inventory;
     this.homePosition = position.clone();
-
-    // Initialize independent event log
     this.eventLog = new EventLog(50);
-
-    // Model setup
     const box = new Box3().setFromObject(model);
     const currentHeight = box.max.y - box.min.y;
     const scale = CHARACTER_HEIGHT / currentHeight;
     model.scale.set(scale, scale, scale);
     model.position.y = -box.min.y * scale;
     this.mesh!.add(model);
-
-    // Animation setup
     this.mixer = new AnimationMixer(model);
     const idleAnim = animations.find(anim => anim.name.toLowerCase().includes('idle'));
     if (idleAnim) this.idleAction = this.mixer.clipAction(idleAnim);
@@ -252,12 +242,9 @@ export class Character extends Entity {
       this.attackAction.clampWhenFinished = true;
     }
     if (this.idleAction) this.idleAction.play();
-
     this.userData.height = CHARACTER_HEIGHT;
     this.userData.radius = CHARACTER_RADIUS;
     this.updateBoundingBox();
-
-    // Animation event listener
     this.mixer.addEventListener('finished', (e) => {
       if (e.action === this.attackAction) {
         this.performAttack();
@@ -273,10 +260,9 @@ export class Character extends Entity {
     });
   }
 
-  // Methods from Character
   performAttack(): void {
     const range = 2.0;
-    const damage = this.name === 'Character' ? 10 : 5; // Character deals more damage
+    const damage = this.name === 'Character' ? 10 : 5;
     const raycaster = new Raycaster();
     raycaster.set(this.mesh!.position, this.mesh!.getWorldDirection(new Vector3()));
     raycaster.far = range;
@@ -298,13 +284,11 @@ export class Character extends Entity {
         if (this.game) {
           const message = `${this.name} hit ${targetEntity.name} for ${damage} damage.`;
           this.game.logEvent(this, "attack", message, targetEntity.name, { damage }, this.mesh!.position);
-          // Death is handled in takeDamage -> die -> logEvent
         }
       }
     }
   }
 
-  // Removed setEventLog as each character has its own log now
 
   handleStamina(deltaTime: number): void {
     const isMoving = this.moveState.forward !== 0 || this.moveState.right !== 0;
@@ -473,8 +457,6 @@ export class Character extends Entity {
     this.lastVelocityY = this.velocity.y;
     this.updateAnimations(deltaTime);
     this.updateBoundingBox();
-
-    // Log AI state changes
     if (this.aiState !== this.previousAiState) {
       if (this.game) {
         let message = '';
@@ -483,7 +465,6 @@ export class Character extends Entity {
           case 'roaming': message = `${this.name} is roaming.`; break;
           case 'movingToResource': message = `${this.name} is moving to a resource.`; break;
           case 'gathering': message = `${this.name} started gathering.`; break;
-          // Add other states as needed
         }
         if (message) {
           this.game.logEvent(this, this.aiState, message, undefined, {}, this.mesh!.position);
@@ -493,9 +474,9 @@ export class Character extends Entity {
     }
   }
 
-  die(attacker: Entity | null = null): void { // Accept attacker
+  die(attacker: Entity | null = null): void {
     if (this.isDead) return;
-    super.die(attacker); // Pass attacker to super
+    super.die(attacker);
     if (this.game) {
         const message = `${this.name} has died!`;
         const details = attacker ? { killedBy: attacker.name } : {};
@@ -520,21 +501,19 @@ export class Character extends Entity {
     this.isGathering = false;
     this.gatherAttackTimer = 0;
     this.aiState = 'idle';
-    this.previousAiState = 'idle'; // Reset previous state
+    this.previousAiState = 'idle';
     if (this.game) this.game.logEvent(this, "respawn", `${this.name} feels slightly disoriented but alive.`, undefined, {}, position);
     this.updateBoundingBox();
   }
 
-  // AI Logic
   computeAIMoveState(deltaTime: number, options: UpdateOptions = {}): MoveState {
     const moveState: MoveState = { forward: 0, right: 0, jump: false, sprint: false, interact: false, attack: false };
-    const { player } = options;
-
     switch (this.aiState) {
       case 'idle':
         this.actionTimer -= deltaTime;
         if (this.actionTimer <= 0) {
           this.actionTimer = 5 + Math.random() * 5;
+          this.decideNextAction();
           const resources = this.scene!.children.filter(child =>
             child.userData.isInteractable &&
             child.userData.interactionType === 'gather' &&
@@ -568,7 +547,7 @@ export class Character extends Entity {
             this.destination = null;
           }
         } else {
-             this.aiState = 'idle'; // Go idle if no destination
+             this.aiState = 'idle';
         }
         break;
 
@@ -599,7 +578,6 @@ export class Character extends Entity {
           if (this.targetResource && this.inventory) {
             const resourceName = this.targetResource.userData.resource;
             this.inventory.addItem(resourceName, 1);
-            // Log gather event
             if (this.game) {
               this.game.logEvent(this, "gather", `${this.name} gathered 1 ${resourceName}.`, undefined, { resource: resourceName }, this.mesh!.position);
             }
@@ -608,18 +586,18 @@ export class Character extends Entity {
             this.targetResource.visible = false;
             this.targetResource.userData.isInteractable = false;
             const respawnTime = this.targetResource.userData.respawnTime || 15000;
-            const resourceToRespawn = this.targetResource; // Capture the resource
+            const resourceToRespawn = this.targetResource;
             setTimeout(() => {
               if (resourceToRespawn && resourceToRespawn.userData) {
                 resourceToRespawn.visible = true;
                 resourceToRespawn.userData.isInteractable = true;
-                // Log respawn event? Maybe not necessary for AI observation
               }
             }, respawnTime);
           }
           this.targetResource = null;
           this.aiState = 'idle';
           this.isGathering = false;
+          this.currentIntent = '';
         }
         break;
     }
@@ -627,11 +605,10 @@ export class Character extends Entity {
     return moveState;
   }
 
-  // Interaction (from NPC)
   interact(player: Character): { type: string; text: string; state: string; options?: string[] } | null {
     this.lookAt(player.mesh!.position);
     const dialogue = this.getRandomIdleDialogue();
-    this.aiState = 'idle'; // Go idle when interacted with
+    this.aiState = 'idle';
     if (this.game) this.game.logEvent(this, "interact", `${this.name}: "${dialogue}"`, player.name, { dialogue }, this.mesh!.position);
     return { type: 'dialogue', text: dialogue, state: 'greeting', options: ['Switch Control'] };
   }
@@ -645,7 +622,6 @@ export class Character extends Entity {
     return dialogues[Math.floor(Math.random() * dialogues.length)];
   }
 
-  // New method to update observation
   updateObservation(allEntities: Array<any>, searchRadius: number): void {
     const nearbyCharacters: Observation['nearbyCharacters'] = [];
     const nearbyObjects: Observation['nearbyObjects'] = [];
@@ -653,15 +629,15 @@ export class Character extends Entity {
     const searchRadiusSq = searchRadius * searchRadius;
 
     for (const entity of allEntities) {
-      if (entity === this || entity === this.mesh) continue; // Skip self
+      if (entity === this || entity === this.mesh) continue;
 
       const entityMesh = (entity instanceof Entity || entity instanceof Object3D) ? (entity as any).mesh ?? entity : null;
-      if (!entityMesh || !entityMesh.parent) continue; // Skip entities without mesh or not in scene
+      if (!entityMesh || !entityMesh.parent) continue;
 
       const entityPosition = entityMesh.position;
       const distanceSq = selfPosition.distanceToSquared(entityPosition);
 
-      if (distanceSq > searchRadiusSq) continue; // Skip entities outside radius
+      if (distanceSq > searchRadiusSq) continue;
 
       if (entity instanceof Character) {
         nearbyCharacters.push({
@@ -669,11 +645,11 @@ export class Character extends Entity {
           position: entityPosition.clone(),
           health: entity.health,
           isDead: entity.isDead,
-          currentAction: entity.aiState || (entity === this.game?.activeCharacter ? 'player_controlled' : 'unknown'), // Use aiState or indicate player control
+          currentAction: entity.aiState || (entity === this.game?.activeCharacter ? 'player_controlled' : 'unknown'),
         });
-      } else if (entity.userData?.isInteractable && entity.visible) { // Check visibility for objects
+      } else if (entity.userData?.isInteractable && entity.visible) {
         nearbyObjects.push({
-          id: entity.userData.id || entity.uuid, // Use userData.id or uuid
+          id: entity.userData.id || entity.uuid,
           type: entity.name || 'unknown',
           position: entityPosition.clone(),
           isInteractable: entity.userData.isInteractable,
@@ -687,5 +663,94 @@ export class Character extends Entity {
       nearbyCharacters,
       nearbyObjects,
     };
+  }
+
+  generatePrompt(): string {
+    const persona = this.persona;
+    const observation = this.observation;
+    const eventLog = this.eventLog.getFormattedEntries().slice(-5).join('\n');
+
+    let nearbyCharacters = 'None';
+    if (observation && observation.nearbyCharacters.length > 0) {
+      nearbyCharacters = observation.nearbyCharacters.map(c => `- ${c.id} at (${c.position.x.toFixed(1)}, ${c.position.y.toFixed(1)}, ${c.position.z.toFixed(1)}), health: ${c.health}, ${c.isDead ? 'dead' : 'alive'}, action: ${c.currentAction}`).join('\n');
+    }
+
+    let nearbyObjects = 'None';
+    if (observation && observation.nearbyObjects.length > 0) {
+      nearbyObjects = observation.nearbyObjects.map(o => `- ${o.type} (${o.id}) at (${o.position.x.toFixed(1)}, ${o.position.y.toFixed(1)}, ${o.position.z.toFixed(1)}), interactable: ${o.isInteractable}${o.resource ? ', resource: ' + o.resource : ''}`).join('\n');
+    }
+
+    const prompt = `
+You are controlling an NPC in a game. Here is your persona:
+
+${persona}
+
+Here are your recent observations:
+
+Nearby characters:
+${nearbyCharacters}
+
+Nearby objects:
+${nearbyObjects}
+
+Here are the recent events you are aware of:
+
+${eventLog}
+
+Based on this information, decide your next action. Respond with a single sentence describing your action and intent, for example: "I will go to the forest to gather wood because I need materials for my farm."
+    `.trim();
+
+    return prompt;
+  }
+
+  async decideNextAction(): Promise<void> {
+    const prompt = this.generatePrompt();
+    try {
+      console.log('Prompt:', prompt);
+      // const response = await sendToGemini(prompt);
+      // console.log('Response:', response);
+      // if (!response) {
+      //   this.setActionFromAPI(response);
+      // }
+    } catch (error) {
+      console.error('Error querying API:', error);
+      this.aiState = 'roaming';
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * this.roamRadius;
+      this.destination = this.homePosition.clone().add(new Vector3(Math.cos(angle) * distance, 0, Math.sin(angle) * distance));
+      this.destination.y = getTerrainHeight(this.scene!, this.destination.x, this.destination.z);
+    }
+  }
+
+  setActionFromAPI(response: string): void {
+    const parts = response.split(' because ');
+    const action = parts[0].trim();
+    this.currentIntent = parts[1] ? parts[1].trim() : 'Thinking...';
+    if (action.includes('idle') || action.includes('rest')) {
+      this.aiState = 'idle';
+      this.destination = null;
+      this.targetResource = null;
+      this.target = null;
+    } else if (action.includes('roam') || action.includes('wander')) {
+      this.aiState = 'roaming';
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * this.roamRadius;
+      this.destination = this.homePosition.clone().add(new Vector3(Math.cos(angle) * distance, 0, Math.sin(angle) * distance));
+      this.destination.y = getTerrainHeight(this.scene!, this.destination.x, this.destination.z);
+    } else if (action.includes('gather') && action.includes('wood')) {
+      const trees = this.scene!.children.filter(child => child.userData.resource === 'wood' && child.visible);
+      if (trees.length > 0) {
+        const nearestTree = trees.reduce((closest, tree) => {
+          const dist = this.mesh!.position.distanceToSquared(tree.position);
+          return dist < closest.dist ? { tree, dist } : closest;
+        }, { tree: trees[0], dist: Infinity }).tree;
+        this.targetResource = nearestTree;
+        this.aiState = 'movingToResource';
+      } else {
+        this.aiState = 'idle';
+      }
+    } else {
+      this.aiState = 'idle';
+    }
   }
 }
