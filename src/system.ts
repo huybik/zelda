@@ -1084,7 +1084,13 @@ export class Controls {
       this.mouse.dx = 0;
       this.mouse.dy = 0;
       // Attempt to unpause the game when pointer locks
-      this.game?.setPauseState(false);
+      // Only unpause if no major UI is open
+      const inventoryIsOpen = this.game?.inventoryDisplay?.isOpen ?? false;
+      const journalIsOpen = this.game?.journalDisplay?.isOpen ?? false;
+      const chatIsOpen = this.game?.interactionSystem?.isChatOpen ?? false;
+      if (!inventoryIsOpen && !journalIsOpen && !chatIsOpen) {
+        this.game?.setPauseState(false);
+      }
     } else {
       this.isPointerLocked = false;
       // Reset keyboard state if lock is lost
@@ -1094,8 +1100,13 @@ export class Controls {
       this.mouse.dy = 0;
       this.updateContinuousMoveState(); // Reset keyboard movement
 
-      // Pause the game when pointer unlocks
-      this.game?.setPauseState(true);
+      // Pause the game when pointer unlocks, unless a UI element that requires interaction is open
+      const inventoryIsOpen = this.game?.inventoryDisplay?.isOpen ?? false;
+      const journalIsOpen = this.game?.journalDisplay?.isOpen ?? false;
+      const chatIsOpen = this.game?.interactionSystem?.isChatOpen ?? false;
+      if (!inventoryIsOpen && !journalIsOpen && !chatIsOpen) {
+        this.game?.setPauseState(true);
+      }
     }
   }
 
@@ -1160,10 +1171,30 @@ export class Controls {
   }
 
   onClick(event: MouseEvent): void {
-    const gameIsPaused = this.game?.isPaused ?? false;
+    // Check if the click target is part of the game canvas/container
+    // and not a UI element that should remain interactive.
+    const targetElement = event.target as HTMLElement;
+    // Check if the click is on the canvas itself or its container (this.domElement)
+    const isGameContainerClick =
+      targetElement === this.domElement ||
+      (this.domElement.contains(targetElement) &&
+        targetElement.closest(
+          "#inventory-display, #journal-display, #chat-container, .touch-button, #minimap-canvas"
+        ) === null);
+
+    // Check if UI panels that require pointer unlock are open
+    const inventoryIsOpen = this.game?.inventoryDisplay?.isOpen ?? false;
+    const journalIsOpen = this.game?.journalDisplay?.isOpen ?? false;
     const chatIsOpen = this.game?.interactionSystem?.isChatOpen ?? false;
-    if (!this.isPointerLocked && !gameIsPaused && !chatIsOpen)
+    const uiBlocksPointerLock = inventoryIsOpen || journalIsOpen || chatIsOpen;
+
+    // Attempt to lock pointer only if:
+    // 1. Pointer is not already locked.
+    // 2. No major UI panel (inventory, journal, chat) is open.
+    // 3. The click was inside the game container and not on an interactive UI element.
+    if (isGameContainerClick && !this.isPointerLocked && !uiBlocksPointerLock) {
       this.lockPointer();
+    }
   }
 
   // --- Touch Input ---
