@@ -155,8 +155,6 @@ export class Character extends Entity {
   game: Game | null = null;
   persona: string = "";
   aiController: AIController | null = null;
-  searchRadius: number = 120;
-  roamRadius: number = 10;
 
 
   private groundCheckOrigin = new Vector3();
