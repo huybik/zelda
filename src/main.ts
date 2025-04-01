@@ -43,12 +43,9 @@ import {
   EventEntry,
 } from "./ultils";
 import { AIController } from "./ai";
-// Removed sendToGemini import from here
 
 const WORLD_SIZE = 100;
 const TERRAIN_SEGMENTS = 15;
-
-// Removed sendToGemini function from here
 
 async function loadModels(): Promise<
   Record<string, { scene: Group; animations: AnimationClip[] }>
@@ -341,6 +338,7 @@ export class Game {
     this.entities.forEach((entity) => {
       if (entity instanceof Character) {
         entity.game = this;
+        entity.initIntentDisplay();
       }
     });
 
@@ -423,6 +421,7 @@ export class Game {
       this.camera!,
       this.activeCharacter!.mesh!
     );
+
     this.controls = new Controls(
       this.activeCharacter,
       this.thirdPersonCamera,
@@ -596,48 +595,8 @@ export class Game {
       if (this.activeCharacter.isDead) this.respawnPlayer();
     }
     this.hud!.update();
-    this.updateIntentDisplays();
     this.renderer.render(this.scene, this.camera);
     this.minimap!.update();
-  }
-
-  updateIntentDisplays(): void {
-    if (!this.intentContainer) return;
-    this.entities.forEach((entity) => {
-      if (
-        entity instanceof Character &&
-        entity.aiController &&
-        entity.aiController.currentIntent
-      ) {
-        let intentElement = document.getElementById(
-          `intent-${entity.id}`
-        ) as HTMLElement;
-        if (!intentElement) {
-          intentElement = document.createElement("div");
-          intentElement.id = `intent-${entity.id}`;
-          intentElement.classList.add("intent-text");
-          this.intentContainer!.appendChild(intentElement);
-        }
-        intentElement.textContent = `${entity.name}: ${entity.aiController.currentIntent}`;
-        const screenPos = this.worldToScreenPosition(
-          entity
-            .mesh!.position.clone()
-            .add(new Vector3(0, entity.userData.height! + 0.5, 0))
-        );
-        if (screenPos) {
-          intentElement.style.left = `${screenPos.x}px`;
-          intentElement.style.top = `${screenPos.y}px`;
-          intentElement.style.display = "block";
-        } else {
-          intentElement.style.display = "none";
-        }
-      } else if (entity instanceof Character) {
-        const intentElement = document.getElementById(`intent-${entity.id}`);
-        if (intentElement) {
-          intentElement.style.display = "none";
-        }
-      }
-    });
   }
 
   worldToScreenPosition(worldPos: Vector3): { x: number; y: number } | null {

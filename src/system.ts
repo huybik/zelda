@@ -574,8 +574,8 @@ Respond to the player in character, keeping your response relatively brief (1-2 
         this.chatInput.disabled = true; // Disable input while waiting for response
         this.chatSendButton.disabled = true;
 
-        // 1. Display player's message
-        this.player.showSpeechBubble(message);
+        // 1. Display player's message in html div
+        // this.player.showSpeechBubble(message);
 
         // 2. Log player's message
         this.game.logEvent(
@@ -600,7 +600,7 @@ Respond to the player in character, keeping your response relatively brief (1-2 
           }
 
           // 4. Display NPC's response
-          this.chatTarget.showSpeechBubble(npcMessage);
+          this.chatTarget.showTemporaryMessage(npcMessage);
 
           // 5. Log NPC's response
           this.game.logEvent(
@@ -613,7 +613,7 @@ Respond to the player in character, keeping your response relatively brief (1-2 
           );
         } catch (error) {
           console.error("Error during chat API call:", error);
-          this.chatTarget.showSpeechBubble("I... don't know what to say.");
+          this.chatTarget.showTemporaryMessage("I... don't know what to say.");
           this.game.logEvent(
             this.chatTarget,
             "chat_error",
@@ -835,6 +835,7 @@ export class ThirdPersonCamera {
     this.camera = camera;
     this.target = target;
     this.collisionRaycaster = new Raycaster();
+    this.collisionRaycaster.camera = camera;
     this.currentPosition = new Vector3();
     this.currentLookat = new Vector3();
     this.target.getWorldPosition(this.currentLookat);

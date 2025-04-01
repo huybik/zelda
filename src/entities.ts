@@ -14,6 +14,8 @@ import {
   AnimationAction,
   LoopOnce,
   Sprite, // Added Sprite
+  CanvasTexture,
+  SpriteMaterial,
 } from "three";
 import {
   EventLog,
@@ -27,11 +29,11 @@ import {
   EventEntry,
   GameEvent,
   InteractionResult,
-  createSpeechBubble,
-} from "./ultils"; // Added InteractionResult, createSpeechBubble
+} from "./ultils"; // Added InteractionResult
 import { Raycaster } from "three";
 import type { Game } from "./main";
 import { AIController } from "./ai";
+import { not } from "three/src/nodes/TSL.js";
 
 export class Entity {
   id: string;
@@ -45,6 +47,12 @@ export class Entity {
   isDead: boolean;
   userData: EntityUserData;
   game: Game | null = null;
+  intentCanvas: HTMLCanvasElement | null = null;
+  intentContext: CanvasRenderingContext2D | null = null;
+  intentTexture: CanvasTexture | null = null;
+  intentSprite: Sprite | null = null;
+  aiController: AIController | null = null;
+  rayCaster: Raycaster | null = null;
 
   constructor(scene: Scene, position: Vector3, name: string = "Entity") {
     this.id = `${name}_${getNextEntityId()}`;
@@ -57,6 +65,7 @@ export class Entity {
     this.health = 100;
     this.maxHealth = 100;
     this.isDead = false;
+
     this.userData = {
       entityReference: this,
       isEntity: true,
@@ -74,6 +83,63 @@ export class Entity {
   }
 
   update(deltaTime: number, options: UpdateOptions = {}): void {}
+
+  initIntentDisplay(): void {
+    this.rayCaster = new Raycaster();
+    if (this.game?.camera) {
+      this.rayCaster.camera = this.game.camera;
+    }
+    this.intentCanvas = document.createElement("canvas");
+    this.intentCanvas.width = 200;
+    this.intentCanvas.height = 50;
+    this.intentContext = this.intentCanvas.getContext("2d")!;
+    this.intentTexture = new CanvasTexture(this.intentCanvas);
+    const material = new SpriteMaterial({ map: this.intentTexture });
+    this.intentSprite = new Sprite(material);
+    this.intentSprite.scale.set(2, 0.5, 1);
+    this.intentSprite.position.set(0, CHARACTER_HEIGHT + 0.5, 0);
+    this.mesh!.add(this.intentSprite);
+    this.updateIntentDisplay("");
+  }
+
+  updateIntentDisplay(text: string): void {
+    if (!this.intentContext || !this.intentCanvas || !this.intentTexture)
+      return;
+    this.intentContext.clearRect(
+      0,
+      0,
+      this.intentCanvas.width,
+      this.intentCanvas.height
+    );
+    this.intentContext.fillStyle = "rgba(0, 0, 0, 0.5)";
+    this.intentContext.fillRect(
+      0,
+      0,
+      this.intentCanvas.width,
+      this.intentCanvas.height
+    );
+    this.intentContext.font = "24px Arial";
+    this.intentContext.fillStyle = "white";
+    this.intentContext.textAlign = "center";
+    this.intentContext.textBaseline = "middle";
+    this.intentContext.fillText(
+      text,
+      this.intentCanvas.width / 2,
+      this.intentCanvas.height / 2
+    );
+    this.intentTexture.needsUpdate = true;
+  }
+
+  showTemporaryMessage(message: string, duration: number = 5000): void {
+    if (!this.intentSprite) return;
+    const originalText = this.aiController
+      ? this.aiController.currentIntent
+      : "";
+    this.updateIntentDisplay(message);
+    setTimeout(() => {
+      this.updateIntentDisplay(originalText);
+    }, duration);
+  }
 
   updateBoundingBox(): void {
     if (!this.mesh) return;
@@ -334,18 +400,18 @@ export class Character extends Entity {
   performAttack(): void {
     const range = 2.0;
     const damage = this.name === "Character" ? 10 : 5;
-    const raycaster = new Raycaster();
     // Set ray from character's position and forward direction
-    raycaster.set(
+    if (!this.rayCaster) return;
+    this.rayCaster.set(
       this.mesh!.position,
       this.mesh!.getWorldDirection(new Vector3())
     );
-    raycaster.far = range;
+    this.rayCaster.far = range;
     // Filter entities, excluding the attacker's mesh
     const entities = this.scene!.children.filter(
       (child) => child.userData.isEntity && child !== this.mesh
     );
-    const intersects = raycaster.intersectObjects(entities, true);
+    const intersects = this.rayCaster.intersectObjects(entities, true);
     if (intersects.length > 0) {
       const hit = intersects[0];
       let targetEntity: Entity | null = null;
@@ -477,16 +543,15 @@ export class Character extends Entity {
       .copy(this.mesh!.position)
       .add(new Vector3(0, 0.1, 0));
     const rayLength = 0.1 + this.groundCheckDistance;
-    const raycaster = new Raycaster(
-      this.groundCheckOrigin,
-      this.groundCheckDirection,
-      0,
-      rayLength
-    );
+    if (!this.rayCaster) return;
+    this.rayCaster.set(this.groundCheckOrigin, this.groundCheckDirection);
+    this.rayCaster.far = rayLength;
+    this.rayCaster.near = 0;
+
     const checkAgainst = collidables.filter(
       (obj) => obj !== this.mesh && obj?.userData?.isCollidable
     );
-    const intersects = raycaster.intersectObjects(checkAgainst, true);
+    const intersects = this.rayCaster.intersectObjects(checkAgainst, true);
     let foundGround = false;
     let groundY = -Infinity;
     if (intersects.length > 0) {
@@ -764,32 +829,5 @@ export class Character extends Entity {
         player.mesh!.position
       );
     return { type: "chat" }; // Signal to InteractionSystem to open chat UI
-  }
-
-  // Method to display speech bubble
-  showSpeechBubble(text: string, duration: number = 5000): void {
-    if (!this.mesh) return;
-    // Remove existing bubble if any
-    if (this.userData.speechBubble) {
-      this.mesh.remove(this.userData.speechBubble);
-      this.userData.speechBubble = undefined;
-    }
-
-    const bubble = createSpeechBubble(text);
-    const height = this.userData.height || CHARACTER_HEIGHT;
-    bubble.position.set(0, height + 0.5, 0); // Position above head
-
-    this.mesh.add(bubble);
-    this.userData.speechBubble = bubble;
-
-    // Set timeout to remove
-    setTimeout(() => {
-      if (bubble.parent) {
-        bubble.parent.remove(bubble);
-      }
-      if (this.userData.speechBubble === bubble) {
-        this.userData.speechBubble = undefined;
-      }
-    }, duration);
   }
 }

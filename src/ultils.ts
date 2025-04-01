@@ -8,11 +8,7 @@ import {
   Object3D,
   Raycaster,
   Box3,
-  Sprite,
-  SpriteMaterial,
-  CanvasTexture, // Added imports for speech bubble
 } from "three";
-import { SimplexNoise } from "three/examples/jsm/math/SimplexNoise.js";
 
 export interface EntityUserData {
   entityReference: any | null;
@@ -27,7 +23,6 @@ export interface EntityUserData {
   boundingBox?: Box3;
   height?: number;
   radius?: number;
-  speechBubble?: Sprite; // Added for speech bubble management
   [key: string]: unknown;
 }
 
@@ -392,46 +387,4 @@ export class EventLog {
     const entriesCopy = [...this.entries];
     this.onChangeCallbacks.forEach((cb) => cb(entriesCopy));
   }
-}
-
-// Function to create speech bubble sprite
-export function createSpeechBubble(
-  text: string,
-  maxWidth: number = 200
-): Sprite {
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d")!;
-
-  // Measure text
-  ctx.font = "16px Arial";
-  const textWidth = ctx.measureText(text).width;
-  const width = Math.min(maxWidth, textWidth + 20); // Add padding
-  const height = 40; // Fixed height for simplicity
-
-  canvas.width = width;
-  canvas.height = height;
-
-  // Draw background (white bubble)
-  ctx.fillStyle = "white";
-  ctx.fillRect(0, 0, width, height);
-  // Optional: Add a border
-  // ctx.strokeStyle = 'black';
-  // ctx.lineWidth = 1;
-  // ctx.strokeRect(0, 0, width, height);
-
-  // Draw text
-  ctx.fillStyle = "black";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, width / 2, height / 2);
-
-  // Create texture and sprite
-  const texture = new CanvasTexture(canvas);
-  const spriteMaterial = new SpriteMaterial({ map: texture });
-  const sprite = new Sprite(spriteMaterial);
-
-  // Scale the sprite appropriately
-  sprite.scale.set(width / 10, height / 10, 1); // Adjust scale as needed
-
-  return sprite;
 }
