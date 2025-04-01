@@ -8,23 +8,6 @@ import { Raycaster } from 'three';
 import type { Game } from './main';
 import { AIController } from './ai';
 
-export interface Observation {
-  timestamp: number;
-  nearbyCharacters: Array<{
-    id: string;
-    position: Vector3;
-    health: number;
-    isDead: boolean;
-    currentAction: string;
-  }>;
-  nearbyObjects: Array<{
-    id: string;
-    type: string;
-    position: Vector3;
-    isInteractable: boolean;
-    resource?: string;
-  }>;
-}
 
 
 export class Entity {

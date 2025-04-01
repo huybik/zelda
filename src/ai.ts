@@ -1,6 +1,6 @@
 // src/ai.ts
 import { Vector3, Object3D } from 'three';
-import { Character, Entity, Observation } from './entities';
+import { Character, Entity } from './entities';
 import { MoveState, getTerrainHeight, EventEntry } from './ultils';
 import type { Game } from './main';
 
@@ -48,6 +48,24 @@ export async function sendToGemini(prompt: string): Promise<string | null> {
   return null;
 }
 
+export interface Observation {
+  timestamp: number;
+  nearbyCharacters: Array<{
+    id: string;
+    position: Vector3;
+    health: number;
+    isDead: boolean;
+    currentAction: string;
+  }>;
+  nearbyObjects: Array<{
+    id: string;
+    type: string;
+    position: Vector3;
+    isInteractable: boolean;
+    resource?: string;
+  }>;
+}
+
 
 export class AIController {
   character: Character;
@@ -61,12 +79,13 @@ export class AIController {
   gatherDuration: number = 0;
   actionTimer: number = 5;
   interactionDistance: number = 3;
-  searchRadius: number = 120;
+  searchRadius: number = 60;
   target: Entity | null = null;
   observation: Observation | null = null;
   persona: string = "";
   currentIntent: string = "";
 
+    
   constructor(character: Character) {
     this.character = character;
     this.homePosition = character.mesh!.position.clone();
@@ -271,27 +290,27 @@ export class AIController {
     }
 
     const prompt = `
-You are controlling an NPC named ${this.character.name} in a game. Here is your persona:
+    You are controlling an NPC named ${this.character.name} in a game. Here is your persona:
 
-${persona}
+    ${persona}
 
-Here are your recent observations:
+    Here are your recent observations:
 
-Nearby characters:
-${nearbyCharacters}
+    Nearby characters:
+    ${nearbyCharacters}
 
-Nearby objects:
-${nearbyObjects}
+    Nearby objects:
+    ${nearbyObjects}
 
-Here are the recent events you are aware of:
+    Here are the recent events you are aware of:
 
-${eventLog}
+    ${eventLog}
 
-Based on this information, decide your next action. Respond with a single sentence describing your action and intent, for example: "I will go to the forest to gather wood because I need materials for my farm."
-    `.trim();
+    Based on this information, decide your next action. Respond with a single sentence describing your action and intent, for example: "I will go to the forest to gather wood because I need materials for my farm."
+        `.trim();
 
-    return prompt;
-  }
+        return prompt;
+    }
 
   async decideNextAction(): Promise<void> {
     const prompt = this.generatePrompt();
