@@ -96,6 +96,7 @@ export class AIController {
 
   computeAIMoveState(deltaTime: number): MoveState {
     const moveState: MoveState = { forward: 0, right: 0, jump: false, sprint: false, interact: false, attack: false };
+
     switch (this.aiState) {
       case 'idle':
         this.actionTimer -= deltaTime;
@@ -318,13 +319,13 @@ export class AIController {
     const prompt = this.generatePrompt();
     try {
       console.log(`AI (${this.character.name}) Prompt:`, prompt);
-      // const response = await sendToGemini(prompt);
-      // console.log(`AI (${this.character.name}) Response:`, response);
-      // if (response) {
-      //   this.setActionFromAPI(response);
-      // } else {
-      //    this.fallbackToDefaultBehavior();
-      // }
+      const response = await sendToGemini(prompt);
+      console.log(`AI (${this.character.name}) Response:`, response);
+      if (response) {
+        this.setActionFromAPI(response);
+      } else {
+         this.fallbackToDefaultBehavior();
+      }
     } catch (error) {
       console.error(`Error querying API for ${this.character.name}:`, error);
       this.fallbackToDefaultBehavior();
