@@ -6,7 +6,7 @@ import {
 import { EventLog, Inventory, EntityUserData, UpdateOptions, smoothQuaternionSlerp, getNextEntityId, MoveState, getTerrainHeight, EventEntry, GameEvent } from './ultils';
 import { Raycaster } from 'three';
 import type { Game } from './main';
-// import  { sendToGemini } from './main';
+import  { sendToGemini } from './main';
 
 export interface Observation {
   timestamp: number;
@@ -513,8 +513,8 @@ export class Character extends Entity {
         this.actionTimer -= deltaTime;
         if (this.actionTimer <= 0) {
           this.actionTimer = 5 + Math.random() * 5;
-          this.decideNextAction();
-          const resources = this.scene!.children.filter(child =>
+          if (false) {this.decideNextAction();}
+          else {const resources = this.scene!.children.filter(child =>
             child.userData.isInteractable &&
             child.userData.interactionType === 'gather' &&
             child.visible &&
@@ -529,7 +529,8 @@ export class Character extends Entity {
             this.destination = this.homePosition.clone().add(new Vector3(Math.cos(angle) * distance, 0, Math.sin(angle) * distance));
             this.destination.y = getTerrainHeight(this.scene!, this.destination.x, this.destination.z); // Ensure destination is on terrain
             this.aiState = 'roaming';
-          }
+          }}
+          
         }
         break;
 
@@ -707,11 +708,11 @@ Based on this information, decide your next action. Respond with a single senten
     const prompt = this.generatePrompt();
     try {
       console.log('Prompt:', prompt);
-      // const response = await sendToGemini(prompt);
-      // console.log('Response:', response);
-      // if (!response) {
-      //   this.setActionFromAPI(response);
-      // }
+      const response = await sendToGemini(prompt);
+      console.log('Response:', response);
+      if (response) {
+        this.setActionFromAPI(response);
+      }
     } catch (error) {
       console.error('Error querying API:', error);
       this.aiState = 'roaming';

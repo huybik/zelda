@@ -1,21 +1,64 @@
 // src/main.ts
-
 import {
   Scene, PerspectiveCamera, WebGLRenderer, Clock, Vector3, Color, Fog, Mesh,
   PlaneGeometry, MeshLambertMaterial, AmbientLight, DirectionalLight, HemisphereLight,
-  BoxGeometry, MeshBasicMaterial, DoubleSide, PCFSoftShadowMap, MathUtils, Object3D, Group, AnimationClip
+  BoxGeometry, MeshBasicMaterial, DoubleSide, PCFSoftShadowMap, MathUtils, Object3D, Group, AnimationClip, Vector2
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import WebGL from 'three/examples/jsm/capabilities/WebGL.js';
-import { Character, Entity, Observation } from './entities'; // Updated import, added Entity, Observation
+import { Character, Entity, Observation } from './entities';
 import { createTree, createRock, createHerb } from './objects';
 import { InteractionSystem, Physics, ThirdPersonCamera, Controls } from './system';
 import { HUD, InventoryDisplay, JournalDisplay, Minimap } from './ui';
-import { Inventory, EventLog, getTerrainHeight, randomFloat, smoothstep, EventEntry } from './ultils'; // Added EventEntry
+import { Inventory, EventLog, getTerrainHeight, randomFloat, smoothstep, EventEntry } from './ultils';
+
 
 const WORLD_SIZE = 100;
 const TERRAIN_SEGMENTS = 15;
+const API_KEY = import.meta.env.VITE_API_KEY;
+const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + API_KEY;
+
+export async function sendToGemini(prompt: string): Promise<string | null> {
+  if (!API_KEY) {
+    console.warn('API_KEY is not configured. Please set a valid API_KEY in .env file to use Gemini API.');
+    return "I will roam around because I am exploring.";
+  }
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }],
+        }],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`HTTP error! status: ${response.status}`);
+      const errorData = await response.json(); // Try to get error details
+      console.error("Error details:", errorData);
+      return null;
+    }
+    
+    const data = await response.json();
+    if (data.candidates && data.candidates.length > 0 && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts.length > 0) {
+      return data.candidates[0].content.parts[0].text as string;
+    }
+    else {
+      console.error("No text content found in the API response.");
+    }
+  }
+  catch (error) {
+        console.error("Error during API call:", error);
+        return "I will roam around because I am exploring.";
+  }
+
+  return null; // Ensure all code paths return a value
+}
 
 
 async function loadModels(): Promise<Record<string, { scene: Group; animations: AnimationClip[] }>> {
@@ -107,7 +150,7 @@ function populateEnvironment(
     const character = new Character(scene, pos, name, model.scene, model.animations, charInventory);
     character.mesh!.position.y = getTerrainHeight(scene, pos.x, pos.z);
     if (isPlayer) {
-        character.name = 'Character'; // Ensure player retains name
+        character.name = 'Character';
         character.userData.isPlayer = true;
         character.userData.isNPC = false;
     }
@@ -116,9 +159,13 @@ function populateEnvironment(
     interactableObjects.push(character);
     return character;
   };
-  addCharacter(villageCenter.clone().add(new Vector3(-12, 0, 2)), 'Farmer Giles', 'tavernMan');
-  addCharacter(villageCenter.clone().add(new Vector3(10, 0, -3)), 'Blacksmith Brynn', 'woman');
-  addCharacter(new Vector3(halfSize * 0.4, 0, -halfSize * 0.3), 'Hunter Rex', 'oldMan');
+  const farmerGiles = addCharacter(villageCenter.clone().add(new Vector3(-12, 0, 2)), 'Farmer Giles', 'tavernMan');
+  farmerGiles.persona = "A hardworking farmer who values community and is always willing to help others. He is knowledgeable about crops and livestock but can be a bit stubborn. He prefers to stay close to his farm but will venture out if necessary.";
+  const blacksmithBrynn = addCharacter(villageCenter.clone().add(new Vector3(10, 0, -3)), 'Blacksmith Brynn', 'woman');
+  blacksmithBrynn.persona = "A skilled artisan who takes pride in her work. She is strong-willed and independent, often focused on her craft. She can be gruff but has a kind heart, especially towards those in need.";
+  const hunterRex = addCharacter(new Vector3(halfSize * 0.4, 0, -halfSize * 0.3), 'Hunter Rex', 'oldMan');
+  hunterRex.persona = "An experienced tracker and survivalist. He is quiet and observant, preferring the wilderness over the village. He is resourceful and can be relied upon in tough situations but is not very social.";
+
 
   const addObject = (creator: (pos: Vector3, ...args: any[]) => Group, count: number, minDistSq: number, ...args: any[]) => {
      for (let i = 0; i < count; i++) {
@@ -133,8 +180,8 @@ function populateEnvironment(
       scene.add(obj);
       if (obj.userData.isCollidable) collidableObjects.push(obj);
       if (obj.userData.isInteractable) interactableObjects.push(obj);
-      entities.push(obj); // Add objects to entities list as well
-      obj.userData.id = `${obj.name}_${obj.uuid.substring(0, 6)}`; // Assign an ID
+      entities.push(obj);
+      obj.userData.id = `${obj.name}_${obj.uuid.substring(0, 6)}`;
     }
   };
   addObject(createTree, 100, 25 * 25);
@@ -166,17 +213,16 @@ function createWorldBoundary(scene: Scene, worldSize: number, collidableObjects:
   createWall(0, -halfSize - thickness / 2, worldSize + thickness * 2, thickness, "Boundary-Z");
 }
 
-export class Game { // Export Game class
+export class Game {
   scene: Scene | null = null;
   renderer: WebGLRenderer | null = null;
   camera: PerspectiveCamera | null = null;
   clock: Clock | null = null;
-  activeCharacter: Character | null = null; // Replaces player
+  activeCharacter: Character | null = null;
   thirdPersonCamera: ThirdPersonCamera | null = null;
   controls: Controls | null = null;
   physics: Physics | null = null;
   inventory: Inventory | null = null;
-  // eventLog: EventLog | null = null; // Removed game-level event log
   interactionSystem: InteractionSystem | null = null;
   hud: HUD | null = null;
   minimap: Minimap | null = null;
@@ -186,6 +232,7 @@ export class Game { // Export Game class
   collidableObjects: Object3D[] = [];
   interactableObjects: Array<any> = [];
   isPaused: boolean = false;
+  intentContainer: HTMLElement | null = null;
 
   constructor() {}
 
@@ -194,17 +241,16 @@ export class Game { // Export Game class
     this.initRenderer();
     this.initScene();
     this.initCamera();
-    this.initInventory(); // Separate inventory init
+    this.initInventory();
     const models = await loadModels();
-    this.initPlayer(models); // Player needs inventory
+    this.initPlayer(models);
     this.initControls();
     this.initPhysics();
-    this.initEnvironment(models); // Environment needs inventory for NPCs
-    this.initSystems(); // Interaction system needs active character's log
-    this.initUI(); // UI needs active character's log
+    this.initEnvironment(models);
+    this.initSystems();
+    this.initUI();
     this.setupUIControls();
 
-    // Set game reference for all characters
     this.entities.forEach(entity => {
       if (entity instanceof Character) {
         entity.game = this;
@@ -221,6 +267,7 @@ export class Game { // Export Game class
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFSoftShadowMap;
     document.getElementById('game-container')?.appendChild(this.renderer.domElement);
+    this.intentContainer = document.getElementById('intent-container');
   }
 
   initScene(): void {
@@ -238,19 +285,18 @@ export class Game { // Export Game class
     this.camera = new PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
   }
 
-  initInventory(): void { // Renamed from initInventoryAndEventLog
-    this.inventory = new Inventory(9); // Player inventory
+  initInventory(): void {
+    this.inventory = new Inventory(9);
   }
 
   initPlayer(models: Record<string, { scene: Group; animations: AnimationClip[] }>): void {
     const playerSpawnPos = new Vector3(0, 0, 5);
     playerSpawnPos.y = getTerrainHeight(this.scene!, playerSpawnPos.x, playerSpawnPos.z);
     this.activeCharacter = new Character(this.scene!, playerSpawnPos, 'Character', models.player.scene, models.player.animations, this.inventory!);
-    this.activeCharacter.userData.isPlayer = true; // Mark as player
+    this.activeCharacter.userData.isPlayer = true;
     this.activeCharacter.userData.isNPC = false;
     this.entities.push(this.activeCharacter);
     this.collidableObjects.push(this.activeCharacter.mesh!);
-    // No need to set event log here, it's initialized in constructor
   }
 
   initControls(): void {
@@ -263,12 +309,10 @@ export class Game { // Export Game class
   }
 
   initEnvironment(models: Record<string, { scene: Group; animations: AnimationClip[] }>): void {
-    // Pass player inventory for now, maybe NPCs need their own later
     populateEnvironment(this.scene!, WORLD_SIZE, this.collidableObjects, this.interactableObjects, this.entities, this.inventory!, models);
   }
 
   initSystems(): void {
-    // Pass active character's event log
     this.interactionSystem = new InteractionSystem(this.activeCharacter!, this.camera!, this.interactableObjects, this.controls!, this.inventory!, this.activeCharacter!.eventLog);
   }
 
@@ -276,7 +320,6 @@ export class Game { // Export Game class
     this.hud = new HUD(this.activeCharacter!);
     this.minimap = new Minimap(document.getElementById('minimap-canvas') as HTMLCanvasElement, this.activeCharacter!, this.entities, WORLD_SIZE);
     this.inventoryDisplay = new InventoryDisplay(this.inventory!);
-    // Initialize JournalDisplay with the active character's event log
     this.journalDisplay = new JournalDisplay(this.activeCharacter!.eventLog);
   }
 
@@ -292,7 +335,7 @@ export class Game { // Export Game class
       this.journalDisplay!.toggle();
       this.setPauseState(this.journalDisplay!.isOpen);
     });
-    this.controls!.addKeyDownListener('KeyC', () => { // Switch control key
+    this.controls!.addKeyDownListener('KeyC', () => {
       if (this.interactionSystem!.currentTarget instanceof Character && this.interactionSystem!.currentTarget !== this.activeCharacter) {
         this.switchControlTo(this.interactionSystem!.currentTarget);
       }
@@ -320,8 +363,6 @@ export class Game { // Export Game class
     if (index === -1) return;
     const item = this.inventory!.getItem(index);
     if (!item) return;
-
-    // Use logEvent for examining items
     this.logEvent(this.activeCharacter!, 'examine', `Examined ${item.name}.`, undefined, { item: item.name }, this.activeCharacter!.mesh!.position);
     event.stopPropagation();
   }
@@ -346,26 +387,22 @@ export class Game { // Export Game class
     const deltaTime = Math.min(this.clock.getDelta(), 0.05);
     this.controls!.update(deltaTime);
     if (!this.isPaused) {
-      // Update active character first
       this.activeCharacter.update(deltaTime, {
         moveState: this.controls!.moveState,
         collidables: this.collidableObjects
       });
-      this.physics!.update(deltaTime); // Physics update after active character moves
+      this.physics!.update(deltaTime);
 
-      // Update other entities (NPCs)
       this.entities.forEach(entity => {
-        if (entity === this.activeCharacter) return; // Skip active character
+        if (entity === this.activeCharacter) return;
         if (entity instanceof Character) {
           const aiMoveState = entity.computeAIMoveState(deltaTime, { player: this.activeCharacter });
           entity.update(deltaTime, { moveState: aiMoveState, collidables: this.collidableObjects });
         } else if (entity.update) {
-            // Update other non-character entities if they have an update method
             entity.update(deltaTime);
         }
       });
 
-      // Update observations for all characters AFTER all entities have moved/updated
       this.entities.forEach(entity => {
         if (entity instanceof Character) {
           entity.updateObservation(this.entities, entity.searchRadius);
@@ -378,8 +415,48 @@ export class Game { // Export Game class
       if (this.activeCharacter.isDead) this.respawnPlayer();
     }
     this.hud!.update();
+    // this.updateIntentDisplays();
+     this.renderer.render(this.scene, this.camera);
     this.minimap!.update();
-    this.renderer.render(this.scene, this.camera);
+     
+  }
+
+  updateIntentDisplays(): void {
+    if (!this.intentContainer) return;
+    this.entities.forEach(entity => {
+      if (entity instanceof Character && entity.currentIntent) {
+        let intentElement = document.getElementById(`intent-${entity.id}`) as HTMLElement;
+        if (!intentElement) {
+          intentElement = document.createElement('div');
+          intentElement.id = `intent-${entity.id}`;
+          intentElement.classList.add('intent-text');
+          this.intentContainer!.appendChild(intentElement);
+        }
+        intentElement.textContent = entity.currentIntent;
+        const screenPos = this.worldToScreenPosition(entity.mesh!.position.clone().add(new Vector3(0, entity.userData.height! + 0.5, 0)));
+        if (screenPos) {
+          intentElement.style.left = `${screenPos.x}px`;
+          intentElement.style.top = `${screenPos.y}px`;
+          intentElement.style.display = 'block';
+        } else {
+          intentElement.style.display = 'none';
+        }
+      } else if (entity instanceof Character) {
+        const intentElement = document.getElementById(`intent-${entity.id}`);
+        if (intentElement) {
+          intentElement.style.display = 'none';
+        }
+      }
+    });
+  }
+
+  worldToScreenPosition(worldPos: Vector3): {x: number, y: number} | null {
+    if (!this.camera || !this.renderer) return null;
+    const vector = worldPos.clone().project(this.camera);
+    const x = (vector.x * 0.5 + 0.5) * this.renderer.domElement.width;
+    const y = (vector.y * -0.5 + 0.5) * this.renderer.domElement.height;
+    if (vector.z > 1) return null;
+    return {x, y};
   }
 
   respawnPlayer(): void {
@@ -395,7 +472,7 @@ export class Game { // Export Game class
     }
     const respawnPos = new Vector3(0, 0, 10);
     respawnPos.y = getTerrainHeight(this.scene!, respawnPos.x, respawnPos.z);
-    this.activeCharacter!.respawn(respawnPos); // Respawn handles its own log message
+    this.activeCharacter!.respawn(respawnPos);
     this.setPauseState(false);
     this.interactionSystem!.cancelGatherAction();
   }
@@ -404,9 +481,7 @@ export class Game { // Export Game class
     if (targetCharacter === this.activeCharacter) return;
 
     const switchMessage = `Switched control to ${targetCharacter.name}.`;
-    // Log to the outgoing character's log
     this.logEvent(this.activeCharacter!, "control_switch_out", switchMessage, targetCharacter.name, {}, this.activeCharacter!.mesh!.position);
-    // Log to the incoming character's log
     this.logEvent(targetCharacter, "control_switch_in", switchMessage, targetCharacter.name, {}, targetCharacter.mesh!.position);
 
 
@@ -415,23 +490,14 @@ export class Game { // Export Game class
     this.thirdPersonCamera!.target = targetCharacter.mesh!;
     this.physics!.player = targetCharacter;
     this.interactionSystem!.player = targetCharacter;
-    this.interactionSystem!.eventLog = targetCharacter.eventLog; // Update interaction system log
+    this.interactionSystem!.eventLog = targetCharacter.eventLog;
     this.hud!.player = targetCharacter;
     this.minimap!.player = targetCharacter;
-    // Update Journal Display to use the new active character's log
     this.journalDisplay!.setEventLog(this.activeCharacter.eventLog);
-    targetCharacter.aiState = 'idle'; // Reset AI state for new active character
-    targetCharacter.previousAiState = 'idle'; // Reset previous state
-    targetCharacter.userData.isPlayer = true; // Mark as player
+    targetCharacter.aiState = 'idle';
+    targetCharacter.previousAiState = 'idle';
+    targetCharacter.userData.isPlayer = true;
     targetCharacter.userData.isNPC = false;
-
-    // Mark old character as NPC again (if needed)
-    // this.entities.forEach(e => {
-    //     if (e instanceof Character && e !== this.activeCharacter) {
-    //         e.userData.isPlayer = false;
-    //         e.userData.isNPC = true;
-    //     }
-    // });
   }
 
   onWindowResize(): void {
@@ -442,7 +508,6 @@ export class Game { // Export Game class
     }
   }
 
-  // New method for logging events globally and distributing them
   logEvent(actor: Character, action: string, message: string, target?: string, details: Record<string, any> = {}, location: Vector3 = actor.mesh!.position): void {
     const eventEntry: EventEntry = {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -451,19 +516,13 @@ export class Game { // Export Game class
       action,
       target,
       details,
-      location: location.clone(), // Clone location to prevent mutation
+      location: location.clone(),
     };
-
-    // Add to actor's log directly using the structured entry
     actor.eventLog.addEntry(eventEntry);
-
-    // Find nearby characters and add the event to their logs
     this.entities.forEach(entity => {
       if (entity instanceof Character && entity !== actor) {
         const distanceSq = location.distanceToSquared(entity.mesh!.position);
-        // Use the *observing* character's search radius
         if (distanceSq <= entity.searchRadius * entity.searchRadius) {
-           // Add the same structured entry to the observer's log
            entity.eventLog.addEntry(eventEntry);
         }
       }
@@ -471,8 +530,6 @@ export class Game { // Export Game class
   }
 }
 
-// Make game instance accessible globally for easier access in some places (like InteractionSystem)
-// Consider dependency injection or a better pattern for larger projects.
 declare global {
     interface Window { game: Game; }
 }
@@ -481,7 +538,7 @@ declare global {
 if (WebGL.isWebGL2Available()) {
   async function startGame() {
     const gameInstance = new Game();
-    window.game = gameInstance; // Assign to global window object
+    window.game = gameInstance;
     await gameInstance.init();
     gameInstance.start();
     const onResize = () => gameInstance.onWindowResize();
