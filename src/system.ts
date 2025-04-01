@@ -140,7 +140,7 @@ export class InteractionSystem {
     return null;
   }
 
-   tryInteract(targetInstance: any): void {
+  tryInteract(targetInstance: any): void {
     if (!targetInstance || !targetInstance.userData?.isInteractable) return;
     let targetPosition: Vector3;
     const targetMesh = (targetInstance as any).mesh ?? targetInstance;
@@ -153,29 +153,26 @@ export class InteractionSystem {
 
     const distance = this.player.mesh!.position.distanceTo(targetPosition);
     if (distance > this.interactionDistance * 1.1) {
-      this.currentTarget = null;
-      this.currentTargetMesh = null;
-      this.hidePrompt();
-      return;
+        this.currentTarget = null;
+        this.currentTargetMesh = null;
+        this.hidePrompt();
+        return;
     }
     let result: InteractionResult | null = null;
     if (typeof targetInstance.interact === 'function') {
-      // Pass player, inventory, and the *player's* event log
-      result = targetInstance.interact(this.player, this.inventory, this.player.eventLog);
-      // Switch control logic remains in Game class via key listener
+        result = targetInstance.interact(this.player, this.inventory, this.player.eventLog);
     } else if (targetInstance.userData.interactionType === 'gather' && targetInstance.userData.resource) {
-      this.startGatherAction(targetInstance);
-      result = { type: 'gather_start' };
+        this.startGatherAction(targetInstance);
+        result = { type: 'gather_start' };
     } else {
-      // Default interaction: examine
-      const message = `Examined ${targetInstance.name || 'object'}.`;
-      if (this.player.game) this.player.game.logEvent(this.player, 'examine', message, targetInstance.name || targetInstance.id, {}, targetPosition);
-      result = { type: 'message', message: "You look at the object." };
+        const message = `Examined ${targetInstance.name || 'object'}.`;
+        if (this.player.game) this.player.game.logEvent(this.player, 'examine', message, targetInstance.name || targetInstance.id, {}, targetPosition);
+        result = { type: 'message', message: "You look at the object." };
     }
     if (result) this.handleInteractionResult(result, targetInstance);
     if (result?.type !== 'gather_start' && !targetInstance.userData?.isInteractable) {
-      this.currentTarget = null;
-      this.currentTargetMesh = null;
+        this.currentTarget = null;
+        this.currentTargetMesh = null;
     }
   }
 

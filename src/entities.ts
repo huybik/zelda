@@ -240,30 +240,35 @@ export class Character extends Entity {
     const range = 2.0;
     const damage = this.name === 'Character' ? 10 : 5;
     const raycaster = new Raycaster();
+    // Set ray from character's position and forward direction
     raycaster.set(this.mesh!.position, this.mesh!.getWorldDirection(new Vector3()));
     raycaster.far = range;
+    // Filter entities, excluding the attacker's mesh
     const entities = this.scene!.children.filter(child => child.userData.isEntity && child !== this.mesh);
     const intersects = raycaster.intersectObjects(entities, true);
     if (intersects.length > 0) {
-      const hit = intersects[0];
-      let targetEntity: Entity | null = null;
-      let hitObject = hit.object;
-      while(hitObject && !targetEntity) {
-          if (hitObject.userData?.entityReference instanceof Entity) {
-              targetEntity = hitObject.userData.entityReference;
-          }
-          hitObject = hitObject.parent!;
-      }
-
-      if (targetEntity && targetEntity.takeDamage) {
-        targetEntity.takeDamage(damage, this);
-        if (this.game) {
-          const message = `${this.name} hit ${targetEntity.name} for ${damage} damage.`;
-          this.game.logEvent(this, "attack", message, targetEntity.name, { damage }, this.mesh!.position);
+        const hit = intersects[0];
+        let targetEntity: Entity | null = null;
+        let hitObject = hit.object;
+        // Traverse up the hierarchy to find the entity reference
+        while (hitObject && !targetEntity) {
+            if (hitObject.userData?.entityReference instanceof Entity) {
+                targetEntity = hitObject.userData.entityReference;
+            }
+            hitObject = hitObject.parent!;
         }
-      }
+        // Ensure we don’t hit ourselves and target can take damage
+        if (targetEntity && targetEntity !== this && targetEntity.takeDamage) {
+            targetEntity.takeDamage(damage, this);
+            if (this.game) {
+                const message = `${this.name} hit ${targetEntity.name} for ${damage} damage.`;
+                this.game.logEvent(this, "attack", message, targetEntity.name, { damage }, this.mesh!.position);
+            }
+        }
     }
-  }
+}
+
+
 
 
   handleStamina(deltaTime: number): void {
