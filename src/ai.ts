@@ -1,4 +1,4 @@
-// src/ai.ts
+///// src/ai.ts
 import { Vector3, Object3D } from 'three';
 import { Character, Entity } from './entities';
 import { MoveState, getTerrainHeight, EventEntry } from './ultils';
@@ -85,7 +85,11 @@ export class AIController {
   persona: string = "";
   currentIntent: string = "";
 
-    
+  // New properties for optimization
+  private lastApiCallTime: number = 0;
+  private apiCallCooldown: number = 5000; // 10 seconds minimum between API calls
+  private lastObservation: Observation | null = null; // To track changes
+
   constructor(character: Character) {
     this.character = character;
     this.homePosition = character.mesh!.position.clone();
@@ -97,31 +101,29 @@ export class AIController {
   computeAIMoveState(deltaTime: number): MoveState {
     const moveState: MoveState = { forward: 0, right: 0, jump: false, sprint: false, interact: false, attack: false };
 
+    // Update observation every frame to detect changes
+    if (this.character.game) {
+      this.updateObservation(this.character.game.entities);
+    }
+
     switch (this.aiState) {
       case 'idle':
         this.actionTimer -= deltaTime;
         if (this.actionTimer <= 0) {
           this.actionTimer = 5 + Math.random() * 5;
-          const useAPI = true;
-          if (useAPI && this.character.game) {
-             this.decideNextAction();
+          const currentTime = Date.now();
+          const timeSinceLastCall = currentTime - this.lastApiCallTime;
+
+          // Check conditions for API call
+          if (
+            (timeSinceLastCall >= this.apiCallCooldown || this.isAffectedByEntities()) && // Respect cooldown
+            (this.justCompletedAction()) // Action finished or entity interaction
+          ) {
+            this.decideNextAction();
+            this.lastApiCallTime = currentTime;
           } else {
-             const resources = this.character.scene!.children.filter(child =>
-              child.userData.isInteractable &&
-              child.userData.interactionType === 'gather' &&
-              child.visible &&
-              this.character.mesh!.position.distanceTo(child.position) < this.searchRadius
-            );
-            if (resources.length > 0) {
-              this.targetResource = resources[Math.floor(Math.random() * resources.length)];
-              this.aiState = 'movingToResource';
-            } else {
-              const angle = Math.random() * Math.PI * 2;
-              const distance = Math.random() * this.roamRadius;
-              this.destination = this.homePosition.clone().add(new Vector3(Math.cos(angle) * distance, 0, Math.sin(angle) * distance));
-              this.destination.y = getTerrainHeight(this.character.scene!, this.destination.x, this.destination.z);
-              this.aiState = 'roaming';
-            }
+            // Fallback to local behavior if API not called
+            this.fallbackToDefaultBehavior();
           }
         }
         break;
@@ -138,9 +140,10 @@ export class AIController {
           } else {
             this.aiState = 'idle';
             this.destination = null;
+            // Action completed, potentially trigger API in next idle cycle
           }
         } else {
-             this.aiState = 'idle';
+          this.aiState = 'idle';
         }
         break;
 
@@ -172,7 +175,14 @@ export class AIController {
             const resourceName = this.targetResource.userData.resource;
             this.character.inventory.addItem(resourceName, 1);
             if (this.character.game) {
-              this.character.game.logEvent(this.character, "gather", `${this.character.name} gathered 1 ${resourceName}.`, undefined, { resource: resourceName }, this.character.mesh!.position);
+              this.character.game.logEvent(
+                this.character,
+                "gather",
+                `${this.character.name} gathered 1 ${resourceName}.`,
+                undefined,
+                { resource: resourceName },
+                this.character.mesh!.position
+              );
             }
           }
           if (this.targetResource?.userData.isDepletable) {
@@ -191,48 +201,72 @@ export class AIController {
           this.aiState = 'idle';
           this.character.isGathering = false;
           this.currentIntent = '';
+          // Action completed, API will be considered in next idle cycle
         }
         break;
     }
 
+    // Log state changes
     if (this.aiState !== this.previousAiState) {
-        if (this.character.game) {
-          let message = '';
-          switch (this.aiState) {
-            case 'idle': message = `${this.character.name} is now idle.`; break;
-            case 'roaming': message = `${this.character.name} is roaming.`; break;
-            case 'movingToResource': message = `${this.character.name} is moving to a resource.`; break;
-            case 'gathering': message = `${this.character.name} started gathering.`; break;
-          }
-          if (message) {
-            this.character.game.logEvent(this.character, this.aiState, message, undefined, {}, this.character.mesh!.position);
-          }
+      if (this.character.game) {
+        let message = '';
+        switch (this.aiState) {
+          case 'idle': message = `${this.character.name} is now idle.`; break;
+          case 'roaming': message = `${this.character.name} is roaming.`; break;
+          case 'movingToResource': message = `${this.character.name} is moving to a resource.`; break;
+          case 'gathering': message = `${this.character.name} started gathering.`; break;
         }
-        this.previousAiState = this.aiState;
+        if (message) {
+          this.character.game.logEvent(this.character, this.aiState, message, undefined, {}, this.character.mesh!.position);
+        }
+      }
+      this.previousAiState = this.aiState;
     }
-
 
     return moveState;
   }
 
-  handleInteraction(player: Character): { type: string; text: string; state: string; options?: string[] } | null {
-    this.character.lookAt(player.mesh!.position);
-    const dialogue = this.getRandomIdleDialogue();
-    this.aiState = 'idle';
-    if (this.character.game) this.character.game.logEvent(this.character, "interact", `${this.character.name}: "${dialogue}"`, player.name, { dialogue }, this.character.mesh!.position);
-    return { type: 'dialogue', text: dialogue, state: 'greeting', options: ['Switch Control'] };
+  // Check if an action just completed
+  private justCompletedAction(): boolean {
+    return this.previousAiState !== 'idle' && this.aiState === 'idle';
   }
 
-  getRandomIdleDialogue(): string {
-    const dialogues = [
-      "Nice weather today.", "Be careful out there.", "Seen any troublemakers around?",
-      "The wilderness holds many secrets.", "Welcome to our village.", "Need something?",
-      "Don't wander too far from the village."
-    ];
-    return dialogues[Math.floor(Math.random() * dialogues.length)];
+  // Check if the character is affected by other entities
+  private isAffectedByEntities(): boolean {
+    if (!this.observation || !this.lastObservation) return false;
+
+    const currentCharacters = this.observation.nearbyCharacters;
+    const lastCharacters = this.lastObservation.nearbyCharacters;
+
+    // Check for new characters or significant changes
+    for (const currChar of currentCharacters) {
+      const matchingLastChar = lastCharacters.find(c => c.id === currChar.id);
+      if (!matchingLastChar) {
+        // New character appeared
+        return true;
+      }
+      // Check for significant state changes (e.g., health drop, action change)
+      if (
+        currChar.health < matchingLastChar.health ||
+        currChar.currentAction !== matchingLastChar.currentAction ||
+        currChar.isDead !== matchingLastChar.isDead
+      ) {
+        return true;
+      }
+    }
+
+    // Check event log for recent interactions
+    const recentEvents = this.character.eventLog.entries.slice(-5);
+    return recentEvents.some(event =>
+      event.target === this.character.name ||
+      (event.actor !== this.character.name && (event.location?.distanceTo(this.character.mesh!.position) ?? Infinity) < this.searchRadius)
+    );
   }
 
+  // Update observation and store previous state
   updateObservation(allEntities: Array<any>): void {
+    this.lastObservation = this.observation ? { ...this.observation } : null;
+   
     const nearbyCharacters: Observation['nearbyCharacters'] = [];
     const nearbyObjects: Observation['nearbyObjects'] = [];
     const selfPosition = this.character.mesh!.position;
@@ -247,10 +281,8 @@ export class AIController {
       const entityPosition = entityMesh.position;
       const distanceSq = selfPosition.distanceToSquared(entityPosition);
 
-      if (distanceSq > searchRadiusSq) {
-        continue;
-      }
-      
+      if (distanceSq > searchRadiusSq) continue;
+
       if (entity instanceof Character) {
         nearbyCharacters.push({
           id: entity.id,
@@ -324,7 +356,7 @@ export class AIController {
       if (response) {
         this.setActionFromAPI(response);
       } else {
-         this.fallbackToDefaultBehavior();
+        this.fallbackToDefaultBehavior();
       }
     } catch (error) {
       console.error(`Error querying API for ${this.character.name}:`, error);
@@ -332,15 +364,15 @@ export class AIController {
     }
   }
 
-   fallbackToDefaultBehavior(): void {
-        this.aiState = 'roaming';
-        const angle = Math.random() * Math.PI * 2;
-        const distance = Math.random() * this.roamRadius;
-        this.destination = this.homePosition.clone().add(new Vector3(Math.cos(angle) * distance, 0, Math.sin(angle) * distance));
-        if (this.character.scene) {
-             this.destination.y = getTerrainHeight(this.character.scene, this.destination.x, this.destination.z);
-        }
+  fallbackToDefaultBehavior(): void {
+    this.aiState = 'roaming';
+    const angle = Math.random() * Math.PI * 2;
+    const distance = Math.random() * this.roamRadius;
+    this.destination = this.homePosition.clone().add(new Vector3(Math.cos(angle) * distance, 0, Math.sin(angle) * distance));
+    if (this.character.scene) {
+      this.destination.y = getTerrainHeight(this.character.scene, this.destination.x, this.destination.z);
     }
+  }
 
   setActionFromAPI(response: string): void {
     const parts = response.split(' because ');

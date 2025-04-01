@@ -1,4 +1,4 @@
-// src/main.ts
+////// src/main.ts
 
 import {
   Scene, PerspectiveCamera, WebGLRenderer, Clock, Vector3, Color, Fog, Mesh,

@@ -1,4 +1,4 @@
-// src/entities.ts
+///// src/entities.ts
 import {
   Scene, Vector3, Box3, Quaternion, Group, Mesh, Material, Object3D, Matrix4,
   AnimationMixer, AnimationClip, AnimationAction, LoopOnce
@@ -496,9 +496,9 @@ export class Character extends Entity {
 
 
   interact(player: Character): { type: string; text: string; state: string; options?: string[] } | null {
-     if (this.aiController) {
-       return this.aiController.handleInteraction(player);
-     }
+    //  if (this.aiController) {
+    //    return this.aiController.handleInteraction(player);
+    //  }
      this.lookAt(player.mesh!.position);
      const defaultDialogue = "Hello there.";
      if (this.game) this.game.logEvent(this, "interact", `${this.name}: "${defaultDialogue}"`, player.name, {}, this.mesh!.position);
