@@ -14,33 +14,6 @@ export async function sendToGemini(prompt: string): Promise<string | null> {
     console.warn(
       "API_KEY is not configured. Please set a valid API_KEY in .env file to use Gemini API."
     );
-    // Fallback for testing without API key
-    // Determine action based on prompt content for basic testing
-    if (prompt.includes('"action": "chat"')) {
-      return JSON.stringify({
-        action: "chat",
-        target_id: "Farmer Giles_1", // Example target
-        message: "Just testing the chat fallback!",
-        intent: "Test fallback",
-      });
-    } else if (prompt.includes('"action": "heal"')) {
-      return JSON.stringify({
-        action: "heal",
-        target_id: "Blacksmith Brynn_3", // Example target
-        intent: "Test heal fallback",
-      });
-    } else if (prompt.includes('"action": "attack"')) {
-      return JSON.stringify({
-        action: "attack",
-        target_id: "Hunter Rex_2", // Example target
-        intent: "Test attack fallback",
-      });
-    }
-    // Default fallback
-    return JSON.stringify({
-      action: "roam",
-      intent: "Exploring fallback",
-    });
   }
   try {
     const response = await fetch(API_URL, {

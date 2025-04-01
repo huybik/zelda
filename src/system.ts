@@ -594,16 +594,6 @@ Respond to the player in character, keeping your response relatively brief (1-2 
           let npcMessage = "Hmm..."; // Default response
 
           if (responseJson) {
-            // Gemini API with JSON mode might return the string directly
-            // If it returns a JSON object containing the reply:
-            // try {
-            //     const responseObj = JSON.parse(responseJson);
-            //     npcMessage = responseObj.reply || responseObj.message || npcMessage;
-            // } catch (e) {
-            //     console.warn("API response was not valid JSON, using raw text:", responseJson);
-            //     npcMessage = responseJson.trim(); // Use raw text if not JSON
-            // }
-            // Assuming the API returns just the text reply as per the prompt instruction:
             npcMessage = responseJson.trim();
           } else {
             console.warn("Received null or empty response from chat API.");
@@ -1040,10 +1030,6 @@ export class Controls {
 
   onKeyUp(event: KeyboardEvent): void {
     const keyCode = event.code;
-    // Allow chat input to handle keys even when chat is open
-    // if ((window as any).game?.interactionSystem?.isChatOpen) {
-    //     return;
-    // }
     this.keys[keyCode] = false;
     if (keyCode === "KeyF") this.moveState.attack = false; // Reset attack on key release
     this.updateContinuousMoveState();
@@ -1058,9 +1044,6 @@ export class Controls {
   }
 
   onMouseUp(event: MouseEvent): void {
-    // Prevent mouse up if chat is open
-    // if ((window as any).game?.interactionSystem?.isChatOpen) return;
-
     this.mouse.buttons[event.button] = false;
   }
 

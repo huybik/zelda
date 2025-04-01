@@ -408,6 +408,7 @@ export class Game {
       this.inventory!
     );
     this.activeCharacter.userData.isPlayer = true;
+    this.activeCharacter.userData.isInteractable = false;
     this.activeCharacter.userData.isNPC = false;
     if (this.activeCharacter.aiController) {
       this.activeCharacter.aiController = null; // Ensure player doesn't have AI controller
