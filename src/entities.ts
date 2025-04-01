@@ -379,8 +379,8 @@ export class Character extends Entity {
     model.position.y = -box.min.y * scale;
     this.mesh!.add(model);
     this.mixer = new AnimationMixer(model);
-    const idleAnim = animations.find((anim) =>
-      anim.name.toLowerCase().includes("idle")
+    const idleAnim = animations.find(
+      (anim) => anim.name.toLowerCase().includes("idled") // idled not idle
     );
     if (idleAnim) this.idleAction = this.mixer.clipAction(idleAnim);
     const walkAnim = animations.find((anim) =>
