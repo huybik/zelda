@@ -924,6 +924,15 @@ export class ThirdPersonCamera {
   }
 }
 
+interface TouchState {
+  identifier: number;
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+  targetElementId?: string; // Store ID if touch started on a button
+}
+
 export class Controls {
   player: Character | null;
   cameraController: ThirdPersonCamera | null;
@@ -932,6 +941,8 @@ export class Controls {
   mouse: MouseState = { x: 0, y: 0, dx: 0, dy: 0, buttons: {} };
   isPointerLocked: boolean = false;
   playerRotationSensitivity: number = 0.0025;
+  touchRotationSensitivity: number = 0.003; // Separate sensitivity for touch
+  touchMoveSensitivity: number = 0.015; // Sensitivity for joystick movement
   moveState: MoveState = {
     forward: 0,
     right: 0,
@@ -942,6 +953,15 @@ export class Controls {
   };
   keyDownListeners: Record<string, Array<() => void>> = {};
   mouseClickListeners: Record<number, Array<(event: MouseEvent) => void>> = {};
+
+  // Touch state
+  private activeTouches: Map<number, TouchState> = new Map();
+  private leftTouchId: number | null = null;
+  private rightTouchId: number | null = null;
+  private joystickThumb: HTMLElement | null;
+  private joystickBase: HTMLElement | null;
+  private maxJoystickDist: number = 50; // Max distance thumb can move from center
+
   boundOnKeyDown: (event: KeyboardEvent) => void;
   boundOnKeyUp: (event: KeyboardEvent) => void;
   boundOnMouseDown: (event: MouseEvent) => void;
@@ -950,6 +970,10 @@ export class Controls {
   boundOnClick: (event: MouseEvent) => void;
   boundOnPointerLockChange: () => void;
   boundOnPointerLockError: () => void;
+  boundOnTouchStart: (event: TouchEvent) => void;
+  boundOnTouchMove: (event: TouchEvent) => void;
+  boundOnTouchEnd: (event: TouchEvent) => void;
+  boundOnTouchCancel: (event: TouchEvent) => void;
 
   constructor(
     player: Character | null,
@@ -959,6 +983,14 @@ export class Controls {
     this.player = player;
     this.cameraController = cameraController;
     this.domElement = domElement ?? document.body;
+
+    this.joystickThumb = document.getElementById("touch-joystick-thumb");
+    this.joystickBase = document.getElementById("touch-controls-left");
+    if (this.joystickBase) {
+      this.maxJoystickDist = this.joystickBase.offsetWidth / 2 - 10; // Calculate max distance based on base size
+    }
+
+    // Bind methods
     this.boundOnKeyDown = this.onKeyDown.bind(this);
     this.boundOnKeyUp = this.onKeyUp.bind(this);
     this.boundOnMouseDown = this.onMouseDown.bind(this);
@@ -967,16 +999,24 @@ export class Controls {
     this.boundOnClick = this.onClick.bind(this);
     this.boundOnPointerLockChange = this.onPointerLockChange.bind(this);
     this.boundOnPointerLockError = this.onPointerLockError.bind(this);
+    this.boundOnTouchStart = this.onTouchStart.bind(this);
+    this.boundOnTouchMove = this.onTouchMove.bind(this);
+    this.boundOnTouchEnd = this.onTouchEnd.bind(this);
+    this.boundOnTouchCancel = this.onTouchEnd.bind(this); // Treat cancel like end
+
     this.initListeners();
   }
 
   initListeners(): void {
+    // Keyboard & Mouse
     document.addEventListener("keydown", this.boundOnKeyDown, false);
     document.addEventListener("keyup", this.boundOnKeyUp, false);
     document.addEventListener("mousedown", this.boundOnMouseDown, false);
     document.addEventListener("mouseup", this.boundOnMouseUp, false);
     document.addEventListener("mousemove", this.boundOnMouseMove, false);
     this.domElement.addEventListener("click", this.boundOnClick, false);
+
+    // Pointer Lock (Optional for non-touch)
     document.addEventListener(
       "pointerlockchange",
       this.boundOnPointerLockChange,
@@ -985,6 +1025,20 @@ export class Controls {
     document.addEventListener(
       "pointerlockerror",
       this.boundOnPointerLockError,
+      false
+    );
+
+    // Touch
+    this.domElement.addEventListener("touchstart", this.boundOnTouchStart, {
+      passive: false,
+    });
+    this.domElement.addEventListener("touchmove", this.boundOnTouchMove, {
+      passive: false,
+    });
+    this.domElement.addEventListener("touchend", this.boundOnTouchEnd, false);
+    this.domElement.addEventListener(
+      "touchcancel",
+      this.boundOnTouchCancel,
       false
     );
   }
@@ -1003,10 +1057,13 @@ export class Controls {
     this.mouseClickListeners[buttonIndex].push(callback);
   }
 
+  // --- Pointer Lock (Desktop) ---
   lockPointer(): void {
+    // Only attempt lock if not primarily a touch device (basic check)
     if (
       "requestPointerLock" in this.domElement &&
-      document.pointerLockElement !== this.domElement
+      document.pointerLockElement !== this.domElement &&
+      !window.matchMedia("(hover: none) and (pointer: coarse)").matches
     ) {
       this.domElement.requestPointerLock();
     }
@@ -1017,35 +1074,75 @@ export class Controls {
       document.exitPointerLock();
   }
 
+  onPointerLockChange(): void {
+    if (document.pointerLockElement === this.domElement) {
+      this.isPointerLocked = true;
+      this.mouse.dx = 0;
+      this.mouse.dy = 0;
+    } else {
+      this.isPointerLocked = false;
+      // Reset keyboard state if lock is lost
+      this.keys = {};
+      this.mouse.buttons = {};
+      this.mouse.dx = 0;
+      this.mouse.dy = 0;
+      this.updateContinuousMoveState(); // Reset keyboard movement
+      // If pointer lock is lost and chat isn't open, ensure game isn't paused
+      const game = (window as any).game as Game | undefined;
+      if (
+        game &&
+        !game.interactionSystem?.isChatOpen &&
+        !game.inventoryDisplay?.isOpen &&
+        !game.journalDisplay?.isOpen
+      ) {
+        game.setPauseState(false);
+      }
+    }
+  }
+
+  onPointerLockError(): void {
+    console.error("Pointer lock failed.");
+    this.isPointerLocked = false;
+  }
+
+  // --- Keyboard Input ---
   onKeyDown(event: KeyboardEvent): void {
     const keyCode = event.code;
-    // Prevent handling keys if chat is open, except for Escape
     const game = (window as any).game as Game | undefined;
     if (game?.interactionSystem?.isChatOpen && keyCode !== "Escape") {
-      // Allow chat input to handle keys
-      return;
+      return; // Allow chat input
     }
 
-    if (this.keys[keyCode]) return;
+    if (this.keys[keyCode]) return; // Prevent repeated triggers
     this.keys[keyCode] = true;
     this.keyDownListeners[keyCode]?.forEach((cb) => cb());
-    if (keyCode === "Space") this.moveState.jump = true;
-    if (keyCode === "KeyE") this.moveState.interact = true;
-    if (keyCode === "KeyF") this.moveState.attack = true; // Handle 'F' key press for attack
+
+    // Handle specific key actions (only if not handled by touch buttons)
+    if (keyCode === "Space" && !this.isButtonPressed("touch-button-jump"))
+      this.moveState.jump = true;
+    if (keyCode === "KeyE" && !this.isButtonPressed("touch-button-interact"))
+      this.moveState.interact = true;
+    if (keyCode === "KeyF" && !this.isButtonPressed("touch-button-attack"))
+      this.moveState.attack = true;
+
     this.updateContinuousMoveState();
   }
 
   onKeyUp(event: KeyboardEvent): void {
     const keyCode = event.code;
     this.keys[keyCode] = false;
-    if (keyCode === "KeyF") this.moveState.attack = false; // Reset attack on key release
+
+    // Reset specific key actions (only if not handled by touch buttons)
+    if (keyCode === "KeyF" && !this.isButtonPressed("touch-button-attack"))
+      this.moveState.attack = false;
+    // Jump and Interact are consumed, not held continuously based on keyup
+
     this.updateContinuousMoveState();
   }
 
+  // --- Mouse Input ---
   onMouseDown(event: MouseEvent): void {
-    // Prevent mouse down if chat is open
     if ((window as any).game?.interactionSystem?.isChatOpen) return;
-
     this.mouse.buttons[event.button] = true;
     this.mouseClickListeners[event.button]?.forEach((cb) => cb(event));
   }
@@ -1068,73 +1165,277 @@ export class Controls {
     const gameIsPaused = (window as any).game?.isPaused ?? false;
     const chatIsOpen =
       (window as any).game?.interactionSystem?.isChatOpen ?? false;
-    // Don't lock pointer if chat is open or game is paused for other reasons (inventory/journal)
     if (!this.isPointerLocked && !gameIsPaused && !chatIsOpen)
       this.lockPointer();
   }
 
-  onPointerLockChange(): void {
-    if (document.pointerLockElement === this.domElement) {
-      this.isPointerLocked = true;
-      this.mouse.dx = 0;
-      this.mouse.dy = 0;
-    } else {
-      this.isPointerLocked = false;
-      this.keys = {};
-      this.mouse.buttons = {};
-      this.mouse.dx = 0;
-      this.mouse.dy = 0;
-      this.updateContinuousMoveState();
-      // If pointer lock is lost and chat isn't open, ensure game isn't paused
-      const game = (window as any).game as Game | undefined;
-      if (
-        game &&
-        !game.interactionSystem?.isChatOpen &&
-        !game.inventoryDisplay?.isOpen &&
-        !game.journalDisplay?.isOpen
-      ) {
-        game.setPauseState(false);
+  // --- Touch Input ---
+  onTouchStart(event: TouchEvent): void {
+    event.preventDefault(); // Prevent default touch actions like scrolling
+    const game = (window as any).game as Game | undefined;
+    if (game?.isPaused && !game?.interactionSystem?.isChatOpen) return; // Ignore touches if paused (unless chat is open, handled separately)
+
+    const touches = event.changedTouches;
+    for (let i = 0; i < touches.length; i++) {
+      const touch = touches[i];
+      const touchId = touch.identifier;
+
+      // Check if touch is on a button first
+      const targetElement = touch.target as HTMLElement;
+      const buttonId = targetElement.closest(".touch-button")?.id;
+
+      if (buttonId) {
+        this.activeTouches.set(touchId, {
+          identifier: touchId,
+          startX: touch.clientX,
+          startY: touch.clientY,
+          currentX: touch.clientX,
+          currentY: touch.clientY,
+          targetElementId: buttonId,
+        });
+        this.handleButtonPress(buttonId, true);
+        continue; // Don't process as movement/look if it's a button
+      }
+
+      // Check if touch is on left or right side
+      const isLeftSide = touch.clientX < window.innerWidth / 2;
+
+      if (isLeftSide && this.leftTouchId === null) {
+        // Start movement touch
+        this.leftTouchId = touchId;
+        this.activeTouches.set(touchId, {
+          identifier: touchId,
+          startX: touch.clientX,
+          startY: touch.clientY,
+          currentX: touch.clientX,
+          currentY: touch.clientY,
+        });
+        if (this.joystickThumb && this.joystickBase) {
+          this.joystickThumb.style.opacity = "0.8";
+          this.updateJoystickThumb(touch.clientX, touch.clientY);
+        }
+      } else if (!isLeftSide && this.rightTouchId === null) {
+        // Start look touch
+        this.rightTouchId = touchId;
+        this.activeTouches.set(touchId, {
+          identifier: touchId,
+          startX: touch.clientX,
+          startY: touch.clientY,
+          currentX: touch.clientX,
+          currentY: touch.clientY,
+        });
+        // Reset dx/dy for the new touch
+        this.mouse.dx = 0;
+        this.mouse.dy = 0;
       }
     }
   }
 
-  onPointerLockError(): void {
-    console.error("Pointer lock failed.");
-    this.isPointerLocked = false;
+  onTouchMove(event: TouchEvent): void {
+    event.preventDefault();
+    const game = (window as any).game as Game | undefined;
+    if (game?.isPaused && !game?.interactionSystem?.isChatOpen) return;
+
+    const touches = event.changedTouches;
+    for (let i = 0; i < touches.length; i++) {
+      const touch = touches[i];
+      const touchId = touch.identifier;
+      const touchState = this.activeTouches.get(touchId);
+
+      if (!touchState) continue; // Ignore touches not tracked
+
+      const prevX = touchState.currentX;
+      const prevY = touchState.currentY;
+      touchState.currentX = touch.clientX;
+      touchState.currentY = touch.clientY;
+
+      if (touchId === this.leftTouchId) {
+        // Update movement
+        const deltaX = touchState.currentX - touchState.startX;
+        const deltaY = touchState.currentY - touchState.startY;
+        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        const angle = Math.atan2(deltaY, deltaX);
+
+        const normalizedDist = Math.min(distance / this.maxJoystickDist, 1.0);
+
+        // Invert Y for forward/backward
+        this.moveState.forward = -Math.sin(angle) * normalizedDist;
+        this.moveState.right = -Math.cos(angle) * normalizedDist; // Invert X for A/D convention
+
+        // Clamp values
+        this.moveState.forward = MathUtils.clamp(this.moveState.forward, -1, 1);
+        this.moveState.right = MathUtils.clamp(this.moveState.right, -1, 1);
+
+        // Optional: Sprint if joystick is pushed far
+        this.moveState.sprint = normalizedDist > 0.8;
+
+        if (this.joystickThumb) {
+          this.updateJoystickThumb(touch.clientX, touch.clientY);
+        }
+      } else if (touchId === this.rightTouchId) {
+        // Update look rotation
+        const dx = touchState.currentX - prevX;
+        const dy = touchState.currentY - prevY;
+        this.mouse.dx += dx;
+        this.mouse.dy += dy;
+      }
+      // No movement update needed for button touches
+    }
   }
 
+  onTouchEnd(event: TouchEvent): void {
+    // Don't prevent default here, allows clicks on UI elements behind controls
+    const game = (window as any).game as Game | undefined;
+    // Allow touch end even if paused to release buttons/joystick
+
+    const touches = event.changedTouches;
+    for (let i = 0; i < touches.length; i++) {
+      const touch = touches[i];
+      const touchId = touch.identifier;
+      const touchState = this.activeTouches.get(touchId);
+
+      if (!touchState) continue;
+
+      if (touchState.targetElementId) {
+        // Handle button release
+        this.handleButtonPress(touchState.targetElementId, false);
+      } else if (touchId === this.leftTouchId) {
+        // End movement touch
+        this.leftTouchId = null;
+        this.moveState.forward = 0;
+        this.moveState.right = 0;
+        this.moveState.sprint = false;
+        if (this.joystickThumb) {
+          this.joystickThumb.style.opacity = "0.6";
+          this.joystickThumb.style.transform = `translate(0px, 0px)`; // Reset position
+        }
+      } else if (touchId === this.rightTouchId) {
+        // End look touch
+        this.rightTouchId = null;
+        // dx/dy will stop updating naturally
+      }
+
+      this.activeTouches.delete(touchId);
+    }
+  }
+
+  // --- Touch Helpers ---
+  private handleButtonPress(buttonId: string, isPressed: boolean): void {
+    switch (buttonId) {
+      case "touch-button-jump":
+        if (isPressed) this.moveState.jump = true; // Jump is consumed on press
+        break;
+      case "touch-button-interact":
+        if (isPressed) this.moveState.interact = true; // Interact is consumed
+        break;
+      case "touch-button-attack":
+        this.moveState.attack = isPressed;
+        break;
+      // Add sprint button handling if implemented separately
+    }
+  }
+
+  private isButtonPressed(buttonId: string): boolean {
+    for (const touchState of this.activeTouches.values()) {
+      if (touchState.targetElementId === buttonId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private updateJoystickThumb(touchX: number, touchY: number): void {
+    if (!this.joystickThumb || !this.joystickBase) return;
+
+    const baseRect = this.joystickBase.getBoundingClientRect();
+    const baseX = baseRect.left + baseRect.width / 2;
+    const baseY = baseRect.top + baseRect.height / 2;
+
+    let deltaX = touchX - baseX;
+    let deltaY = touchY - baseY;
+
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+    if (distance > this.maxJoystickDist) {
+      deltaX = (deltaX / distance) * this.maxJoystickDist;
+      deltaY = (deltaY / distance) * this.maxJoystickDist;
+    }
+
+    this.joystickThumb.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+  }
+
+  // --- Update Logic ---
   updateContinuousMoveState(): void {
+    // This now primarily handles keyboard state
     const W = this.keys["KeyW"] || this.keys["ArrowUp"];
     const S = this.keys["KeyS"] || this.keys["ArrowDown"];
     const D = this.keys["KeyD"] || this.keys["ArrowRight"];
     const A = this.keys["KeyA"] || this.keys["ArrowLeft"];
     const Sprint = this.keys["ShiftLeft"] || this.keys["ShiftRight"];
-    this.moveState.forward = (W ? 1 : 0) - (S ? 1 : 0);
-    this.moveState.right = (A ? 1 : 0) - (D ? 1 : 0); // Note: Swapped A and D to match typical WASD controls
-    this.moveState.sprint = Sprint ?? false;
+
+    // Only update from keyboard if joystick is not active
+    if (this.leftTouchId === null) {
+      this.moveState.forward = (W ? 1 : 0) - (S ? 1 : 0);
+      this.moveState.right = (A ? 1 : 0) - (D ? 1 : 0); // Swapped A/D
+      this.moveState.sprint = Sprint ?? false;
+    }
   }
 
   update(deltaTime: number): void {
-    if (!this.isPointerLocked || !this.player || !this.player.mesh) {
-      // Check player and mesh
-      this.mouse.dx = 0;
-      this.mouse.dy = 0;
-      return;
+    // --- Rotation Update (Mouse or Touch) ---
+    if (
+      (this.isPointerLocked || this.rightTouchId !== null) &&
+      this.player &&
+      this.player.mesh
+    ) {
+      const sensitivity =
+        this.rightTouchId !== null
+          ? this.touchRotationSensitivity
+          : this.playerRotationSensitivity;
+
+      if (Math.abs(this.mouse.dx) > 0) {
+        const yawDelta = -this.mouse.dx * sensitivity;
+        this.player.mesh!.rotateY(yawDelta);
+      }
+      if (this.cameraController && Math.abs(this.mouse.dy) > 0) {
+        // Use negative dy for camera pitch control
+        this.cameraController.handleMouseInput(this.mouse.dx, -this.mouse.dy);
+      }
     }
-    if (Math.abs(this.mouse.dx) > 0) {
-      const yawDelta = -this.mouse.dx * this.playerRotationSensitivity;
-      this.player.mesh!.rotateY(yawDelta);
-    }
-    if (this.cameraController && Math.abs(this.mouse.dy) > 0) {
-      this.cameraController.handleMouseInput(this.mouse.dx, -this.mouse.dy);
-    }
+    // Reset dx/dy after processing
     this.mouse.dx = 0;
     this.mouse.dy = 0;
+
+    // --- Keyboard Movement Update ---
+    // This ensures keyboard input is reflected if joystick isn't used
+    this.updateContinuousMoveState();
   }
 
   consumeInteraction(): boolean {
     if (!this.moveState.interact) return false;
-    this.moveState.interact = false;
+    this.moveState.interact = false; // Reset after consumption
     return true;
+  }
+
+  // Method to clean up listeners
+  dispose(): void {
+    document.removeEventListener("keydown", this.boundOnKeyDown);
+    document.removeEventListener("keyup", this.boundOnKeyUp);
+    document.removeEventListener("mousedown", this.boundOnMouseDown);
+    document.removeEventListener("mouseup", this.boundOnMouseUp);
+    document.removeEventListener("mousemove", this.boundOnMouseMove);
+    this.domElement.removeEventListener("click", this.boundOnClick);
+    document.removeEventListener(
+      "pointerlockchange",
+      this.boundOnPointerLockChange
+    );
+    document.removeEventListener(
+      "pointerlockerror",
+      this.boundOnPointerLockError
+    );
+    this.domElement.removeEventListener("touchstart", this.boundOnTouchStart);
+    this.domElement.removeEventListener("touchmove", this.boundOnTouchMove);
+    this.domElement.removeEventListener("touchend", this.boundOnTouchEnd);
+    this.domElement.removeEventListener("touchcancel", this.boundOnTouchCancel);
   }
 }
