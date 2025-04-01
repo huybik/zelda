@@ -160,7 +160,7 @@ function populateEnvironment(
     character.mesh!.position.y = getTerrainHeight(scene, pos.x, pos.z);
     character.game = gameInstance; // Assign game instance
     if (isPlayer) {
-      character.name = "Character";
+      character.name = "Player";
       character.userData.isPlayer = true;
       character.userData.isNPC = false;
       if (character.aiController) character.aiController = null; // Remove AI for player
@@ -400,7 +400,7 @@ export class Game {
     this.activeCharacter = new Character(
       this.scene!,
       playerSpawnPos,
-      "Character",
+      "Player",
       playerModel.scene,
       playerModel.animations,
       this.inventory!

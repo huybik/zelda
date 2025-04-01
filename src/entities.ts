@@ -457,7 +457,7 @@ export class Character extends Entity {
 
   performAttack(): void {
     const range = 2.0;
-    const damage = this.name === "Character" ? 10 : 5;
+    const damage = this.name === "Player" ? 10 : 5;
     // Set ray from character's position and forward direction
     if (!this.rayCaster) return;
     this.rayCaster.set(
