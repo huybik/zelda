@@ -1,6 +1,4 @@
 // File: /src/main.ts
-// File: /src/main.ts
-// File: /src/main.ts
 import * as THREE from "three";
 import {
   Scene,
@@ -331,6 +329,7 @@ export class Game {
   isPaused: boolean = false;
   intentContainer: HTMLElement | null = null;
   particleEffects: Group[] = []; // Array to hold active particle effects
+  audioElement: HTMLAudioElement | null = null; // For background music
 
   // Portal variables
   exitPortalGroup: THREE.Group | null = null;
@@ -354,36 +353,32 @@ export class Game {
     this.initScene();
     this.initCamera();
     this.initInventory();
+    this.initAudio(); // Initialize audio
     const models = await loadModels();
 
-    // Check for portal entry *before* initializing player
     const urlParams = new URLSearchParams(window.location.search);
     this.hasEnteredFromPortal = urlParams.get("portal") === "true";
     this.startPortalRefUrl = urlParams.get("ref");
     this.startPortalOriginalParams = urlParams; // Store all original params
 
-    this.initPlayer(models); // Player position might be adjusted if coming from portal
+    this.initPlayer(models);
     this.initControls();
     this.initPhysics();
-    this.initEnvironment(models); // Environment needs player inventory, so call after player init
-    this.initSystems(); // Initialize systems after player and environment
+    this.initEnvironment(models);
+    this.initSystems();
     this.initUI();
     this.setupUIControls();
 
-    // --- Portal Initialization ---
     this.createExitPortal();
     if (this.hasEnteredFromPortal && this.startPortalRefUrl) {
       this.createStartPortal();
-      // Optional: Adjust player starting orientation if coming from portal
       if (this.activeCharacter?.mesh) {
         this.activeCharacter.mesh.lookAt(
           this.startPortalGroup!.position.clone().add(new Vector3(0, 0, 10))
-        ); // Look slightly away from portal
+        );
       }
     }
-    // --- End Portal Initialization ---
 
-    // Assign game instance after all entities (including player) are created
     this.entities.forEach((entity) => {
       if (entity instanceof Character) {
         entity.game = this;
@@ -391,7 +386,17 @@ export class Game {
       }
     });
 
-    // Initial log moved to Game.start for banner timing
+    // Add listener for pointer lock change to start music on interaction
+    document.addEventListener("pointerlockchange", () => {
+      if (
+        document.pointerLockElement === this.renderer?.domElement &&
+        this.audioElement?.paused
+      ) {
+        this.audioElement.play().catch((e) => {
+          console.warn("Background music play failed on interaction:", e);
+        });
+      }
+    });
   }
 
   initRenderer(): void {
@@ -433,14 +438,18 @@ export class Game {
     this.inventory = new Inventory(9);
   }
 
+  initAudio(): void {
+    this.audioElement = new Audio("assets/background.mp3");
+    this.audioElement.loop = true;
+    this.audioElement.volume = 0.3; // Start quieter
+  }
+
   initPlayer(
     models: Record<string, { scene: Group; animations: AnimationClip[] }>
   ): void {
     let playerSpawnPos = new Vector3(0, 0, 5); // Default spawn
 
-    // If coming from a portal, adjust spawn slightly (e.g., behind where portal will be)
     if (this.hasEnteredFromPortal) {
-      // We'll place the portal at the default spawn, so spawn player slightly behind it
       playerSpawnPos = new Vector3(0, 0, 15); // Adjust Z
     }
 
@@ -463,11 +472,11 @@ export class Game {
     this.activeCharacter.userData.isInteractable = false;
     this.activeCharacter.userData.isNPC = false;
     if (this.activeCharacter.aiController) {
-      this.activeCharacter.aiController = null; // Ensure player doesn't have AI controller
+      this.activeCharacter.aiController = null;
     }
     this.entities.push(this.activeCharacter);
     this.collidableObjects.push(this.activeCharacter.mesh!);
-    this.interactableObjects.push(this.activeCharacter); // Player can be interacted with (for switching control)
+    this.interactableObjects.push(this.activeCharacter);
   }
 
   initControls(): void {
@@ -480,7 +489,7 @@ export class Game {
       this.activeCharacter,
       this.thirdPersonCamera,
       this.renderer!.domElement,
-      this // Pass game instance to Controls
+      this
     );
   }
 
@@ -504,7 +513,6 @@ export class Game {
   }
 
   initSystems(): void {
-    // Pass 'this' (the game instance) to InteractionSystem
     this.interactionSystem = new InteractionSystem(
       this.activeCharacter!,
       this.camera!,
@@ -530,19 +538,18 @@ export class Game {
 
   setupUIControls(): void {
     this.controls!.addKeyDownListener("KeyI", () => {
-      if (this.interactionSystem?.isChatOpen) return; // Don't open inventory if chat is open
+      if (this.interactionSystem?.isChatOpen) return;
       this.journalDisplay!.hide();
       this.inventoryDisplay!.toggle();
       this.setPauseState(this.inventoryDisplay!.isOpen);
     });
     this.controls!.addKeyDownListener("KeyJ", () => {
-      if (this.interactionSystem?.isChatOpen) return; // Don't open journal if chat is open
+      if (this.interactionSystem?.isChatOpen) return;
       this.inventoryDisplay!.hide();
       this.journalDisplay!.toggle();
       this.setPauseState(this.journalDisplay!.isOpen);
     });
     this.controls!.addKeyDownListener("KeyH", () => {
-      // Heal listener
       if (!this.isPaused && !this.interactionSystem?.isChatOpen) {
         this.activeCharacter?.selfHeal();
       }
@@ -557,7 +564,7 @@ export class Game {
     });
     this.controls!.addKeyDownListener("Escape", () => {
       if (this.interactionSystem?.isChatOpen) {
-        this.interactionSystem.closeChatInterface(); // Close chat first
+        this.interactionSystem.closeChatInterface();
       } else if (this.inventoryDisplay!.isOpen) {
         this.inventoryDisplay!.hide();
         this.setPauseState(false);
@@ -566,7 +573,6 @@ export class Game {
         this.setPauseState(false);
       } else if (this.controls!.isPointerLocked) {
         this.controls!.unlockPointer();
-        // Pause state will be set by onPointerLockChange
       }
     });
     this.controls!.addMouseClickListener(0, (event: MouseEvent) => {
@@ -618,7 +624,6 @@ export class Game {
   start(): void {
     if (!this.renderer || !this.clock) return;
 
-    // Show welcome banner
     const banner = document.getElementById("welcome-banner");
     if (banner) {
       banner.textContent =
@@ -626,9 +631,8 @@ export class Game {
       banner.classList.remove("hidden");
       setTimeout(() => {
         banner.classList.add("hidden");
-      }, 5000); // Hide after 5 seconds
+      }, 5000);
     } else {
-      // Log to journal if banner element not found
       this.activeCharacter!.eventLog.addEntry(
         "Welcome! Click window to lock controls. [WASD] Move, Mouse Look, [I] Inventory, [J] Journal, [E] Interact, [F] Attack, [H] Heal, [C] Switch Control, [Esc] Unlock/Close UI"
       );
