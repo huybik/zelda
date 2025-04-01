@@ -370,44 +370,95 @@ export class Character extends Entity {
 
   updateAnimations(deltaTime: number): void {
     this.mixer.update(deltaTime);
-    if (this.isGathering) {
-      if (this.idleAction) this.idleAction.play();
-       if (this.walkAction) this.walkAction.stop();
-       if (this.runAction) this.runAction.stop();
-       if (this.attackAction && !this.attackAction.isRunning()) {
-           // Ensure gather attack animation plays periodically if needed
-           this.gatherAttackTimer += deltaTime;
-           if (this.gatherAttackTimer >= this.gatherAttackInterval) {
-             this.gatherAttackTimer = 0;
-             if (this.attackAction) this.attackAction.reset().play();
-           }
-       }
-    } else if (!this.isAttacking) {
-      const isMoving = Math.abs(this.moveState.forward) > 0.1 || Math.abs(this.moveState.right) > 0.1;
-      if (isMoving) {
-        if (this.isSprinting && this.runAction) {
-          this.runAction.play();
-          if (this.walkAction) this.walkAction.stop();
-          if (this.idleAction) this.idleAction.stop();
-        } else if (this.walkAction) {
-          this.walkAction.play();
-          if (this.runAction) this.runAction.stop();
-          if (this.idleAction) this.idleAction.stop();
+
+    const gatherAnimToUse = this.attackAction; // Use gather or fallback to attack
+
+    if (this.isGathering && gatherAnimToUse) {
+        // --- Gathering State ---
+        this.gatherAttackTimer += deltaTime;
+
+        // Stop movement animations
+        if (this.walkAction?.isRunning()) this.walkAction.stop();
+        if (this.runAction?.isRunning()) this.runAction.stop();
+        if (this.jumpAction?.isRunning()) this.jumpAction.stop(); // Stop jump too
+
+        // Check if it's time to play the gather animation
+        if (this.gatherAttackTimer >= this.gatherAttackInterval) {
+             if (!gatherAnimToUse.isRunning()) { // Play only if not already running
+                if (this.idleAction?.isRunning()) this.idleAction.stop(); // Stop idle before playing gather
+                gatherAnimToUse.reset().play();
+                this.gatherAttackTimer = 0; // Reset timer *after* playing
+             }
         }
-      } else {
-        if (this.idleAction) this.idleAction.play();
-        if (this.walkAction) this.walkAction.stop();
-        if (this.runAction) this.runAction.stop();
-      }
+
+        // If gather animation is NOT running (i.e., between actions), play idle
+        if (!gatherAnimToUse.isRunning()) {
+            if (this.idleAction && !this.idleAction.isRunning()) {
+                this.idleAction.reset().play();
+            }
+        } else {
+             // If gather *is* running, ensure idle is stopped
+             if (this.idleAction?.isRunning()) this.idleAction.stop();
+        }
+
+    } else if (this.isAttacking && this.attackAction) {
+        // --- Attacking State ---
+         // Stop other animations
+        if (this.idleAction?.isRunning()) this.idleAction.stop();
+        if (this.walkAction?.isRunning()) this.walkAction.stop();
+        if (this.runAction?.isRunning()) this.runAction.stop();
+        if (this.jumpAction?.isRunning()) this.jumpAction.stop();
+        if (gatherAnimToUse?.isRunning()) gatherAnimToUse.stop(); // Stop gather if switching to attack
+
+        // Play attack if not already playing
+        if (!this.attackAction.isRunning()) {
+             this.attackAction.reset().play();
+        }
+    } else if (!this.isOnGround) {
+        // --- In Air State ---
+         // Stop walk/run/idle
+         if (this.idleAction?.isRunning()) this.idleAction.stop();
+         if (this.walkAction?.isRunning()) this.walkAction.stop();
+         if (this.runAction?.isRunning()) this.runAction.stop();
+         if (gatherAnimToUse?.isRunning()) gatherAnimToUse.stop(); // Stop gather if falling/jumping
+
+         // Play jump animation if it exists and isn't already playing (it's LoopOnce)
+         // Note: Jump is often triggered once on takeoff in handleMovement.
+         // If jumpAction exists and velocity > 0 (going up) or was recently triggered might be better.
+         // Let's assume if jumpAction exists and is running, we keep it, otherwise idle for falling.
+         if (this.jumpAction?.isRunning()) {
+             // Jump animation is playing, do nothing else
+         } else if (this.idleAction && !this.idleAction.isRunning()) {
+              // Otherwise play idle (falling animation placeholder)
+              this.idleAction.reset().play();
+         }
+
     } else {
-       if (this.walkAction) this.walkAction.stop();
-       if (this.runAction) this.runAction.stop();
-       if (this.idleAction) this.idleAction.stop();
-       if (this.attackAction && !this.attackAction.isRunning()) {
-            this.attackAction.reset().play();
-       }
+        // --- On Ground State (Idle/Walk/Run) ---
+        const isMoving = Math.abs(this.moveState.forward) > 0.1 || Math.abs(this.moveState.right) > 0.1;
+
+        // Determine target action
+        let targetAction: AnimationAction | undefined;
+        if (isMoving) {
+            targetAction = (this.isSprinting && this.runAction) ? this.runAction : this.walkAction;
+        } else {
+            targetAction = this.idleAction;
+        }
+
+        // Stop other ground/air animations
+        if (this.idleAction && targetAction !== this.idleAction && this.idleAction.isRunning()) this.idleAction.stop();
+        if (this.walkAction && targetAction !== this.walkAction && this.walkAction.isRunning()) this.walkAction.stop();
+        if (this.runAction && targetAction !== this.runAction && this.runAction.isRunning()) this.runAction.stop();
+        if (this.jumpAction?.isRunning()) this.jumpAction.stop(); // Ensure jump stops when grounded
+        if (gatherAnimToUse?.isRunning()) gatherAnimToUse.stop(); // Stop gather if moving
+
+        // Play the target action if it exists and isn't already playing
+        if (targetAction && !targetAction.isRunning()) {
+             targetAction.reset().play();
+        }
     }
   }
+
 
   triggerAttack(): void {
     if (this.attackAction && !this.isAttacking && !this.isGathering) {
