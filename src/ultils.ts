@@ -1,9 +1,18 @@
-/////Utils.ts
+///// src/ultils.ts
 
 import {
-  Vector3, Quaternion, Mesh, Scene, Object3D, Raycaster, Box3
-} from 'three';
-import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
+  Vector3,
+  Quaternion,
+  Mesh,
+  Scene,
+  Object3D,
+  Raycaster,
+  Box3,
+  Sprite,
+  SpriteMaterial,
+  CanvasTexture, // Added imports for speech bubble
+} from "three";
+import { SimplexNoise } from "three/examples/jsm/math/SimplexNoise.js";
 
 export interface EntityUserData {
   entityReference: any | null;
@@ -18,15 +27,24 @@ export interface EntityUserData {
   boundingBox?: Box3;
   height?: number;
   radius?: number;
+  speechBubble?: Sprite; // Added for speech bubble management
   [key: string]: unknown;
 }
 
 export interface InteractionResult {
-  type: 'reward' | 'message' | 'dialogue' | 'item_retrieved' | 'error' | 'gather_start';
+  type:
+    | "reward"
+    | "message"
+    | "dialogue"
+    | "item_retrieved"
+    | "error"
+    | "gather_start"
+    | "chat"; // Added 'chat' type
   item?: { name: string; amount: number };
   message?: string;
   text?: string;
   state?: string;
+  options?: string[]; // Added options for dialogue
 }
 
 export interface TargetInfo {
@@ -58,14 +76,13 @@ export interface GameEvent {
   location: Vector3; // Position where the event occurred
 }
 
-
 export interface EventEntry {
   timestamp: string;
   message: string;
-  actorId?: string;    // Unique ID of the actor
-  actorName?: string;  // Display name of the actor
+  actorId?: string; // Unique ID of the actor
+  actorName?: string; // Display name of the actor
   action?: string;
-  targetId?: string;   // Unique ID of the target
+  targetId?: string; // Unique ID of the target
   targetName?: string; // Display name of the target
   details?: Record<string, any>;
   location?: Vector3;
@@ -98,7 +115,6 @@ export interface UpdateOptions {
   collidables?: Object3D[];
 }
 
-
 export function degreesToRadians(degrees: number): number {
   return degrees * (Math.PI / 180);
 }
@@ -107,14 +123,24 @@ export function randomFloat(min: number, max: number): number {
   return Math.random() * (max - min) + min;
 }
 
-export function smoothVectorLerp(current: Vector3, target: Vector3, alphaBase: number, deltaTime: number): Vector3 {
+export function smoothVectorLerp(
+  current: Vector3,
+  target: Vector3,
+  alphaBase: number,
+  deltaTime: number
+): Vector3 {
   if (alphaBase <= 0) return current.copy(target);
   if (alphaBase >= 1) return current;
   const factor = 1 - Math.pow(alphaBase, deltaTime);
   return current.lerp(target, factor);
 }
 
-export function smoothQuaternionSlerp(current: Quaternion, target: Quaternion, alphaBase: number, deltaTime: number): Quaternion {
+export function smoothQuaternionSlerp(
+  current: Quaternion,
+  target: Quaternion,
+  alphaBase: number,
+  deltaTime: number
+): Quaternion {
   if (alphaBase <= 0) return current.copy(target);
   if (alphaBase >= 1) return current;
   const factor = 1 - Math.pow(alphaBase, deltaTime);
@@ -129,16 +155,19 @@ export function smoothstep(edge0: number, edge1: number, x: number): number {
 export function getTerrainHeight(scene: Scene, x: number, z: number): number {
   const terrain = scene.getObjectByName("Terrain") as Mesh;
   if (!terrain) return 0;
-  const raycaster = new Raycaster(new Vector3(x, 200, z), new Vector3(0, -1, 0));
+  const raycaster = new Raycaster(
+    new Vector3(x, 200, z),
+    new Vector3(0, -1, 0)
+  );
   const intersects = raycaster.intersectObject(terrain);
   return intersects.length > 0 ? intersects[0].point.y : 0;
 }
 
 export const Colors = {
-  PASTEL_GREEN: 0x98FB98,
-  PASTEL_BROWN: 0xCD853F,
-  PASTEL_GRAY: 0xB0C4DE,
-  FOREST_GREEN: 0x228B22,
+  PASTEL_GREEN: 0x98fb98,
+  PASTEL_BROWN: 0xcd853f,
+  PASTEL_GRAY: 0xb0c4de,
+  FOREST_GREEN: 0x228b22,
 } as const;
 
 export let nextEntityId = 0;
@@ -158,13 +187,18 @@ export class Inventory {
     this.items = new Array(size).fill(null);
     this.onChangeCallbacks = [];
     this.itemMaxStack = {
-      'default': 64, 'wood': 99, 'stone': 99, 'herb': 30, 'feather': 50,
-      'Health Potion': 10, 'gold': Infinity
+      default: 64,
+      wood: 99,
+      stone: 99,
+      herb: 30,
+      feather: 50,
+      "Health Potion": 10,
+      gold: Infinity,
     };
   }
 
   getMaxStack(itemName: string): number {
-    return this.itemMaxStack[itemName] ?? this.itemMaxStack['default'];
+    return this.itemMaxStack[itemName] ?? this.itemMaxStack["default"];
   }
 
   addItem(itemName: string, count: number = 1): boolean {
@@ -186,7 +220,11 @@ export class Inventory {
       for (let i = 0; i < this.size && remainingCount > 0; i++) {
         if (!this.items[i]) {
           const amountToAdd = Math.min(remainingCount, maxStack);
-          this.items[i] = { name: itemName, count: amountToAdd, icon: itemName.toLowerCase().replace(/ /g, '_').replace(/'/g, '') };
+          this.items[i] = {
+            name: itemName,
+            count: amountToAdd,
+            icon: itemName.toLowerCase().replace(/ /g, "_").replace(/'/g, ""),
+          };
           remainingCount -= amountToAdd;
           changed = true;
         }
@@ -215,7 +253,8 @@ export class Inventory {
   }
 
   removeItemByIndex(index: number, count: number = 1): boolean {
-    if (index < 0 || index >= this.size || !this.items[index] || count <= 0) return false;
+    if (index < 0 || index >= this.size || !this.items[index] || count <= 0)
+      return false;
     const item = this.items[index]!;
     const removeCount = Math.min(count, item.count);
     item.count -= removeCount;
@@ -225,20 +264,23 @@ export class Inventory {
   }
 
   countItem(itemName: string): number {
-    return this.items.reduce((total, item) => total + (item?.name === itemName ? item.count : 0), 0);
+    return this.items.reduce(
+      (total, item) => total + (item?.name === itemName ? item.count : 0),
+      0
+    );
   }
 
   getItem(index: number): InventoryItem | null {
-    return (index >= 0 && index < this.size) ? this.items[index] : null;
+    return index >= 0 && index < this.size ? this.items[index] : null;
   }
 
   onChange(callback: (items: Array<InventoryItem | null>) => void): void {
-    if (typeof callback === 'function') this.onChangeCallbacks.push(callback);
+    if (typeof callback === "function") this.onChangeCallbacks.push(callback);
   }
 
   notifyChange(): void {
-    const itemsCopy = this.items.map(item => item ? { ...item } : null);
-    this.onChangeCallbacks.forEach(cb => cb(itemsCopy));
+    const itemsCopy = this.items.map((item) => (item ? { ...item } : null));
+    this.onChangeCallbacks.forEach((cb) => cb(itemsCopy));
   }
 }
 
@@ -256,13 +298,24 @@ export class EventLog {
   // Overload addEntry
   addEntry(message: string): void;
   addEntry(entry: EventEntry): void;
-  addEntry(actor: string, action: string, message: string, target?: string, details?: Record<string, any>, location?: Vector3): void;
+  addEntry(
+    actor: string,
+    action: string,
+    message: string,
+    target?: string,
+    details?: Record<string, any>,
+    location?: Vector3
+  ): void;
 
   addEntry(...args: any[]): void {
     let entryToAdd: EventEntry;
-    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const timestamp = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
 
-    if (args.length === 1 && typeof args[0] === 'string') {
+    if (args.length === 1 && typeof args[0] === "string") {
       // Simple message string
       const message = args[0];
       entryToAdd = {
@@ -275,18 +328,35 @@ export class EventLog {
         details: {},
         location: undefined, // Or default Vector3
       };
-    } else if (args.length === 1 && typeof args[0] === 'object' && args[0].message && args[0].timestamp) {
-       // Pre-constructed EventEntry object (used by game.logEvent distribution)
-       entryToAdd = args[0];
-       // Ensure timestamp is current if not provided or different format
-       if (!entryToAdd.timestamp || entryToAdd.timestamp.length !== 8) {
-           entryToAdd.timestamp = timestamp;
-       }
-    } else if (args.length >= 3 && typeof args[0] === 'string' && typeof args[1] === 'string' && typeof args[2] === 'string') {
+    } else if (
+      args.length === 1 &&
+      typeof args[0] === "object" &&
+      args[0].message &&
+      args[0].timestamp
+    ) {
+      // Pre-constructed EventEntry object (used by game.logEvent distribution)
+      entryToAdd = args[0];
+      // Ensure timestamp is current if not provided or different format
+      if (!entryToAdd.timestamp || entryToAdd.timestamp.length !== 8) {
+        entryToAdd.timestamp = timestamp;
+      }
+    } else if (
+      args.length >= 3 &&
+      typeof args[0] === "string" &&
+      typeof args[1] === "string" &&
+      typeof args[2] === "string"
+    ) {
       // Structured event data
-      const [actor, action, message, target, details = {}, location = new Vector3()] = args;
+      const [
+        actor,
+        action,
+        message,
+        target,
+        details = {},
+        location = new Vector3(),
+      ] = args;
       entryToAdd = {
-         timestamp,
+        timestamp,
         message,
         actorId: undefined, // Or set default like 'System'
         actorName: undefined,
@@ -305,19 +375,63 @@ export class EventLog {
     this.notifyChange();
   }
 
-
   getFormattedEntries(): string[] {
     // Return only the message part for simple display compatibility
-    return [...this.entries].reverse().map(entry => `[${entry.timestamp}] ${entry.message}`);
+    return [...this.entries]
+      .reverse()
+      .map((entry) => `[${entry.timestamp}] ${entry.message}`);
   }
 
-  onChange(callback: (entries: EventEntry[]) => void): void { // Changed parameter type
-    if (typeof callback === 'function') this.onChangeCallbacks.push(callback);
+  onChange(callback: (entries: EventEntry[]) => void): void {
+    // Changed parameter type
+    if (typeof callback === "function") this.onChangeCallbacks.push(callback);
   }
 
   notifyChange(): void {
     // Pass the raw entries array to callbacks
     const entriesCopy = [...this.entries];
-    this.onChangeCallbacks.forEach(cb => cb(entriesCopy));
+    this.onChangeCallbacks.forEach((cb) => cb(entriesCopy));
   }
+}
+
+// Function to create speech bubble sprite
+export function createSpeechBubble(
+  text: string,
+  maxWidth: number = 200
+): Sprite {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d")!;
+
+  // Measure text
+  ctx.font = "16px Arial";
+  const textWidth = ctx.measureText(text).width;
+  const width = Math.min(maxWidth, textWidth + 20); // Add padding
+  const height = 40; // Fixed height for simplicity
+
+  canvas.width = width;
+  canvas.height = height;
+
+  // Draw background (white bubble)
+  ctx.fillStyle = "white";
+  ctx.fillRect(0, 0, width, height);
+  // Optional: Add a border
+  // ctx.strokeStyle = 'black';
+  // ctx.lineWidth = 1;
+  // ctx.strokeRect(0, 0, width, height);
+
+  // Draw text
+  ctx.fillStyle = "black";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, width / 2, height / 2);
+
+  // Create texture and sprite
+  const texture = new CanvasTexture(canvas);
+  const spriteMaterial = new SpriteMaterial({ map: texture });
+  const sprite = new Sprite(spriteMaterial);
+
+  // Scale the sprite appropriately
+  sprite.scale.set(width / 10, height / 10, 1); // Adjust scale as needed
+
+  return sprite;
 }

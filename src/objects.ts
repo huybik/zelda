@@ -1,11 +1,24 @@
-// src/objects.ts
-
 import {
-  Vector3, Mesh, Group, CylinderGeometry, ConeGeometry, BoxGeometry, SphereGeometry,
-  MeshLambertMaterial,Scene,Box3,
-} from 'three';
-import { Character } from './entities';
-import { Inventory, EventLog, EntityUserData, InteractionResult, Colors, randomFloat } from './ultils';
+  Vector3,
+  Mesh,
+  Group,
+  CylinderGeometry,
+  ConeGeometry,
+  BoxGeometry,
+  SphereGeometry,
+  MeshLambertMaterial,
+  Scene,
+  Box3,
+} from "three";
+import { Character } from "./entities";
+import {
+  Inventory,
+  EventLog,
+  EntityUserData,
+  InteractionResult,
+  Colors,
+  randomFloat,
+} from "./ultils";
 
 const treeTrunkMat = new MeshLambertMaterial({ color: Colors.PASTEL_BROWN });
 const treeFoliageMat = new MeshLambertMaterial({ color: Colors.PASTEL_GREEN });
@@ -23,7 +36,15 @@ export class InteractableObject {
   isActive: boolean;
   userData: EntityUserData;
 
-  constructor(id: string, name: string, position: Vector3, interactionType: string, data: any, prompt: string, scene: Scene | null = null) {
+  constructor(
+    id: string,
+    name: string,
+    position: Vector3,
+    interactionType: string,
+    data: any,
+    prompt: string,
+    scene: Scene | null = null
+  ) {
     this.id = id;
     this.name = name;
     this.position = position.clone();
@@ -47,41 +68,85 @@ export class InteractableObject {
     };
   }
 
-  interact(player: Character, inventory: Inventory, eventLog: EventLog): InteractionResult | null {
-    if (!this.isActive) return { type: 'error', message: 'Already used.' };
-    let message = '';
-    let action = 'interact';
+  // Updated interact method signature
+  interact(player: Character): InteractionResult | null {
+    if (!this.isActive) return { type: "error", message: "Already used." };
+    let message = "";
+    let action = "interact";
     let details: Record<string, any> = {};
 
+    // Use player's inventory and game instance for logging
+    const inventory = player.inventory;
+    const game = player.game;
+
+    if (!inventory || !game) {
+      console.error(
+        "Player inventory or game instance not found for interaction."
+      );
+      return { type: "error", message: "Internal error." };
+    }
+
     switch (this.interactionType) {
-      case 'retrieve':
+      case "retrieve":
         const itemName = this.data as string;
         if (inventory.addItem(itemName, 1)) {
           message = `Picked up: ${itemName}`;
-          action = 'retrieve';
+          action = "retrieve";
           details = { item: itemName, amount: 1 };
           this.removeFromWorld();
-          if (player.game) player.game.logEvent(player, action, message, this.name, details, this.position);
-          return { type: 'item_retrieved', item: { name: itemName, amount: 1 } };
+          game.logEvent(
+            player,
+            action,
+            message,
+            this.name,
+            details,
+            this.position
+          );
+          return {
+            type: "item_retrieved",
+            item: { name: itemName, amount: 1 },
+          };
         } else {
           message = `Inventory is full. Cannot pick up ${itemName}.`;
-          action = 'retrieve_fail';
+          action = "retrieve_fail";
           details = { item: itemName };
-          if (player.game) player.game.logEvent(player, action, message, this.name, details, this.position);
-          return { type: 'error', message: 'Inventory full' };
+          game.logEvent(
+            player,
+            action,
+            message,
+            this.name,
+            details,
+            this.position
+          );
+          return { type: "error", message: "Inventory full" };
         }
-      case 'read_sign':
-        const signText = this.data as string || "The sign is worn and illegible.";
+      case "read_sign":
+        const signText =
+          (this.data as string) || "The sign is worn and illegible.";
         message = `Read sign: "${signText}"`;
-        action = 'read';
+        action = "read";
         details = { text: signText };
-        if (player.game) player.game.logEvent(player, action, message, this.name, details, this.position);
-        return { type: 'message', message: signText };
+        game.logEvent(
+          player,
+          action,
+          message,
+          this.name,
+          details,
+          this.position
+        );
+        return { type: "message", message: signText };
       default:
         message = `Looked at ${this.name}.`;
-        action = 'examine';
-        if (player.game) player.game.logEvent(player, action, message, this.name, details, this.position);
-        return { type: 'message', message: 'You look at the object.' };
+        action = "examine";
+        game.logEvent(
+          player,
+          action,
+          message,
+          this.name,
+          details,
+          this.position
+        );
+        return { type: "message", message: "You look at the object." };
     }
   }
 
@@ -102,7 +167,12 @@ export function createTree(position: Vector3): Group {
   const foliageRadius = trunkRadius * 3 + randomFloat(0, 1.5);
   const treeGroup = new Group();
   treeGroup.name = "Tree";
-  const trunkGeo = new CylinderGeometry(trunkRadius * 0.8, trunkRadius, trunkHeight, 8);
+  const trunkGeo = new CylinderGeometry(
+    trunkRadius * 0.8,
+    trunkRadius,
+    trunkHeight,
+    8
+  );
   const trunkMesh = new Mesh(trunkGeo, treeTrunkMat);
   trunkMesh.position.y = trunkHeight / 2;
   trunkMesh.castShadow = true;
@@ -117,14 +187,14 @@ export function createTree(position: Vector3): Group {
   treeGroup.userData = {
     isCollidable: true,
     isInteractable: true,
-    interactionType: 'gather',
-    resource: 'wood',
+    interactionType: "gather",
+    resource: "wood",
     gatherTime: 3000,
     prompt: "Press E to gather Wood",
     isDepletable: true,
     respawnTime: 20000,
     entityReference: treeGroup,
-    boundingBox: new Box3().setFromObject(treeGroup)
+    boundingBox: new Box3().setFromObject(treeGroup),
   };
   return treeGroup;
 }
@@ -137,20 +207,24 @@ export function createRock(position: Vector3, size: number): Group {
   const mesh = new Mesh(geo, rockMat);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-  mesh.rotation.set(randomFloat(-0.1, 0.1) * Math.PI, randomFloat(0, 2) * Math.PI, randomFloat(-0.1, 0.1) * Math.PI);
+  mesh.rotation.set(
+    randomFloat(-0.1, 0.1) * Math.PI,
+    randomFloat(0, 2) * Math.PI,
+    randomFloat(-0.1, 0.1) * Math.PI
+  );
   rockGroup.add(mesh);
   rockGroup.position.copy(position).setY(0);
   rockGroup.userData = {
     isCollidable: true,
     isInteractable: true,
-    interactionType: 'gather',
-    resource: 'stone',
+    interactionType: "gather",
+    resource: "stone",
     gatherTime: 4000,
     prompt: "Press E to gather Stone",
     isDepletable: true,
     respawnTime: 30000,
     entityReference: rockGroup,
-    boundingBox: new Box3().setFromObject(rockGroup)
+    boundingBox: new Box3().setFromObject(rockGroup),
   };
   return rockGroup;
 }
@@ -167,14 +241,14 @@ export function createHerb(position: Vector3): Group {
   herbGroup.userData = {
     isCollidable: false,
     isInteractable: true,
-    interactionType: 'gather',
-    resource: 'herb',
+    interactionType: "gather",
+    resource: "herb",
     gatherTime: 1500,
     prompt: "Press E to gather Herb",
     isDepletable: true,
     respawnTime: 15000,
     entityReference: herbGroup,
-    boundingBox: new Box3().setFromObject(herbGroup)
+    boundingBox: new Box3().setFromObject(herbGroup),
   };
   return herbGroup;
 }

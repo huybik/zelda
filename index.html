@@ -1,56 +1,69 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=no"
+    />
     <title>Low-Poly Wilderness Quest (TS)</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌲</text></svg>">
-</head>
-<body>
+    <link rel="stylesheet" href="style.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌲</text></svg>"
+    />
+  </head>
+  <body>
     <div id="game-container">
-        <div id="intent-container"></div>
+      <div id="intent-container"></div>
     </div>
 
     <div id="ui-container">
-        <div id="hud">
-            <div class="stat-bars">
-                <div class="bar-container">
-                    <div id="health-bar" class="bar"></div>
-                    <span class="bar-label">Health</span>
-                </div>
-                <div class="bar-container">
-                    <div id="stamina-bar" class="bar"></div>
-                    <span class="bar-label">Stamina</span>
-                </div>
-                <div id="fps-display">FPS: 0</div>
-            </div>
-            <div id="interaction-prompt" style="display: none;"></div>
+      <div id="hud">
+        <div class="stat-bars">
+          <div class="bar-container">
+            <div id="health-bar" class="bar"></div>
+            <span class="bar-label">Health</span>
+          </div>
+          <div class="bar-container">
+            <div id="stamina-bar" class="bar"></div>
+            <span class="bar-label">Stamina</span>
+          </div>
+          <div id="fps-display">FPS: 0</div>
         </div>
+        <div id="interaction-prompt" style="display: none"></div>
+      </div>
 
-        <div id="minimap-container">
-            <canvas id="minimap-canvas" width="150" height="150"></canvas>
-        </div>
+      <div id="minimap-container">
+        <canvas id="minimap-canvas" width="150" height="150"></canvas>
+      </div>
 
-        <div id="inventory-display" class="ui-panel hidden">
-            <h2>Inventory (I)</h2>
-            <div id="inventory-slots">
-            </div>
-        </div>
+      <div id="inventory-display" class="ui-panel hidden">
+        <h2>Inventory (I)</h2>
+        <div id="inventory-slots"></div>
+      </div>
 
-         <div id="journal-display" class="ui-panel hidden">
-            <h2>Journal (J)</h2>
-            <div class="journal-section">
-                <h3>Quest Log</h3>
-                <ul id="quest-log"></ul>
-            </div>
-            <div class="journal-section">
-                 <h3>Event Log</h3>
-                 <ul id="event-log"></ul>
-            </div>
+      <div id="journal-display" class="ui-panel hidden">
+        <h2>Journal (J)</h2>
+        <div class="journal-section">
+          <h3>Quest Log</h3>
+          <ul id="quest-log"></ul>
         </div>
+        <div class="journal-section">
+          <h3>Event Log</h3>
+          <ul id="event-log"></ul>
+        </div>
+      </div>
+
+      <!-- Chat Interface -->
+      <div id="chat-container" class="hidden">
+        <input type="text" id="chat-input" placeholder="Type your message..." />
+        <button id="chat-send">Send</button>
+        <button id="chat-close">Close</button>
+        <!-- Added Close Button -->
+      </div>
     </div>
 
     <script type="module" src="/src/main.js"></script>
-</body>
+  </body>
 </html>

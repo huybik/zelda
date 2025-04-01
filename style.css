@@ -1,327 +1,445 @@
-html, body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden; /* Prevent scrollbars */
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    color: #333;
-    background-color: #87CEEB; /* Fallback sky */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* Prevent scrollbars */
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  color: #333;
+  background-color: #87ceeb; /* Fallback sky */
 }
 
 #game-container {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    cursor: default; /* Default cursor for the container */
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: default; /* Default cursor for the container */
 }
 
 /* When pointer is locked, hide the system cursor */
 #game-container:focus-within {
-   /* cursor: none; */ /* Browser usually handles this with pointer lock */
+  /* cursor: none; */ /* Browser usually handles this with pointer lock */
 }
 
-
 canvas {
-    display: block; /* Remove extra space below canvas */
+  display: block; /* Remove extra space below canvas */
 }
 
 /* --- UI Container --- */
 #ui-container {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none; /* Allow clicks through to canvas by default */
-    z-index: 10;
-    display: flex; /* Use flex/grid for positioning if needed, or absolute */
-    flex-direction: column;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* Allow clicks through to canvas by default */
+  z-index: 10;
+  display: flex; /* Use flex/grid for positioning if needed, or absolute */
+  flex-direction: column;
 }
 
 /* Allow pointer events on specific UI elements */
-#hud, #minimap-container, .ui-panel {
-    pointer-events: auto;
+#hud,
+#minimap-container,
+.ui-panel,
+#chat-container {
+  /* Added chat-container */
+  pointer-events: auto;
 }
 
 /* --- HUD --- */
 #hud {
-    position: absolute; /* Position within ui-container */
-    top: 15px;
-    left: 15px;
-    color: white;
-    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
-    user-select: none;
+  position: absolute; /* Position within ui-container */
+  top: 15px;
+  left: 15px;
+  color: white;
+  text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
+  user-select: none;
 }
 
 .stat-bars {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .bar-container {
-    background-color: rgba(30, 30, 30, 0.7);
-    border-radius: 5px;
-    padding: 3px;
-    width: 160px;
-    position: relative;
-    border: 1px solid rgba(0, 0, 0, 0.3);
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+  background-color: rgba(30, 30, 30, 0.7);
+  border-radius: 5px;
+  padding: 3px;
+  width: 160px;
+  position: relative;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .bar {
-    height: 16px;
-    border-radius: 3px;
-    transition: width 0.2s ease-out, background-color 0.3s ease;
-    box-shadow: inset 0 -1px 1px rgba(255,255,255,0.2);
+  height: 16px;
+  border-radius: 3px;
+  transition: width 0.2s ease-out, background-color 0.3s ease;
+  box-shadow: inset 0 -1px 1px rgba(255, 255, 255, 0.2);
 }
 
-#health-bar { background-color: #4CAF50; }
-#stamina-bar { background-color: #FF69B4; }
+#health-bar {
+  background-color: #4caf50;
+}
+#stamina-bar {
+  background-color: #ff69b4;
+}
 
 #stamina-bar.exhausted {
-    background-color: #777;
-    animation: pulse-grey 1.5s infinite ease-in-out;
+  background-color: #777;
+  animation: pulse-grey 1.5s infinite ease-in-out;
 }
 @keyframes pulse-grey {
-    0%, 100% { opacity: 0.7; }
-    50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .bar-label {
-    position: absolute;
-    top: 1px;
-    left: 6px;
-    font-size: 11px;
-    font-weight: bold;
-    line-height: 18px; /* Match bar height + padding */
-    color: white;
-    text-shadow: 1px 1px 2px black;
-    pointer-events: none;
+  position: absolute;
+  top: 1px;
+  left: 6px;
+  font-size: 11px;
+  font-weight: bold;
+  line-height: 18px; /* Match bar height + padding */
+  color: white;
+  text-shadow: 1px 1px 2px black;
+  pointer-events: none;
 }
 
 #interaction-prompt {
-    position: fixed; /* Position relative to viewport */
-    bottom: 20%;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: rgba(0, 0, 0, 0.75);
-    color: white;
-    padding: 10px 18px;
-    border-radius: 6px;
-    font-size: 15px;
-    text-align: center;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
-    display: none; /* Controlled by JS */
-    z-index: 15; /* Above HUD elements */
+  position: fixed; /* Position relative to viewport */
+  bottom: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.75);
+  color: white;
+  padding: 10px 18px;
+  border-radius: 6px;
+  font-size: 15px;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+  display: none; /* Controlled by JS */
+  z-index: 15; /* Above HUD elements */
 }
 
 /* --- Minimap --- */
 #minimap-container {
-    position: absolute;
-    top: 15px;
-    right: 15px;
-    border: 2px solid rgba(50, 50, 50, 0.8);
-    border-radius: 4px;
-    background-color: rgba(100, 100, 100, 0.6);
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  border: 2px solid rgba(50, 50, 50, 0.8);
+  border-radius: 4px;
+  background-color: rgba(100, 100, 100, 0.6);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
 }
 
 #minimap-canvas {
-    display: block;
-    border-radius: 2px;
+  display: block;
+  border-radius: 2px;
 }
 
 /* --- Panels (Inventory & Journal) --- */
 .ui-panel {
-    position: fixed; /* Relative to viewport */
-    background-color: rgba(235, 235, 235, 0.97); /* Slightly more opaque */
-    border: 1px solid #aaa;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-    z-index: 20; /* Above other UI */
-    transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out; /* Add transitions */
-    opacity: 1;
-    transform: scale(1);
+  position: fixed; /* Relative to viewport */
+  background-color: rgba(235, 235, 235, 0.97); /* Slightly more opaque */
+  border: 1px solid #aaa;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  z-index: 20; /* Above other UI */
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out; /* Add transitions */
+  opacity: 1;
+  transform: scale(1);
 }
 
 /* Hidden state for panels */
 .ui-panel.hidden {
-    opacity: 0;
-    transform: scale(0.95);
-    pointer-events: none; /* Disable interaction when hidden */
-    /* Use visibility: hidden instead of display: none for transitions */
-    visibility: hidden;
-    transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out, visibility 0s 0.2s;
+  opacity: 0;
+  transform: scale(0.95);
+  pointer-events: none; /* Disable interaction when hidden */
+  /* Use visibility: hidden instead of display: none for transitions */
+  visibility: hidden;
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out,
+    visibility 0s 0.2s;
 }
-.ui-panel { /* Ensure visibility is set when not hidden */
-    visibility: visible;
-    transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+.ui-panel {
+  /* Ensure visibility is set when not hidden */
+  visibility: visible;
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
 }
-
 
 #inventory-display {
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%) scale(1); /* Initial transform state */
-    width: 85%;
-    max-width: 700px;
-    max-height: 60vh;
-    display: flex;
-    flex-direction: column;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) scale(1); /* Initial transform state */
+  width: 85%;
+  max-width: 700px;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
 }
-#inventory-display.hidden { transform: translateX(-50%) scale(0.95); }
-
+#inventory-display.hidden {
+  transform: translateX(-50%) scale(0.95);
+}
 
 #journal-display {
-     top: 50%;
-     left: 50%;
-     transform: translate(-50%, -50%) scale(1); /* Initial transform state */
-     width: 80%;
-     max-width: 650px;
-     max-height: 75vh;
-     display: flex;
-     flex-direction: column;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(1); /* Initial transform state */
+  width: 80%;
+  max-width: 650px;
+  max-height: 75vh;
+  display: flex;
+  flex-direction: column;
 }
-#journal-display.hidden { transform: translate(-50%, -50%) scale(0.95); }
-
+#journal-display.hidden {
+  transform: translate(-50%, -50%) scale(0.95);
+}
 
 .ui-panel h2 {
-    margin-top: 0;
-    text-align: center;
-    color: #444;
-    border-bottom: 1px solid #ccc;
-    padding-bottom: 12px;
-    margin-bottom: 18px;
-    font-size: 1.3em;
-    user-select: none;
-    flex-shrink: 0; /* Prevent header shrinking */
+  margin-top: 0;
+  text-align: center;
+  color: #444;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 12px;
+  margin-bottom: 18px;
+  font-size: 1.3em;
+  user-select: none;
+  flex-shrink: 0; /* Prevent header shrinking */
 }
 
 /* Inventory Slots */
 #inventory-slots {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
-    gap: 12px;
-    overflow-y: auto;
-    padding: 5px;
-    flex-grow: 1; /* Allow grid to fill space */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
+  gap: 12px;
+  overflow-y: auto;
+  padding: 5px;
+  flex-grow: 1; /* Allow grid to fill space */
 }
 
 .inventory-slot {
-    width: 65px;
-    height: 65px;
-    background-color: rgba(200, 200, 200, 0.9);
-    border: 1px solid #999;
-    border-radius: 5px;
-    position: relative;
-    cursor: pointer;
-    transition: background-color 0.15s ease, transform 0.1s ease;
-    overflow: hidden;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+  width: 65px;
+  height: 65px;
+  background-color: rgba(200, 200, 200, 0.9);
+  border: 1px solid #999;
+  border-radius: 5px;
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 .inventory-slot:hover {
-    background-color: rgba(180, 180, 180, 1);
-    transform: scale(1.05);
-    border-color: #666;
+  background-color: rgba(180, 180, 180, 1);
+  transform: scale(1.05);
+  border-color: #666;
 }
 
 .item-icon {
-    width: 40px;
-    height: 40px;
-    background-color: #ddd; /* Placeholder bg */
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-    border-radius: 3px;
-    box-shadow: inset 0 0 2px rgba(0,0,0,0.2);
-    visibility: hidden; /* JS controls visibility */
+  width: 40px;
+  height: 40px;
+  background-color: #ddd; /* Placeholder bg */
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  border-radius: 3px;
+  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.2);
+  visibility: hidden; /* JS controls visibility */
 }
 /* Specific Item Icon Styles (using classes generated by JS) */
-.item-icon.wood { background-color: #8B4513; }
-.item-icon.stone { background-color: #808080; }
-.item-icon.herb { background-color: #228B22; } /* Darker green */
-.item-icon.feather { background-color: #FFFFFF; border: 1px solid #eee; }
-.item-icon.health_potion { background-color: #FF4500; border-radius: 50%; } /* Round potion */
-.item-icon.gold { background-color: #FFD700; border-radius: 50%; }
-.item-icon.hunters_bow { background-color: #A0522D; width: 50px; height: 15px; } /* Bow shape */
-.item-icon.default_icon { background-color: #aaa; } /* Fallback */
-
+.item-icon.wood {
+  background-color: #8b4513;
+}
+.item-icon.stone {
+  background-color: #808080;
+}
+.item-icon.herb {
+  background-color: #228b22;
+} /* Darker green */
+.item-icon.feather {
+  background-color: #ffffff;
+  border: 1px solid #eee;
+}
+.item-icon.health_potion {
+  background-color: #ff4500;
+  border-radius: 50%;
+} /* Round potion */
+.item-icon.gold {
+  background-color: #ffd700;
+  border-radius: 50%;
+}
+.item-icon.hunters_bow {
+  background-color: #a0522d;
+  width: 50px;
+  height: 15px;
+} /* Bow shape */
+.item-icon.default_icon {
+  background-color: #aaa;
+} /* Fallback */
 
 .item-count {
-    position: absolute;
-    bottom: 3px;
-    right: 5px;
-    font-size: 13px;
-    font-weight: bold;
-    color: #f0f0f0;
-    text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.9);
-    background-color: rgba(0, 0, 0, 0.2);
-    padding: 0 3px;
-    border-radius: 2px;
+  position: absolute;
+  bottom: 3px;
+  right: 5px;
+  font-size: 13px;
+  font-weight: bold;
+  color: #f0f0f0;
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.9);
+  background-color: rgba(0, 0, 0, 0.2);
+  padding: 0 3px;
+  border-radius: 2px;
 }
 
 /* Journal Entries */
 .journal-section {
-    margin-bottom: 15px;
-    flex-shrink: 0;
+  margin-bottom: 15px;
+  flex-shrink: 0;
 }
 .journal-section:last-child {
-     margin-bottom: 0;
+  margin-bottom: 0;
 }
 
 .journal-section h3 {
-    margin-top: 0;
-    margin-bottom: 8px;
-    font-size: 1.1em;
-    color: #555;
-    border-bottom: 1px dotted #ccc;
-    padding-bottom: 5px;
+  margin-top: 0;
+  margin-bottom: 8px;
+  font-size: 1.1em;
+  color: #555;
+  border-bottom: 1px dotted #ccc;
+  padding-bottom: 5px;
 }
-#quest-log, #event-log {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    max-height: 25vh; /* Limit height of each list */
-    overflow-y: auto;
-    border: 1px solid #ddd;
-    background-color: rgba(255, 255, 255, 0.6);
-    border-radius: 4px;
-    padding: 10px;
-    scrollbar-width: thin; /* Firefox scrollbar styling */
-    scrollbar-color: #aaa #eee; /* Firefox scrollbar thumb and track */
+#quest-log,
+#event-log {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 25vh; /* Limit height of each list */
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  background-color: rgba(255, 255, 255, 0.6);
+  border-radius: 4px;
+  padding: 10px;
+  scrollbar-width: thin; /* Firefox scrollbar styling */
+  scrollbar-color: #aaa #eee; /* Firefox scrollbar thumb and track */
 }
 /* Webkit scrollbar styling */
-#quest-log::-webkit-scrollbar, #event-log::-webkit-scrollbar { width: 8px; }
-#quest-log::-webkit-scrollbar-track, #event-log::-webkit-scrollbar-track { background: #eee; border-radius: 4px; }
-#quest-log::-webkit-scrollbar-thumb, #event-log::-webkit-scrollbar-thumb { background-color: #aaa; border-radius: 4px; border: 2px solid #eee; }
-
-
-#quest-log li, #event-log li {
-    margin-bottom: 10px;
-    padding-bottom: 10px;
-    border-bottom: 1px dashed #ddd;
-    font-size: 0.95em;
-    line-height: 1.4;
+#quest-log::-webkit-scrollbar,
+#event-log::-webkit-scrollbar {
+  width: 8px;
 }
-#quest-log li:last-child, #event-log li:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
+#quest-log::-webkit-scrollbar-track,
+#event-log::-webkit-scrollbar-track {
+  background: #eee;
+  border-radius: 4px;
+}
+#quest-log::-webkit-scrollbar-thumb,
+#event-log::-webkit-scrollbar-thumb {
+  background-color: #aaa;
+  border-radius: 4px;
+  border: 2px solid #eee;
+}
+
+#quest-log li,
+#event-log li {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed #ddd;
+  font-size: 0.95em;
+  line-height: 1.4;
+}
+#quest-log li:last-child,
+#event-log li:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
 }
 
 /* Quest Status Styling */
-li.quest-completed { color: #555; font-style: italic; text-decoration: line-through; opacity: 0.7; }
-li.quest-failed { color: #a00; font-style: italic; opacity: 0.8; }
-li.quest-available { color: #005a9c; } /* Dark blue */
-li.quest-active strong { color: #006400; } /* Dark green */
+li.quest-completed {
+  color: #555;
+  font-style: italic;
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+li.quest-failed {
+  color: #a00;
+  font-style: italic;
+  opacity: 0.8;
+}
+li.quest-available {
+  color: #005a9c;
+} /* Dark blue */
+li.quest-active strong {
+  color: #006400;
+} /* Dark green */
 
+/* --- Chat Interface --- */
+#chat-container {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 10px;
+  border-radius: 5px;
+  display: flex;
+  gap: 10px;
+  z-index: 25; /* Above other UI panels */
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+  opacity: 1;
+}
+
+#chat-container.hidden {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out,
+    visibility 0s 0.2s;
+}
+
+#chat-input {
+  width: 300px;
+  padding: 8px; /* Increased padding */
+  border: 1px solid #555;
+  border-radius: 3px;
+  background-color: #f0f0f0;
+  color: #333;
+}
+#chat-input:focus {
+  outline: none;
+  border-color: #aaa;
+}
+
+#chat-send,
+#chat-close {
+  padding: 8px 15px; /* Increased padding */
+  border: none;
+  border-radius: 3px;
+  background-color: #555;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+#chat-send:hover,
+#chat-close:hover {
+  background-color: #777;
+}
+#chat-send:disabled {
+  background-color: #444;
+  cursor: not-allowed;
+}
 
 /* --- Utility --- */
 /* Using class-based hiding instead of !important */
@@ -329,26 +447,26 @@ li.quest-active strong { color: #006400; } /* Dark green */
 
 /* Crosshair using ::after pseudo-element */
 body::after {
-    content: '+';
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 24px;
-    font-weight: bold;
-    color: rgba(255, 255, 255, 0.5);
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
-    pointer-events: none; /* Allow clicks through */
-    z-index: 5; /* Below UI panels */
-    user-select: none;
+  content: "+";
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 24px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.5);
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+  pointer-events: none; /* Allow clicks through */
+  z-index: 5; /* Below UI panels */
+  user-select: none;
 }
 
 /* Hide crosshair when UI is open (optional) */
-body:has(.ui-panel:not(.hidden))::after {
-   /* display: none; */ /* Uncomment to hide crosshair when panels are open */
+body:has(.ui-panel:not(.hidden))::after,
+body:has(#chat-container:not(.hidden))::after {
+  /* Hide when chat is open too */
+  display: none; /* Uncomment to hide crosshair when panels are open */
 }
-
-
 
 #fps-display {
   position: relative;
@@ -361,3 +479,26 @@ body:has(.ui-panel:not(.hidden))::after {
   padding: 2px 5px;
 }
 
+/* Intent Display */
+#intent-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5; /* Below UI panels but above game */
+}
+
+.intent-text {
+  position: absolute;
+  transform: translateX(-50%); /* Center horizontally */
+  background-color: rgba(0, 0, 0, 0.6);
+  color: #eee;
+  padding: 3px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  white-space: nowrap;
+  user-select: none;
+  display: none; /* Hidden by default */
+}
