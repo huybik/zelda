@@ -115,25 +115,48 @@ export class AIController {
 
     switch (this.aiState) {
       case 'idle':
-        this.actionTimer -= deltaTime;
-        if (this.actionTimer <= 0) {
-          this.actionTimer = 5 + Math.random() * 5;
-          const currentTime = Date.now();
-          const timeSinceLastCall = currentTime - this.lastApiCallTime;
+        const currentTime = Date.now();
+        const timeSinceLastCall = currentTime - this.lastApiCallTime;
+        const canCallApi = timeSinceLastCall >= this.apiCallCooldown;
 
-          // Check conditions for API call
-          if (
-            timeSinceLastCall >= this.apiCallCooldown && ( this.isAffectedByEntities() || // Respect cooldown
-            this.justCompletedAction()) // Action finished or entity interaction
-          ) {
+        // --- Reactivity Check (Happens frequently while idle) ---
+        // Should we call the API due to environment changes, even if timer hasn't run out?
+        if (canCallApi && this.isAffectedByEntities()) {
+            console.log(`AI (${this.character.name}) reacting to entity change.`);
             this.decideNextAction();
             this.lastApiCallTime = currentTime;
-          } else {
-            // Fallback to local behavior if API not called
-            this.fallbackToDefaultBehavior();
-          }
+            this.actionTimer = 5 + Math.random() * 5; // Reset idle timer after API call
+            break; // Exit idle state processing for this frame
         }
-        break;
+
+        // --- Regular Idle Timer Check ---
+        this.actionTimer -= deltaTime;
+        if (this.actionTimer <= 0) {
+            this.actionTimer = 5 + Math.random() * 5; // Reset timer
+
+            // Should we call the API because we finished an action or just been idle?
+            if (canCallApi && this.justCompletedAction()) {
+                 console.log(`AI (${this.character.name}) deciding action after completing task.`);
+                 this.decideNextAction();
+                 this.lastApiCallTime = currentTime;
+            } else if (canCallApi) {
+                // Optional: Call API even if nothing changed, just because idle timer ran out
+                // console.log(`AI (${this.character.name}) deciding action after idle period.`);
+                // this.decideNextAction();
+                // this.lastApiCallTime = currentTime;
+
+                // Or stick to fallback if nothing triggered the API
+                 console.log(`AI (${this.character.name}) falling back to default after idle period.`);
+                 this.fallbackToDefaultBehavior();
+            }
+             else {
+                // Cooldown not met when timer expired, just roam for now
+                console.log(`AI (${this.character.name}) falling back (cooldown) after idle period.`);
+                this.fallbackToDefaultBehavior();
+            }
+        }
+        // If none of the above happened, remain idle.
+        break; // End of idle case
 
       case 'roaming':
         if (this.destination) {
@@ -262,12 +285,8 @@ export class AIController {
       }
     }
 
-    // Check event log for recent interactions
-    const recentEvents = this.character.eventLog.entries.slice(-5);
-    return recentEvents.some(event =>
-      event.target === this.character.name ||
-      (event.actor !== this.character.name && (event.location?.distanceTo(this.character.mesh!.position) ?? Infinity) < this.searchRadius)
-    );
+    // If no changes are detected, return false
+    return false;
   }
 
 updateObservation(allEntities: Array<any>): void {
@@ -328,9 +347,14 @@ updateObservation(allEntities: Array<any>): void {
   generatePrompt(): string {
   const persona = this.persona;
   const observation = this.observation;
-  const eventLog = this.character.eventLog.getFormattedEntries().slice(-5).join('\n');
+  // Format event log to include IDs
+  const eventLog = this.character.eventLog.entries.slice(-5).map(entry => {
+    let logMessage = `[${entry.timestamp}] ${entry.message}`;
+    if (entry.actorId) logMessage += ` (Actor ID: ${entry.actorId})`;
+    if (entry.targetId) logMessage += ` (Target ID: ${entry.targetId})`;
+    return logMessage;
+  }).join('\n');
 
-  // Include self state
   const selfState = observation?.self
     ? `- Health: ${observation.self.health}\n- Current action: ${observation.self.currentAction}`
     : 'Unknown';
@@ -349,44 +373,51 @@ updateObservation(allEntities: Array<any>): void {
     ).join('\n');
   }
 
-  const prompt = `
-You are controlling an NPC named ${this.character.name} in a game. Here is your persona:
+    const prompt = `
+  You are controlling an NPC named ${this.character.id} in a game. Here is your persona:
 
-${persona}
+  ${persona}
 
-Your current state:
-${selfState}
+  Your current state:
+  ${selfState}
 
-Here are your recent observations:
+  Here are your recent observations:
 
-Nearby characters:
-${nearbyCharacters}
+  Nearby characters:
+  ${nearbyCharacters}
 
-Nearby objects:
-${nearbyObjects}
+  Nearby objects:
+  ${nearbyObjects}
 
-Here are the recent events you are aware of:
+  Here are the recent events you are aware of:
 
-${eventLog}
+  ${eventLog}
 
-Based on this information, decide your next action. Respond with a JSON object in the following format:
-{
-  "action": "idle" | "roam" | "gather" | "moveTo",
-  "resource": "wood" | "stone" | "herb", // only if action is "gather"
-  "target": "home" | "character_name", // only if action is "moveTo"
-  "intent": "less than 5 words reason here"
-}
+  Based on this information, decide your next action, you may want to gather resource if there's nothing to do. Respond with a JSON object in the following format:
+  {
+    "action": "idle" | "roam" | "gather" | "moveTo" | "attack" | "interact"},
+    "object_id": "object_id_here", // only if action is "gather", choose from nearby objects
+    "target_id": "character_id_here", // only if action is "moveTo", "attack" or "interact", choose from nearby characters or "home"
+    "intent": "less than 5 words reason here"
+  }
 
-For example:
-{
-  "action": "gather",
-  "resource": "wood",
-  "intent": "I need materials for my farm"
-}
-`.trim();
+  For example:  
+  {
+    "action": "gather",
+    "object_id": "tree_abc123",
+    "intent": "I need wood"
+  }
 
-  return prompt;
-}
+  Or:
+  {
+    "action": "moveTo",
+    "target_id": "Farmer Giles_1",
+    "intent": "Ask for help"
+  }
+  `.trim();
+
+    return prompt;
+  }
 
   async decideNextAction(): Promise<void> {
   const prompt = this.generatePrompt();
@@ -427,8 +458,8 @@ For example:
     }
   }
 
-  setActionFromAPI(actionData: { action: string; resource?: string; target?: string; intent: string }): void {
-  const { action, resource, target, intent } = actionData;
+  setActionFromAPI(actionData: { action: string; object_id?: string; target_id?: string; intent: string }): void {
+  const { action, object_id, target_id, intent } = actionData;
   this.currentIntent = intent || 'Thinking...';
 
   if (action === 'idle') {
@@ -444,33 +475,22 @@ For example:
     if (this.character.scene) {
       this.destination.y = getTerrainHeight(this.character.scene, this.destination.x, this.destination.z);
     }
-  } else if (action === 'gather' && resource) {
-    const resourceType = resource.toLowerCase();
-    if (this.character.scene) {
-      const resources = this.character.scene.children.filter(child =>
-        child.userData.resource === resourceType && child.visible && child.userData.isInteractable
-      );
-      if (resources.length > 0) {
-        const nearestResource = resources.reduce((closest, res) => {
-          const dist = this.character.mesh!.position.distanceToSquared(res.position);
-          return dist < closest.dist ? { res, dist } : closest;
-        }, { res: resources[0], dist: Infinity }).res;
-        this.targetResource = nearestResource;
-        this.aiState = 'movingToResource';
-      } else {
-        this.currentIntent += ` (but couldn't find any ${resourceType})`;
-        this.aiState = 'idle';
-      }
+  } else if (action === 'gather' && object_id) {
+    const targetObject = this.character.scene?.children.find(child => child.userData.id === object_id && child.userData.isInteractable && child.visible);
+    if (targetObject && this.observation?.nearbyObjects.some(o => o.id === object_id)) {
+      this.targetResource = targetObject;
+      this.aiState = 'movingToResource';
     } else {
+      this.currentIntent += ` (couldn't find object ${object_id})`;
       this.aiState = 'idle';
     }
-  } else if (action === 'moveTo' && target) {
+  } else if (action === 'moveTo' && target_id) {
     let targetPos: Vector3 | null = null;
-    if (target.toLowerCase() === 'home') {
+    if (target_id.toLowerCase() === 'home') {
       targetPos = this.homePosition.clone();
     } else {
-      const foundTarget = this.character.game?.entities.find(e => e.name?.toLowerCase() === target.toLowerCase());
-      if (foundTarget && foundTarget.mesh) {
+      const foundTarget = this.character.game?.entities.find(e => e.id === target_id);
+      if (foundTarget && foundTarget.mesh && this.observation?.nearbyCharacters.some(c => c.id === target_id)) {
         targetPos = foundTarget.mesh.position.clone();
       }
     }
@@ -481,35 +501,31 @@ For example:
       }
       this.aiState = 'roaming';
     } else {
-      this.currentIntent += ` (but couldn't find ${target})`;
+      this.currentIntent += ` (couldn't find target ${target_id})`;
       this.aiState = 'idle';
     }
+  console.log(`AI (${this.character.name}) ${this.currentIntent} ${target_id}`);
+  
   } else {
-    console.log(`AI (${this.character.name}) action not recognized: "${action}", defaulting to idle.`);
+    console.log(`AI (${this.character.name}) action not recognized or missing parameters: "${action}", defaulting to idle.`);
     this.aiState = 'idle';
   }
 
   // Log the decided action
   if (this.character.game) {
     let actionMessage = '';
-    if (action === 'idle') {
-      actionMessage = 'idle';
-    } else if (action === 'roam') {
-      actionMessage = 'roam';
-    } else if (action === 'gather' && resource) {
-      actionMessage = `gather ${resource}`;
-    } else if (action === 'moveTo' && target) {
-      actionMessage = `move to ${target}`;
-    } else {
-      actionMessage = action;
-    }
+    if (action === 'idle') actionMessage = 'idle';
+    else if (action === 'roam') actionMessage = 'roam';
+    else if (action === 'gather' && object_id) actionMessage = `gather from ${object_id}`;
+    else if (action === 'moveTo' && target_id) actionMessage = `move to ${target_id}`;
+    else actionMessage = action;
     const message = `Decided to ${actionMessage} because ${intent}`;
     this.character.game.logEvent(
       this.character,
       "decide_action",
       message,
       undefined,
-      { action, resource, target, intent },
+      { action, object_id, target_id, intent },
       this.character.mesh!.position
     );
   }

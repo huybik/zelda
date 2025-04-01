@@ -59,17 +59,17 @@ export interface GameEvent {
 }
 
 
-// Updated EventEntry interface to include optional structured fields
 export interface EventEntry {
   timestamp: string;
   message: string;
-  actor?: string;
+  actorId?: string;    // Unique ID of the actor
+  actorName?: string;  // Display name of the actor
   action?: string;
-  target?: string;
+  targetId?: string;   // Unique ID of the target
+  targetName?: string; // Display name of the target
   details?: Record<string, any>;
   location?: Vector3;
 }
-
 
 export interface KeyState {
   [key: string]: boolean | undefined;
@@ -268,9 +268,10 @@ export class EventLog {
       entryToAdd = {
         timestamp,
         message,
-        actor: undefined, // Or set default like 'System'
+        actorId: undefined, // Or set default like 'System'
+        actorName: undefined,
         action: undefined,
-        target: undefined,
+        targetId: undefined,
         details: {},
         location: undefined, // Or default Vector3
       };
@@ -285,13 +286,14 @@ export class EventLog {
       // Structured event data
       const [actor, action, message, target, details = {}, location = new Vector3()] = args;
       entryToAdd = {
-        timestamp,
+         timestamp,
         message,
-        actor,
-        action,
-        target,
-        details,
-        location,
+        actorId: undefined, // Or set default like 'System'
+        actorName: undefined,
+        action: undefined,
+        targetId: undefined,
+        details: {},
+        location: undefined, // Or default Vector3
       };
     } else {
       console.warn("Invalid arguments passed to EventLog.addEntry:", args);

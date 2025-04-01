@@ -259,12 +259,12 @@ export class Character extends Entity {
         }
         // Ensure we don’t hit ourselves and target can take damage
         if (targetEntity && targetEntity !== this && targetEntity.takeDamage) {
-            targetEntity.takeDamage(damage, this);
-            if (this.game) {
-                const message = `${this.name} hit ${targetEntity.name} for ${damage} damage.`;
-                this.game.logEvent(this, "attack", message, targetEntity.name, { damage }, this.mesh!.position);
-            }
-        }
+    targetEntity.takeDamage(damage, this);
+    if (this.game) {
+        const message = `${this.name} hit ${targetEntity.name} for ${damage} damage.`;
+        this.game.logEvent(this, "attack", message, targetEntity, { damage }, this.mesh!.position);
+    }
+}
     }
 }
 
@@ -506,7 +506,7 @@ export class Character extends Entity {
     //  }
      this.lookAt(player.mesh!.position);
      const defaultDialogue = "Hello there.";
-     if (this.game) this.game.logEvent(this, "interact", `${this.name}: "${defaultDialogue}"`, player.name, {}, this.mesh!.position);
+     if (this.game) this.game.logEvent(this, "interact", `${this.name}: "${defaultDialogue}"`, player, {}, this.mesh!.position);
      return { type: 'dialogue', text: defaultDialogue, state: 'greeting', options: ['Switch Control'] };
   }
 }

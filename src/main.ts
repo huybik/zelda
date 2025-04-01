@@ -509,26 +509,30 @@ export class Game {
     }
   }
 
-  logEvent(actor: Character, action: string, message: string, target?: string, details: Record<string, any> = {}, location: Vector3 = actor.mesh!.position): void {
-    const eventEntry: EventEntry = {
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      message,
-      actor: actor.name,
-      action,
-      target,
-      details,
-      location: location.clone(),
-    };
-    actor.eventLog.addEntry(eventEntry);
-    this.entities.forEach(entity => {
-      if (entity instanceof Character && entity !== actor && entity.aiController) {
-        const distanceSq = location.distanceToSquared(entity.mesh!.position);
-        if (distanceSq <= entity.searchRadius * entity.searchRadius) {
-           entity.eventLog.addEntry(eventEntry);
-        }
-      }
-    });
-  }
+  logEvent(actor: Entity | string, action: string, message: string, target?: Entity | string, details: Record<string, any> = {}, location?: Vector3): void {
+  const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const actorId = typeof actor === 'string' ? actor : actor.id;
+  const actorName = typeof actor === 'string' ? actor : actor.name;
+  const targetId = typeof target === 'string' ? target : target?.id;
+  const targetName = typeof target === 'string' ? target : target?.name;
+  const eventEntry: EventEntry = {
+    timestamp,
+    message,
+    actorId,
+    actorName,
+    action,
+    targetId,
+    targetName,
+    details,
+    location,
+  };
+  // Distribute to all characters' event logs
+  this.entities.forEach(entity => {
+    if (entity instanceof Character && entity.eventLog) {
+      entity.eventLog.addEntry(eventEntry);
+    }
+  });
+}
 }
 
 declare global {
