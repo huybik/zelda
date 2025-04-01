@@ -1,3 +1,4 @@
+// File: /src/main.ts
 import {
   Scene,
   PerspectiveCamera,
@@ -21,6 +22,7 @@ import {
   Group,
   AnimationClip,
   Vector2,
+  SphereGeometry, // Added for particles
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { SimplexNoise } from "three/examples/jsm/math/SimplexNoise.js";
@@ -316,6 +318,7 @@ export class Game {
   interactableObjects: Array<any> = [];
   isPaused: boolean = false;
   intentContainer: HTMLElement | null = null;
+  particleEffects: Group[] = []; // Array to hold active particle effects
 
   constructor() {}
 
@@ -343,7 +346,7 @@ export class Game {
     });
 
     this.activeCharacter!.eventLog.addEntry(
-      "Welcome! Click window to lock controls. [I] Inventory, [J] Journal, [E] Interact, [C] Switch Control, [Esc] Unlock/Close UI"
+      "Welcome! Click window to lock controls. [I] Inventory, [J] Journal, [E] Interact, [F] Attack, [C] Switch Control, [Esc] Unlock/Close UI"
     );
   }
 
@@ -562,6 +565,8 @@ export class Game {
     )
       return;
     const deltaTime = Math.min(this.clock.getDelta(), 0.05);
+    const elapsedTime = this.clock.elapsedTime; // Get elapsed time for particles
+
     this.controls!.update(deltaTime);
     if (!this.isPaused) {
       this.activeCharacter.update(deltaTime, {
@@ -594,9 +599,124 @@ export class Game {
       this.thirdPersonCamera!.update(deltaTime, this.collidableObjects);
       if (this.activeCharacter.isDead) this.respawnPlayer();
     }
+
+    // Update particle effects
+    this.updateParticleEffects(elapsedTime);
+
     this.hud!.update();
     this.renderer.render(this.scene, this.camera);
     this.minimap!.update();
+  }
+
+  spawnParticleEffect(position: Vector3, colorName: "red" | "green"): void {
+    if (!this.scene || !this.clock) return;
+
+    const particleCount = 10;
+    const particleSize = 0.07;
+    const effectDuration = 1; // seconds
+    const spreadRadius = 0.3;
+    const particleSpeed = 1.5;
+
+    const color = colorName === "red" ? 0xff0000 : 0x00ff00;
+
+    const effectGroup = new Group();
+    effectGroup.position.copy(position);
+
+    const geometry = new SphereGeometry(particleSize, 4, 2); // Simple geometry
+
+    for (let i = 0; i < particleCount; i++) {
+      const material = new MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 1.0,
+      });
+      const particle = new Mesh(geometry, material);
+
+      // Random initial position within a small sphere
+      const initialOffset = new Vector3(
+        (Math.random() - 0.5) * spreadRadius,
+        (Math.random() - 0.5) * spreadRadius,
+        (Math.random() - 0.5) * spreadRadius
+      );
+      particle.position.copy(initialOffset);
+
+      // Store direction and speed in userData
+      particle.userData.velocity = initialOffset
+        .clone()
+        .normalize()
+        .multiplyScalar(particleSpeed * (0.5 + Math.random() * 0.5));
+
+      effectGroup.add(particle);
+    }
+
+    // Store effect metadata
+    effectGroup.userData.startTime = this.clock.elapsedTime;
+    effectGroup.userData.duration = effectDuration;
+
+    this.scene.add(effectGroup);
+    this.particleEffects.push(effectGroup);
+  }
+
+  updateParticleEffects(elapsedTime: number): void {
+    if (!this.scene) return;
+
+    const effectsToRemove: Group[] = [];
+
+    for (let i = this.particleEffects.length - 1; i >= 0; i--) {
+      const effect = this.particleEffects[i];
+      const effectElapsedTime = elapsedTime - effect.userData.startTime;
+      const progress = Math.min(
+        1.0,
+        effectElapsedTime / effect.userData.duration
+      );
+
+      if (progress >= 1.0) {
+        effectsToRemove.push(effect);
+        this.particleEffects.splice(i, 1);
+        continue;
+      }
+
+      // Animate individual particles
+      effect.children.forEach((particle) => {
+        if (particle instanceof Mesh && particle.userData.velocity) {
+          // Move particle outwards
+          particle.position.addScaledVector(
+            particle.userData.velocity,
+            this.clock!.getDelta()
+          ); // Use delta time for movement
+
+          // Fade out particle
+          if (Array.isArray(particle.material)) {
+            // Handle if material is an array (though unlikely for basic material)
+            particle.material.forEach((mat) => {
+              if (mat instanceof MeshBasicMaterial) {
+                mat.opacity = 1.0 - progress;
+                mat.needsUpdate = true;
+              }
+            });
+          } else if (particle.material instanceof MeshBasicMaterial) {
+            particle.material.opacity = 1.0 - progress;
+            particle.material.needsUpdate = true;
+          }
+        }
+      });
+    }
+
+    // Remove completed effects from the scene
+    effectsToRemove.forEach((effect) => {
+      // Dispose geometries and materials
+      effect.traverse((child) => {
+        if (child instanceof Mesh) {
+          child.geometry?.dispose();
+          if (Array.isArray(child.material)) {
+            child.material.forEach((mat) => mat.dispose());
+          } else {
+            child.material?.dispose();
+          }
+        }
+      });
+      this.scene!.remove(effect);
+    });
   }
 
   worldToScreenPosition(worldPos: Vector3): { x: number; y: number } | null {

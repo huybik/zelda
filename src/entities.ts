@@ -1,3 +1,4 @@
+// File: /src/entities.ts
 ///// src/entities.ts
 import {
   Scene,
@@ -71,7 +72,7 @@ export class Entity {
       isEntity: true,
       isPlayer: false,
       isNPC: false,
-      isCollidable: true,
+      isCollidable: false,
       isInteractable: false,
       id: this.id,
     };
@@ -191,11 +192,15 @@ export class Entity {
   showTemporaryMessage(message: string, duration: number = 5000): void {
     if (!this.intentSprite) return;
     const originalText = this.aiController
-      ? this.aiController.currentIntent
+      ? `${this.name}: ${this.aiController.currentIntent}`
       : "";
     this.updateIntentDisplay(message);
     setTimeout(() => {
-      this.updateIntentDisplay(originalText);
+      // Check if the AI controller still exists and has an intent before resetting
+      const currentIntentText = this.aiController
+        ? `${this.name}: ${this.aiController.currentIntent}`
+        : "";
+      this.updateIntentDisplay(currentIntentText || originalText); // Fallback to original if no current intent
     }, duration);
   }
 
@@ -336,7 +341,7 @@ export class Character extends Entity {
     inventory: Inventory | null
   ) {
     super(scene, position, name);
-    this.userData.isCollidable = true;
+    this.userData.isCollidable = false;
     this.userData.isInteractable = true;
     this.userData.interactionType = "talk";
     this.userData.isNPC = true;
@@ -417,7 +422,7 @@ export class Character extends Entity {
         } else if (this.actionType === "heal" && this.aiController?.target) {
           // Heal logic moved here from AIController to sync with animation finish
           const target = this.aiController.target;
-          if (target instanceof Character && !target.isDead) {
+          if (target instanceof Character && !target.isDead && target.mesh) {
             const healAmount = 20;
             target.heal(healAmount);
             // Log the event
@@ -430,6 +435,8 @@ export class Character extends Entity {
                 { amount: healAmount },
                 this.mesh!.position
               );
+              // Spawn heal particles
+              this.game.spawnParticleEffect(target.mesh.position, "green");
             }
           }
         }
@@ -458,33 +465,55 @@ export class Character extends Entity {
   performAttack(): void {
     const range = 2.0;
     const damage = this.name === "Player" ? 10 : 5;
+    if (!this.rayCaster || !this.mesh || !this.scene || !this.game) return;
+
     // Set ray from character's position and forward direction
-    if (!this.rayCaster) return;
-    this.rayCaster.set(
-      this.mesh!.position,
-      this.mesh!.getWorldDirection(new Vector3())
-    );
+    const rayOrigin = this.mesh.position
+      .clone()
+      .add(new Vector3(0, CHARACTER_HEIGHT / 2, 0)); // Start ray from center mass
+    const rayDirection = this.mesh.getWorldDirection(new Vector3());
+    this.rayCaster.set(rayOrigin, rayDirection);
     this.rayCaster.far = range;
-    // Filter entities, excluding the attacker's mesh
-    const entities = this.scene!.children.filter(
-      (child) => child.userData.isEntity && child !== this.mesh
+
+    // Filter potential targets: other characters that are alive
+    const potentialTargets = this.game.entities.filter(
+      (entity): entity is Character =>
+        entity instanceof Character && // Must be a Character
+        entity !== this && // Not self
+        !entity.isDead && // Must be alive
+        entity.mesh !== null // Must have a mesh
     );
-    const intersects = this.rayCaster.intersectObjects(entities, true);
+
+    // Get the meshes of potential targets
+    const targetMeshes = potentialTargets.map((char) => char.mesh!);
+
+    // Intersect with the target meshes
+    const intersects = this.rayCaster.intersectObjects(targetMeshes, true); // true for recursive
+
     if (intersects.length > 0) {
-      const hit = intersects[0];
-      let targetEntity: Entity | null = null;
-      let hitObject = hit.object;
-      // Traverse up the hierarchy to find the entity reference
-      while (hitObject && !targetEntity) {
-        if (hitObject.userData?.entityReference instanceof Entity) {
-          targetEntity = hitObject.userData.entityReference;
+      // Find the closest valid hit
+      for (const hit of intersects) {
+        let hitObject = hit.object;
+        let targetEntity: Character | null = null;
+
+        // Traverse up the hierarchy to find the root mesh with the entity reference
+        while (hitObject) {
+          if (hitObject.userData?.entityReference instanceof Character) {
+            targetEntity = hitObject.userData.entityReference;
+            break; // Found the entity reference
+          }
+          if (!hitObject.parent) break; // Stop if no parent
+          hitObject = hitObject.parent;
         }
-        hitObject = hitObject.parent!;
-      }
-      // Ensure we don’t hit ourselves and target can take damage
-      if (targetEntity && targetEntity !== this && targetEntity.takeDamage) {
-        targetEntity.takeDamage(damage, this);
-        // Logging moved to takeDamage
+
+        // Ensure we found a valid target entity that isn't ourselves
+        if (targetEntity && targetEntity !== this && !targetEntity.isDead) {
+          targetEntity.takeDamage(damage, this);
+          // Spawn hit particles at the intersection point
+          this.game.spawnParticleEffect(hit.point, "red");
+          // Attack landed, break the loop
+          break;
+        }
       }
     }
   }
@@ -843,7 +872,7 @@ export class Character extends Entity {
     this.isPerformingAction = false; // Reset performing action state
     this.actionType = "none";
     this.attackTriggered = false;
-    this.userData.isCollidable = true;
+    this.userData.isCollidable = false;
     this.userData.isInteractable = true;
     if (this.aiController) {
       this.aiController.aiState = "idle";

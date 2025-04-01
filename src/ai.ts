@@ -6,7 +6,7 @@ import type { Game } from "./main";
 
 const API_KEY = import.meta.env.VITE_API_KEY;
 const API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" +
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" +
   API_KEY; // Updated model
 
 export async function sendToGemini(prompt: string): Promise<string | null> {
@@ -117,7 +117,7 @@ export class AIController {
 
   // New properties for optimization
   private lastApiCallTime: number = 0;
-  private apiCallCooldown: number = 5000; // 5 seconds minimum between API calls
+  private apiCallCooldown: number = 10000; // 5 seconds minimum between API calls
   private lastObservation: Observation | null = null; // To track changes
 
   constructor(character: Character) {
@@ -751,7 +751,8 @@ Choose an appropriate action based on your persona and the current situation. En
           this.currentIntent += ` (target ${target_id} is dead)`;
           targetEntity = null; // Don't target dead entities for most actions
         } else {
-          this.currentIntent += ` (couldn't find valid target ${target_id})`;
+          this.currentIntent += `(couldn't find valid target ${target_id})`;
+          console.warn(`couldn't find valid target ${target_id}`);
           targetEntity = null; // Target not valid
         }
       }
