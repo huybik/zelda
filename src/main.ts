@@ -1,4 +1,5 @@
 // src/main.ts
+
 import {
   Scene, PerspectiveCamera, WebGLRenderer, Clock, Vector3, Color, Fog, Mesh,
   PlaneGeometry, MeshLambertMaterial, AmbientLight, DirectionalLight, HemisphereLight,
@@ -7,59 +8,19 @@ import {
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import WebGL from 'three/examples/jsm/capabilities/WebGL.js';
-import { Character, Entity, Observation } from './entities';
+import { Character, Entity } from './entities'; // Removed Observation import
 import { createTree, createRock, createHerb } from './objects';
 import { InteractionSystem, Physics, ThirdPersonCamera, Controls } from './system';
 import { HUD, InventoryDisplay, JournalDisplay, Minimap } from './ui';
 import { Inventory, EventLog, getTerrainHeight, randomFloat, smoothstep, EventEntry } from './ultils';
+import { AIController } from './ai';
+// Removed sendToGemini import from here
 
 
 const WORLD_SIZE = 100;
 const TERRAIN_SEGMENTS = 15;
-const API_KEY = import.meta.env.VITE_API_KEY;
-const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + API_KEY;
 
-export async function sendToGemini(prompt: string): Promise<string | null> {
-  if (!API_KEY) {
-    console.warn('API_KEY is not configured. Please set a valid API_KEY in .env file to use Gemini API.');
-    return "I will roam around because I am exploring.";
-  }
-  try {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: prompt }],
-        }],
-      }),
-    });
-
-    if (!response.ok) {
-      console.error(`HTTP error! status: ${response.status}`);
-      const errorData = await response.json(); // Try to get error details
-      console.error("Error details:", errorData);
-      return null;
-    }
-    
-    const data = await response.json();
-    if (data.candidates && data.candidates.length > 0 && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts.length > 0) {
-      return data.candidates[0].content.parts[0].text as string;
-    }
-    else {
-      console.error("No text content found in the API response.");
-    }
-  }
-  catch (error) {
-        console.error("Error during API call:", error);
-        return "I will roam around because I am exploring.";
-  }
-
-  return null; // Ensure all code paths return a value
-}
-
+// Removed sendToGemini function from here
 
 async function loadModels(): Promise<Record<string, { scene: Group; animations: AnimationClip[] }>> {
   const loader = new GLTFLoader();
@@ -140,7 +101,8 @@ function populateEnvironment(
   interactableObjects: Array<any>,
   entities: Array<any>,
   inventory: Inventory,
-  models: Record<string, { scene: Group; animations: AnimationClip[] }>
+  models: Record<string, { scene: Group; animations: AnimationClip[] }>,
+  gameInstance: Game // Added gameInstance
 ): void {
   const halfSize = worldSize / 2;
   const villageCenter = new Vector3(5, 0, 10);
@@ -149,10 +111,16 @@ function populateEnvironment(
     const charInventory = new Inventory(9);
     const character = new Character(scene, pos, name, model.scene, model.animations, charInventory);
     character.mesh!.position.y = getTerrainHeight(scene, pos.x, pos.z);
+    character.game = gameInstance; // Assign game instance
     if (isPlayer) {
         character.name = 'Character';
         character.userData.isPlayer = true;
         character.userData.isNPC = false;
+         if (character.aiController) character.aiController = null; // Remove AI for player
+    } else {
+        character.userData.isPlayer = false;
+        character.userData.isNPC = true;
+        if (!character.aiController) console.warn(`NPC ${name} created without AIController!`); // Should be created in constructor
     }
     entities.push(character);
     collidableObjects.push(character.mesh!);
@@ -161,10 +129,15 @@ function populateEnvironment(
   };
   const farmerGiles = addCharacter(villageCenter.clone().add(new Vector3(-12, 0, 2)), 'Farmer Giles', 'tavernMan');
   farmerGiles.persona = "A hardworking farmer who values community and is always willing to help others. He is knowledgeable about crops and livestock but can be a bit stubborn. He prefers to stay close to his farm but will venture out if necessary.";
+  if (farmerGiles.aiController) farmerGiles.aiController.persona = farmerGiles.persona; // Sync persona
+
   const blacksmithBrynn = addCharacter(villageCenter.clone().add(new Vector3(10, 0, -3)), 'Blacksmith Brynn', 'woman');
   blacksmithBrynn.persona = "A skilled artisan who takes pride in her work. She is strong-willed and independent, often focused on her craft. She can be gruff but has a kind heart, especially towards those in need.";
+   if (blacksmithBrynn.aiController) blacksmithBrynn.aiController.persona = blacksmithBrynn.persona;
+
   const hunterRex = addCharacter(new Vector3(halfSize * 0.4, 0, -halfSize * 0.3), 'Hunter Rex', 'oldMan');
   hunterRex.persona = "An experienced tracker and survivalist. He is quiet and observant, preferring the wilderness over the village. He is resourceful and can be relied upon in tough situations but is not very social.";
+   if (hunterRex.aiController) hunterRex.aiController.persona = hunterRex.persona;
 
 
   const addObject = (creator: (pos: Vector3, ...args: any[]) => Group, count: number, minDistSq: number, ...args: any[]) => {
@@ -246,16 +219,17 @@ export class Game {
     this.initPlayer(models);
     this.initControls();
     this.initPhysics();
-    this.initEnvironment(models);
+    this.initEnvironment(models); // Environment needs player inventory, so call after player init
     this.initSystems();
     this.initUI();
     this.setupUIControls();
 
-    this.entities.forEach(entity => {
-      if (entity instanceof Character) {
-        entity.game = this;
-      }
-    });
+    // Assign game instance after all entities (including player) are created
+     this.entities.forEach(entity => {
+       if (entity instanceof Character) {
+         entity.game = this;
+       }
+     });
 
     this.activeCharacter!.eventLog.addEntry("Welcome! Click window to lock controls. [I] Inventory, [J] Journal, [E] Interact, [C] Switch Control, [Esc] Unlock/Close UI");
   }
@@ -285,18 +259,24 @@ export class Game {
     this.camera = new PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
   }
 
-  initInventory(): void {
+   initInventory(): void {
     this.inventory = new Inventory(9);
   }
 
   initPlayer(models: Record<string, { scene: Group; animations: AnimationClip[] }>): void {
     const playerSpawnPos = new Vector3(0, 0, 5);
     playerSpawnPos.y = getTerrainHeight(this.scene!, playerSpawnPos.x, playerSpawnPos.z);
-    this.activeCharacter = new Character(this.scene!, playerSpawnPos, 'Character', models.player.scene, models.player.animations, this.inventory!);
+
+    const playerModel = models.player;
+    this.activeCharacter = new Character(this.scene!, playerSpawnPos, 'Character', playerModel.scene, playerModel.animations, this.inventory!);
     this.activeCharacter.userData.isPlayer = true;
     this.activeCharacter.userData.isNPC = false;
+    if (this.activeCharacter.aiController) {
+        this.activeCharacter.aiController = null; // Ensure player doesn't have AI controller
+    }
     this.entities.push(this.activeCharacter);
     this.collidableObjects.push(this.activeCharacter.mesh!);
+    this.interactableObjects.push(this.activeCharacter); // Player can be interacted with (for switching control)
   }
 
   initControls(): void {
@@ -309,7 +289,7 @@ export class Game {
   }
 
   initEnvironment(models: Record<string, { scene: Group; animations: AnimationClip[] }>): void {
-    populateEnvironment(this.scene!, WORLD_SIZE, this.collidableObjects, this.interactableObjects, this.entities, this.inventory!, models);
+    populateEnvironment(this.scene!, WORLD_SIZE, this.collidableObjects, this.interactableObjects, this.entities, this.inventory!, models, this);
   }
 
   initSystems(): void {
@@ -395,17 +375,17 @@ export class Game {
 
       this.entities.forEach(entity => {
         if (entity === this.activeCharacter) return;
-        if (entity instanceof Character) {
-          const aiMoveState = entity.computeAIMoveState(deltaTime, { player: this.activeCharacter });
+        if (entity instanceof Character && entity.aiController) {
+          const aiMoveState = entity.aiController.computeAIMoveState(deltaTime);
           entity.update(deltaTime, { moveState: aiMoveState, collidables: this.collidableObjects });
-        } else if (entity.update) {
+        } else if (entity.update && !(entity instanceof Character)) {
             entity.update(deltaTime);
         }
       });
 
       this.entities.forEach(entity => {
-        if (entity instanceof Character) {
-          entity.updateObservation(this.entities, entity.searchRadius);
+        if (entity instanceof Character && entity.aiController) {
+          entity.aiController.updateObservation(this.entities);
         }
       });
 
@@ -414,17 +394,17 @@ export class Game {
       this.thirdPersonCamera!.update(deltaTime, this.collidableObjects);
       if (this.activeCharacter.isDead) this.respawnPlayer();
     }
-    this.hud!.update();
-    // this.updateIntentDisplays();
+     this.hud!.update();
+     this.updateIntentDisplays();
      this.renderer.render(this.scene, this.camera);
-    this.minimap!.update();
-     
-  }
+     this.minimap!.update();
+
+      }
 
   updateIntentDisplays(): void {
     if (!this.intentContainer) return;
     this.entities.forEach(entity => {
-      if (entity instanceof Character && entity.currentIntent) {
+      if (entity instanceof Character && entity.aiController && entity.aiController.currentIntent) {
         let intentElement = document.getElementById(`intent-${entity.id}`) as HTMLElement;
         if (!intentElement) {
           intentElement = document.createElement('div');
@@ -432,7 +412,7 @@ export class Game {
           intentElement.classList.add('intent-text');
           this.intentContainer!.appendChild(intentElement);
         }
-        intentElement.textContent = entity.currentIntent;
+        intentElement.textContent = `${entity.name}: ${entity.aiController.currentIntent}`;
         const screenPos = this.worldToScreenPosition(entity.mesh!.position.clone().add(new Vector3(0, entity.userData.height! + 0.5, 0)));
         if (screenPos) {
           intentElement.style.left = `${screenPos.x}px`;
@@ -455,7 +435,7 @@ export class Game {
     const vector = worldPos.clone().project(this.camera);
     const x = (vector.x * 0.5 + 0.5) * this.renderer.domElement.width;
     const y = (vector.y * -0.5 + 0.5) * this.renderer.domElement.height;
-    if (vector.z > 1) return null;
+    if (vector.z > 1.0 || vector.z < -1.0) return null;
     return {x, y};
   }
 
@@ -478,26 +458,47 @@ export class Game {
   }
 
   switchControlTo(targetCharacter: Character): void {
-    if (targetCharacter === this.activeCharacter) return;
+    if (targetCharacter === this.activeCharacter || !targetCharacter.mesh) return;
 
-    const switchMessage = `Switched control to ${targetCharacter.name}.`;
-    this.logEvent(this.activeCharacter!, "control_switch_out", switchMessage, targetCharacter.name, {}, this.activeCharacter!.mesh!.position);
-    this.logEvent(targetCharacter, "control_switch_in", switchMessage, targetCharacter.name, {}, targetCharacter.mesh!.position);
+    const oldPlayer = this.activeCharacter!;
+    const newPlayer = targetCharacter;
+
+    const switchMessage = `Switched control to ${newPlayer.name}.`;
+    this.logEvent(oldPlayer, "control_switch_out", switchMessage, newPlayer.name, {}, oldPlayer.mesh!.position);
+    this.logEvent(newPlayer, "control_switch_in", switchMessage, oldPlayer.name, {}, newPlayer.mesh!.position);
+
+    oldPlayer.userData.isPlayer = false;
+    oldPlayer.userData.isNPC = true;
+    if (!oldPlayer.aiController) {
+      console.warn(`Creating AIController for ${oldPlayer.name} on switch-out.`);
+      oldPlayer.aiController = new AIController(oldPlayer);
+      oldPlayer.aiController.persona = oldPlayer.persona;
+    }
+    oldPlayer.aiController!.aiState = 'idle';
+    oldPlayer.aiController!.previousAiState = 'idle';
 
 
-    this.activeCharacter = targetCharacter;
-    this.controls!.player = targetCharacter;
-    this.thirdPersonCamera!.target = targetCharacter.mesh!;
-    this.physics!.player = targetCharacter;
-    this.interactionSystem!.player = targetCharacter;
-    this.interactionSystem!.eventLog = targetCharacter.eventLog;
-    this.hud!.player = targetCharacter;
-    this.minimap!.player = targetCharacter;
-    this.journalDisplay!.setEventLog(this.activeCharacter.eventLog);
-    targetCharacter.aiState = 'idle';
-    targetCharacter.previousAiState = 'idle';
-    targetCharacter.userData.isPlayer = true;
-    targetCharacter.userData.isNPC = false;
+    this.activeCharacter = newPlayer;
+    newPlayer.userData.isPlayer = true;
+    newPlayer.userData.isNPC = false;
+    if (newPlayer.aiController) {
+         newPlayer.aiController = null; // Player doesn't need AI Controller active
+    }
+
+    this.controls!.player = newPlayer;
+    this.thirdPersonCamera!.target = newPlayer.mesh!;
+    this.physics!.player = newPlayer;
+    this.interactionSystem!.player = newPlayer;
+    this.interactionSystem!.eventLog = newPlayer.eventLog;
+    this.inventory = newPlayer.inventory;
+    // this.inventoryDisplay!.setInventory(this.inventory!);
+    this.hud!.player = newPlayer;
+    this.minimap!.player = newPlayer;
+    this.journalDisplay!.setEventLog(newPlayer.eventLog);
+
+    // this.interactionSystem!.cancelInteraction();
+    this.setPauseState(false);
+    console.log(`Control switched to: ${newPlayer.name}`);
   }
 
   onWindowResize(): void {
@@ -520,7 +521,7 @@ export class Game {
     };
     actor.eventLog.addEntry(eventEntry);
     this.entities.forEach(entity => {
-      if (entity instanceof Character && entity !== actor) {
+      if (entity instanceof Character && entity !== actor && entity.aiController) {
         const distanceSq = location.distanceToSquared(entity.mesh!.position);
         if (distanceSq <= entity.searchRadius * entity.searchRadius) {
            entity.eventLog.addEntry(eventEntry);
