@@ -91,13 +91,15 @@ export class Entity {
     }
     this.intentCanvas = document.createElement("canvas");
     this.intentCanvas.width = 200;
-    this.intentCanvas.height = 50;
+    this.intentCanvas.height = 60; // Increased height for padding/wrapping
     this.intentContext = this.intentCanvas.getContext("2d")!;
     this.intentTexture = new CanvasTexture(this.intentCanvas);
     const material = new SpriteMaterial({ map: this.intentTexture });
     this.intentSprite = new Sprite(material);
-    this.intentSprite.scale.set(2, 0.5, 1);
-    this.intentSprite.position.set(0, CHARACTER_HEIGHT + 0.5, 0);
+    // Adjust scale based on new height ratio (width/height)
+    const aspectRatio = this.intentCanvas.width / this.intentCanvas.height;
+    this.intentSprite.scale.set(aspectRatio * 0.6, 0.6, 1); // Adjust scale y, then x based on aspect
+    this.intentSprite.position.set(0, CHARACTER_HEIGHT + 0.6, 0); // Slightly raise position
     this.mesh!.add(this.intentSprite);
     this.updateIntentDisplay("");
   }
@@ -105,28 +107,79 @@ export class Entity {
   updateIntentDisplay(text: string): void {
     if (!this.intentContext || !this.intentCanvas || !this.intentTexture)
       return;
-    this.intentContext.clearRect(
-      0,
-      0,
-      this.intentCanvas.width,
-      this.intentCanvas.height
-    );
-    this.intentContext.fillStyle = "rgba(0, 0, 0, 0.5)";
-    this.intentContext.fillRect(
-      0,
-      0,
-      this.intentCanvas.width,
-      this.intentCanvas.height
-    );
-    this.intentContext.font = "24px Arial";
-    this.intentContext.fillStyle = "white";
-    this.intentContext.textAlign = "center";
-    this.intentContext.textBaseline = "middle";
-    this.intentContext.fillText(
-      text,
-      this.intentCanvas.width / 2,
-      this.intentCanvas.height / 2
-    );
+
+    const ctx = this.intentContext;
+    const canvas = this.intentCanvas;
+    const maxWidth = canvas.width - 10; // Padding
+    const lineHeight = 22; // Slightly more than font size
+    const x = canvas.width / 2;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; // Slightly darker background
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.font = "18px Arial"; // Reduced font size
+    ctx.fillStyle = "white";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    // Basic Text Wrapping Logic
+    const words = text.split(" ");
+    let lines = [];
+    let currentLine = "";
+
+    for (let i = 0; i < words.length; i++) {
+      const testLine = currentLine + words[i] + " ";
+      const metrics = ctx.measureText(testLine);
+      const testWidth = metrics.width;
+      if (testWidth > maxWidth && i > 0) {
+        lines.push(currentLine.trim());
+        currentLine = words[i] + " ";
+      } else {
+        currentLine = testLine;
+      }
+    }
+    lines.push(currentLine.trim());
+
+    // Calculate starting Y position for vertical centering
+    const totalTextHeight = lines.length * lineHeight;
+    let startY = (canvas.height - totalTextHeight) / 2 + lineHeight / 2;
+
+    // Draw lines
+    for (let i = 0; i < lines.length; i++) {
+      // Prevent drawing too many lines if text is excessively long
+      if (startY + i * lineHeight > canvas.height - lineHeight / 2) {
+        // Optional: Indicate truncation if needed
+        if (i > 0) {
+          // Check if we drew at least one line
+          const lastLineIndex = i - 1;
+          const lastLineText = lines[lastLineIndex];
+          // Remove last drawn line and replace with ellipsis
+          ctx.clearRect(
+            0,
+            startY + lastLineIndex * lineHeight - lineHeight / 2,
+            canvas.width,
+            lineHeight
+          );
+          ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+          ctx.fillRect(
+            0,
+            startY + lastLineIndex * lineHeight - lineHeight / 2,
+            canvas.width,
+            lineHeight
+          );
+          ctx.fillStyle = "white";
+          ctx.fillText(
+            lastLineText.substring(0, lastLineText.length - 1) + "...",
+            x,
+            startY + lastLineIndex * lineHeight
+          );
+        }
+        break;
+      }
+      ctx.fillText(lines[i], x, startY + i * lineHeight);
+    }
+
     this.intentTexture.needsUpdate = true;
   }
 

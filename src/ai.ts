@@ -678,11 +678,7 @@ Choose an appropriate action based on your persona and the current situation. En
   }): void {
     const { action, object_id, target_id, message, intent } = actionData;
     this.currentIntent = intent || "Thinking...";
-    if (this.currentIntent !== "Thinking...") {
-      this.character.updateIntentDisplay(
-        `${this.character.name}: ${this.currentIntent}`
-      );
-    }
+    this.character.updateIntentDisplay(this.currentIntent);
 
     // Reset action-specific properties
     this.destination = null;
