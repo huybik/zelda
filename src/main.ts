@@ -1,4 +1,5 @@
 // File: /src/main.ts
+// File: /src/main.ts
 import {
   Scene,
   PerspectiveCamera,
@@ -428,7 +429,8 @@ export class Game {
     this.controls = new Controls(
       this.activeCharacter,
       this.thirdPersonCamera,
-      this.renderer!.domElement
+      this.renderer!.domElement,
+      this // Pass game instance to Controls
     );
   }
 
@@ -508,6 +510,7 @@ export class Game {
         this.setPauseState(false);
       } else if (this.controls!.isPointerLocked) {
         this.controls!.unlockPointer();
+        // Pause state will be set by onPointerLockChange
       }
     });
     this.controls!.addMouseClickListener(0, (event: MouseEvent) => {
@@ -538,16 +541,28 @@ export class Game {
   setPauseState(paused: boolean): void {
     if (this.isPaused === paused) return;
     this.isPaused = paused;
+
     if (this.isPaused) {
-      this.controls!.unlockPointer();
-    } else if (
-      !this.inventoryDisplay!.isOpen &&
-      !this.journalDisplay!.isOpen &&
-      !this.interactionSystem?.isChatOpen
-    ) {
-      // Check chat state too
-      this.controls!.lockPointer();
+      // Pause the game
+      if (this.controls?.isPointerLocked) {
+        this.controls.unlockPointer(); // Unlock pointer if it was locked
+      }
+      // Optionally stop animations, AI updates, etc. here if needed
+      // (Currently, the main update loop check handles this)
+    } else {
+      // Unpause the game
+      // Only lock pointer if no UI elements are open
+      if (
+        !this.inventoryDisplay?.isOpen &&
+        !this.journalDisplay?.isOpen &&
+        !this.interactionSystem?.isChatOpen &&
+        !document.pointerLockElement // Check if pointer isn't already locked
+      ) {
+        this.controls?.lockPointer();
+      }
+      // Resume animations, AI, etc. if they were explicitly stopped
     }
+    console.log("Game Paused:", this.isPaused);
   }
 
   start(): void {
@@ -567,8 +582,11 @@ export class Game {
     const deltaTime = Math.min(this.clock.getDelta(), 0.05);
     const elapsedTime = this.clock.elapsedTime; // Get elapsed time for particles
 
+    // Update controls regardless of pause state to handle UI interactions/unlocking
     this.controls!.update(deltaTime);
+
     if (!this.isPaused) {
+      // --- Game Logic (Runs only when not paused) ---
       this.activeCharacter.update(deltaTime, {
         moveState: this.controls!.moveState,
         collidables: this.collidableObjects,
@@ -598,14 +616,18 @@ export class Game {
       this.interactionSystem!.update(deltaTime);
       this.thirdPersonCamera!.update(deltaTime, this.collidableObjects);
       if (this.activeCharacter.isDead) this.respawnPlayer();
+      // --- End Game Logic ---
     }
 
-    // Update particle effects
+    // Update particle effects (can run even if paused for visual continuity)
     this.updateParticleEffects(elapsedTime);
 
+    // Update HUD and Minimap (can run even if paused)
     this.hud!.update();
-    this.renderer.render(this.scene, this.camera);
     this.minimap!.update();
+
+    // Render the scene
+    this.renderer.render(this.scene, this.camera);
   }
 
   spawnParticleEffect(position: Vector3, colorName: "red" | "green"): void {
@@ -658,9 +680,10 @@ export class Game {
   }
 
   updateParticleEffects(elapsedTime: number): void {
-    if (!this.scene) return;
+    if (!this.scene || !this.clock) return;
 
     const effectsToRemove: Group[] = [];
+    const particleDeltaTime = this.isPaused ? 0 : this.clock!.getDelta(); // Use 0 delta if paused
 
     for (let i = this.particleEffects.length - 1; i >= 0; i--) {
       const effect = this.particleEffects[i];
@@ -676,18 +699,24 @@ export class Game {
         continue;
       }
 
-      // Animate individual particles
-      effect.children.forEach((particle) => {
-        if (particle instanceof Mesh && particle.userData.velocity) {
-          // Move particle outwards
-          particle.position.addScaledVector(
-            particle.userData.velocity,
-            this.clock!.getDelta()
-          ); // Use delta time for movement
+      // Animate individual particles only if not paused
+      if (!this.isPaused) {
+        effect.children.forEach((particle) => {
+          if (particle instanceof Mesh && particle.userData.velocity) {
+            // Move particle outwards
+            particle.position.addScaledVector(
+              particle.userData.velocity,
+              particleDeltaTime
+            ); // Use delta time for movement
+          }
+        });
+      }
 
+      // Update fade effect regardless of pause state
+      effect.children.forEach((particle) => {
+        if (particle instanceof Mesh) {
           // Fade out particle
           if (Array.isArray(particle.material)) {
-            // Handle if material is an array (though unlikely for basic material)
             particle.material.forEach((mat) => {
               if (mat instanceof MeshBasicMaterial) {
                 mat.opacity = 1.0 - progress;

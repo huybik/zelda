@@ -1,3 +1,4 @@
+// File: /src/system.ts
 //// src/system.ts
 import {
   PerspectiveCamera,
@@ -937,6 +938,7 @@ export class Controls {
   player: Character | null;
   cameraController: ThirdPersonCamera | null;
   domElement: HTMLElement;
+  game: Game | null; // Add reference to the game instance
   keys: KeyState = {};
   mouse: MouseState = { x: 0, y: 0, dx: 0, dy: 0, buttons: {} };
   isPointerLocked: boolean = false;
@@ -978,11 +980,13 @@ export class Controls {
   constructor(
     player: Character | null,
     cameraController: ThirdPersonCamera | null,
-    domElement: HTMLElement | null
+    domElement: HTMLElement | null,
+    game: Game | null // Accept game instance
   ) {
     this.player = player;
     this.cameraController = cameraController;
     this.domElement = domElement ?? document.body;
+    this.game = game; // Store game instance
 
     this.joystickThumb = document.getElementById("touch-joystick-thumb");
     this.joystickBase = document.getElementById("touch-controls-left");
@@ -1079,6 +1083,8 @@ export class Controls {
       this.isPointerLocked = true;
       this.mouse.dx = 0;
       this.mouse.dy = 0;
+      // Attempt to unpause the game when pointer locks
+      this.game?.setPauseState(false);
     } else {
       this.isPointerLocked = false;
       // Reset keyboard state if lock is lost
@@ -1087,16 +1093,9 @@ export class Controls {
       this.mouse.dx = 0;
       this.mouse.dy = 0;
       this.updateContinuousMoveState(); // Reset keyboard movement
-      // If pointer lock is lost and chat isn't open, ensure game isn't paused
-      const game = (window as any).game as Game | undefined;
-      if (
-        game &&
-        !game.interactionSystem?.isChatOpen &&
-        !game.inventoryDisplay?.isOpen &&
-        !game.journalDisplay?.isOpen
-      ) {
-        game.setPauseState(false);
-      }
+
+      // Pause the game when pointer unlocks
+      this.game?.setPauseState(true);
     }
   }
 
@@ -1108,8 +1107,7 @@ export class Controls {
   // --- Keyboard Input ---
   onKeyDown(event: KeyboardEvent): void {
     const keyCode = event.code;
-    const game = (window as any).game as Game | undefined;
-    if (game?.interactionSystem?.isChatOpen && keyCode !== "Escape") {
+    if (this.game?.interactionSystem?.isChatOpen && keyCode !== "Escape") {
       return; // Allow chat input
     }
 
@@ -1142,7 +1140,7 @@ export class Controls {
 
   // --- Mouse Input ---
   onMouseDown(event: MouseEvent): void {
-    if ((window as any).game?.interactionSystem?.isChatOpen) return;
+    if (this.game?.interactionSystem?.isChatOpen) return;
     this.mouse.buttons[event.button] = true;
     this.mouseClickListeners[event.button]?.forEach((cb) => cb(event));
   }
@@ -1162,9 +1160,8 @@ export class Controls {
   }
 
   onClick(event: MouseEvent): void {
-    const gameIsPaused = (window as any).game?.isPaused ?? false;
-    const chatIsOpen =
-      (window as any).game?.interactionSystem?.isChatOpen ?? false;
+    const gameIsPaused = this.game?.isPaused ?? false;
+    const chatIsOpen = this.game?.interactionSystem?.isChatOpen ?? false;
     if (!this.isPointerLocked && !gameIsPaused && !chatIsOpen)
       this.lockPointer();
   }
@@ -1172,8 +1169,8 @@ export class Controls {
   // --- Touch Input ---
   onTouchStart(event: TouchEvent): void {
     event.preventDefault(); // Prevent default touch actions like scrolling
-    const game = (window as any).game as Game | undefined;
-    if (game?.isPaused && !game?.interactionSystem?.isChatOpen) return; // Ignore touches if paused (unless chat is open, handled separately)
+    if (this.game?.isPaused && !this.game?.interactionSystem?.isChatOpen)
+      return; // Ignore touches if paused (unless chat is open, handled separately)
 
     const touches = event.changedTouches;
     for (let i = 0; i < touches.length; i++) {
@@ -1233,8 +1230,8 @@ export class Controls {
 
   onTouchMove(event: TouchEvent): void {
     event.preventDefault();
-    const game = (window as any).game as Game | undefined;
-    if (game?.isPaused && !game?.interactionSystem?.isChatOpen) return;
+    if (this.game?.isPaused && !this.game?.interactionSystem?.isChatOpen)
+      return;
 
     const touches = event.changedTouches;
     for (let i = 0; i < touches.length; i++) {
@@ -1285,7 +1282,6 @@ export class Controls {
 
   onTouchEnd(event: TouchEvent): void {
     // Don't prevent default here, allows clicks on UI elements behind controls
-    const game = (window as any).game as Game | undefined;
     // Allow touch end even if paused to release buttons/joystick
 
     const touches = event.changedTouches;
