@@ -1,5 +1,6 @@
 // File: /src/main.ts
 // File: /src/main.ts
+// File: /src/main.ts
 import * as THREE from "three";
 import {
   Scene,
@@ -390,9 +391,7 @@ export class Game {
       }
     });
 
-    this.activeCharacter!.eventLog.addEntry(
-      "Welcome! Click window to lock controls. [I] Inventory, [J] Journal, [E] Interact, [F] Attack, [C] Switch Control, [Esc] Unlock/Close UI"
-    );
+    // Initial log moved to Game.start for banner timing
   }
 
   initRenderer(): void {
@@ -542,6 +541,12 @@ export class Game {
       this.journalDisplay!.toggle();
       this.setPauseState(this.journalDisplay!.isOpen);
     });
+    this.controls!.addKeyDownListener("KeyH", () => {
+      // Heal listener
+      if (!this.isPaused && !this.interactionSystem?.isChatOpen) {
+        this.activeCharacter?.selfHeal();
+      }
+    });
     this.controls!.addKeyDownListener("KeyC", () => {
       if (
         this.interactionSystem!.currentTarget instanceof Character &&
@@ -594,30 +599,41 @@ export class Game {
     this.isPaused = paused;
 
     if (this.isPaused) {
-      // Pause the game
       if (this.controls?.isPointerLocked) {
-        this.controls.unlockPointer(); // Unlock pointer if it was locked
+        this.controls.unlockPointer();
       }
-      // Optionally stop animations, AI updates, etc. here if needed
-      // (Currently, the main update loop check handles this)
     } else {
-      // Unpause the game
-      // Only lock pointer if no UI elements are open
       if (
         !this.inventoryDisplay?.isOpen &&
         !this.journalDisplay?.isOpen &&
         !this.interactionSystem?.isChatOpen &&
-        !document.pointerLockElement // Check if pointer isn't already locked
+        !document.pointerLockElement
       ) {
         this.controls?.lockPointer();
       }
-      // Resume animations, AI, etc. if they were explicitly stopped
     }
     console.log("Game Paused:", this.isPaused);
   }
 
   start(): void {
     if (!this.renderer || !this.clock) return;
+
+    // Show welcome banner
+    const banner = document.getElementById("welcome-banner");
+    if (banner) {
+      banner.textContent =
+        "Welcome!  [I] Inventory,  [J] Journal,  [F] Attack,  [H] Heal,  [C] Switch Control";
+      banner.classList.remove("hidden");
+      setTimeout(() => {
+        banner.classList.add("hidden");
+      }, 5000); // Hide after 5 seconds
+    } else {
+      // Log to journal if banner element not found
+      this.activeCharacter!.eventLog.addEntry(
+        "Welcome! Click window to lock controls. [WASD] Move, Mouse Look, [I] Inventory, [J] Journal, [E] Interact, [F] Attack, [H] Heal, [C] Switch Control, [Esc] Unlock/Close UI"
+      );
+    }
+
     this.renderer.setAnimationLoop(this.update.bind(this));
   }
 
@@ -631,13 +647,11 @@ export class Game {
     )
       return;
     const deltaTime = Math.min(this.clock.getDelta(), 0.05);
-    const elapsedTime = this.clock.elapsedTime; // Get elapsed time for particles
+    const elapsedTime = this.clock.elapsedTime;
 
-    // Update controls regardless of pause state to handle UI interactions/unlocking
     this.controls!.update(deltaTime);
 
     if (!this.isPaused) {
-      // --- Game Logic (Runs only when not paused) ---
       this.activeCharacter.update(deltaTime, {
         moveState: this.controls!.moveState,
         collidables: this.collidableObjects,
@@ -657,7 +671,6 @@ export class Game {
         }
       });
 
-      // Update AI observations after all movements/actions for the frame
       this.entities.forEach((entity) => {
         if (entity instanceof Character && entity.aiController) {
           entity.aiController.updateObservation(this.entities);
@@ -668,22 +681,14 @@ export class Game {
       this.thirdPersonCamera!.update(deltaTime, this.collidableObjects);
       if (this.activeCharacter.isDead) this.respawnPlayer();
 
-      // --- Portal Logic ---
       this.animatePortals();
       this.checkPortalCollisions();
-      // --- End Portal Logic ---
-
-      // --- End Game Logic ---
     }
 
-    // Update particle effects (can run even if paused for visual continuity)
     this.updateParticleEffects(elapsedTime);
-
-    // Update HUD and Minimap (can run even if paused)
     this.hud!.update();
     this.minimap!.update();
 
-    // Render the scene
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -996,17 +1001,9 @@ export class Game {
         newParams.append("color", "white"); // Hardcoded color
         newParams.append("speed", currentSpeed.toFixed(2));
         newParams.append("ref", ref);
-        // Add optional params if available
-        // newParams.append('avatar_url', ...);
-        // newParams.append('team', ...);
         newParams.append("speed_x", this.activeCharacter.velocity.x.toFixed(2));
         newParams.append("speed_y", this.activeCharacter.velocity.y.toFixed(2));
         newParams.append("speed_z", this.activeCharacter.velocity.z.toFixed(2));
-        // Add rotation if needed (requires getting world quaternion)
-        // const rotation = new THREE.Euler().setFromQuaternion(this.activeCharacter.mesh.quaternion, 'XYZ');
-        // newParams.append('rotation_x', rotation.x.toFixed(2));
-        // newParams.append('rotation_y', rotation.y.toFixed(2));
-        // newParams.append('rotation_z', rotation.z.toFixed(2));
 
         const paramString = newParams.toString();
         const nextPage =
@@ -1061,10 +1058,6 @@ export class Game {
               newParams.append(key, value);
             }
           }
-          // Add current player state if needed (optional, depends on receiving game)
-          // newParams.append('username', this.activeCharacter.name);
-          // newParams.append('color', 'white');
-          // ...
 
           const paramString = newParams.toString();
           window.location.href = url + (paramString ? "?" + paramString : "");

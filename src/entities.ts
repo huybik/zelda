@@ -1,4 +1,5 @@
 // File: /src/entities.ts
+// File: /src/entities.ts
 ///// src/entities.ts
 import {
   Scene,
@@ -254,7 +255,7 @@ export class Entity {
     if (this.isDead || amount <= 0 || this.health >= this.maxHealth) return;
     const actualHeal = Math.min(amount, this.maxHealth - this.health);
     this.health += actualHeal;
-    // Logging for heal is handled by the healer in AIController or player action
+    // Logging for heal is handled by the healer (e.g., AIController, selfHeal, or an external ability)
   }
 
   die(attacker: Entity | null = null): void {
@@ -312,9 +313,8 @@ export class Character extends Entity {
   walkAction?: AnimationAction;
   runAction?: AnimationAction;
   jumpAction?: AnimationAction;
-  attackAction?: AnimationAction;
+  attackAction?: AnimationAction; // Can be used for heal animation too
   isGathering: boolean = false;
-  // isAttacking: boolean = false; // Replaced by isPerformingAction
   gatherAttackTimer: number = 0;
   gatherAttackInterval: number = 1.0;
   searchRadius: number = 30;
@@ -325,8 +325,7 @@ export class Character extends Entity {
   persona: string = "";
   aiController: AIController | null = null;
 
-  // New properties for action handling
-  actionType: string = "none"; // 'attack', 'heal', etc.
+  actionType: string = "none"; // 'attack', 'heal', 'gather' etc.
   isPerformingAction: boolean = false;
 
   private groundCheckOrigin = new Vector3();
@@ -381,7 +380,7 @@ export class Character extends Entity {
     this.mesh!.add(model);
     this.mixer = new AnimationMixer(model);
     const idleAnim = animations.find((anim) =>
-      anim.name.toLowerCase().includes("hehe")
+      anim.name.toLowerCase().includes("idle")
     );
     if (idleAnim) this.idleAction = this.mixer.clipAction(idleAnim);
     const walkAnim = animations.find((anim) =>
@@ -416,35 +415,48 @@ export class Character extends Entity {
     // Updated mixer listener
     this.mixer.addEventListener("finished", (e) => {
       if (e.action === this.attackAction) {
-        // Assuming attackAction is used for both attack and heal
+        // Assuming attackAction is used for attack, heal, gather
         if (this.actionType === "attack") {
           this.performAttack();
-        } else if (this.actionType === "heal" && this.aiController?.target) {
-          // Heal logic moved here from AIController to sync with animation finish
-          const target = this.aiController.target;
-          if (target instanceof Character && !target.isDead && target.mesh) {
-            const healAmount = 20;
-            target.heal(healAmount);
-            // Log the event
-            if (this.game) {
-              this.game.logEvent(
-                this,
-                "heal",
-                `${this.name} healed ${target.name} for ${healAmount} health.`,
-                target,
-                { amount: healAmount },
-                this.mesh!.position
-              );
-              // Spawn heal particles
-              this.game.spawnParticleEffect(target.mesh.position, "green");
+        } else if (this.actionType === "heal") {
+          // If heal is triggered by AI (on another target)
+          if (this.aiController?.target) {
+            const target = this.aiController.target;
+            if (target instanceof Character && !target.isDead && target.mesh) {
+              const healAmount = 20;
+              target.heal(healAmount);
+              if (this.game) {
+                this.game.logEvent(
+                  this,
+                  "heal_target",
+                  `${this.name} healed ${target.name} for ${healAmount} health.`,
+                  target,
+                  { amount: healAmount },
+                  this.mesh!.position
+                );
+                this.game.spawnParticleEffect(target.mesh.position, "green");
+              }
             }
           }
+          // Note: Self-heal effect happens instantly on key press,
+          // this just handles animation finish.
         }
-        // Reset action state
+        // Reset action state after animation completes
         this.isPerformingAction = false;
         this.actionType = "none";
 
-        // Reset to idle or movement animation
+        // Reset to appropriate animation (idle or movement)
+        const isMoving =
+          Math.abs(this.moveState.forward) > 0.1 ||
+          Math.abs(this.moveState.right) > 0.1;
+        if (isMoving) {
+          if (this.isSprinting && this.runAction) this.runAction.play();
+          else if (this.walkAction) this.walkAction.play();
+        } else {
+          if (this.idleAction) this.idleAction.play();
+        }
+      } else if (e.action === this.jumpAction) {
+        // Transition back to idle or walk/run after jump animation finishes
         const isMoving =
           Math.abs(this.moveState.forward) > 0.1 ||
           Math.abs(this.moveState.right) > 0.1;
@@ -467,54 +479,90 @@ export class Character extends Entity {
     const damage = this.name === "Player" ? 10 : 5;
     if (!this.rayCaster || !this.mesh || !this.scene || !this.game) return;
 
-    // Set ray from character's position and forward direction
     const rayOrigin = this.mesh.position
       .clone()
-      .add(new Vector3(0, CHARACTER_HEIGHT / 2, 0)); // Start ray from center mass
+      .add(new Vector3(0, CHARACTER_HEIGHT / 2, 0));
     const rayDirection = this.mesh.getWorldDirection(new Vector3());
     this.rayCaster.set(rayOrigin, rayDirection);
     this.rayCaster.far = range;
 
-    // Filter potential targets: other characters that are alive
     const potentialTargets = this.game.entities.filter(
       (entity): entity is Character =>
-        entity instanceof Character && // Must be a Character
-        entity !== this && // Not self
-        !entity.isDead && // Must be alive
-        entity.mesh !== null // Must have a mesh
+        entity instanceof Character &&
+        entity !== this &&
+        !entity.isDead &&
+        entity.mesh !== null
     );
-
-    // Get the meshes of potential targets
     const targetMeshes = potentialTargets.map((char) => char.mesh!);
-
-    // Intersect with the target meshes
-    const intersects = this.rayCaster.intersectObjects(targetMeshes, true); // true for recursive
+    const intersects = this.rayCaster.intersectObjects(targetMeshes, true);
 
     if (intersects.length > 0) {
-      // Find the closest valid hit
       for (const hit of intersects) {
         let hitObject = hit.object;
         let targetEntity: Character | null = null;
-
-        // Traverse up the hierarchy to find the root mesh with the entity reference
         while (hitObject) {
           if (hitObject.userData?.entityReference instanceof Character) {
             targetEntity = hitObject.userData.entityReference;
-            break; // Found the entity reference
+            break;
           }
-          if (!hitObject.parent) break; // Stop if no parent
+          if (!hitObject.parent) break;
           hitObject = hitObject.parent;
         }
-
-        // Ensure we found a valid target entity that isn't ourselves
         if (targetEntity && targetEntity !== this && !targetEntity.isDead) {
           targetEntity.takeDamage(damage, this);
-          // Spawn hit particles at the intersection point
           this.game.spawnParticleEffect(hit.point, "red");
-          // Attack landed, break the loop
           break;
         }
       }
+    }
+  }
+
+  selfHeal(): void {
+    if (
+      this.isDead ||
+      this.isPerformingAction ||
+      this.health >= this.maxHealth
+    ) {
+      if (this.health >= this.maxHealth) {
+        this.game?.logEvent(
+          this,
+          "heal_fail",
+          `${this.name} is already at full health.`,
+          undefined,
+          {},
+          this.mesh!.position
+        );
+      }
+      return;
+    }
+
+    const healAmount = 25; // Amount to heal
+    const actualHeal = Math.min(healAmount, this.maxHealth - this.health);
+
+    if (actualHeal > 0) {
+      this.heal(actualHeal); // Apply the heal immediately
+
+      // Log the event
+      if (this.game) {
+        this.game.logEvent(
+          this,
+          "self_heal",
+          `${this.name} healed for ${actualHeal} health.`,
+          undefined,
+          { amount: actualHeal },
+          this.mesh!.position
+        );
+        // Spawn heal particles at character's feet/center
+        this.game.spawnParticleEffect(
+          this.mesh!.position.clone().add(
+            new Vector3(0, CHARACTER_HEIGHT / 2, 0)
+          ),
+          "green"
+        );
+      }
+
+      // Trigger the heal animation (using attackAction slot for now)
+      this.triggerAction("heal");
     }
   }
 
@@ -676,73 +724,69 @@ export class Character extends Entity {
   updateAnimations(deltaTime: number): void {
     this.mixer.update(deltaTime);
 
-    const actionAnimToUse = this.attackAction; // Use attack animation for gather, attack, heal
+    // Use attackAction for gather, attack, heal animations
+    const actionAnimToUse = this.attackAction;
 
     if (this.isGathering && actionAnimToUse) {
       // --- Gathering State ---
       this.gatherAttackTimer += deltaTime;
-
-      // Stop movement animations
-      if (this.walkAction?.isRunning()) this.walkAction.stop();
-      if (this.runAction?.isRunning()) this.runAction.stop();
-      if (this.jumpAction?.isRunning()) this.jumpAction.stop(); // Stop jump too
-
-      // Check if it's time to play the gather animation
-      if (this.gatherAttackTimer >= this.gatherAttackInterval) {
-        if (!actionAnimToUse.isRunning()) {
-          // Play only if not already running
-          if (this.idleAction?.isRunning()) this.idleAction.stop(); // Stop idle before playing gather
-          actionAnimToUse.reset().play();
-          this.gatherAttackTimer = 0; // Reset timer *after* playing
-        }
-      }
-
-      // If gather animation is NOT running (i.e., between actions), play idle
-      if (!actionAnimToUse.isRunning()) {
-        if (this.idleAction && !this.idleAction.isRunning()) {
-          this.idleAction.reset().play();
-        }
-      } else {
-        // If gather *is* running, ensure idle is stopped
-        if (this.idleAction?.isRunning()) this.idleAction.stop();
-      }
-    } else if (this.isPerformingAction && actionAnimToUse) {
-      // --- Performing Action State (Attack/Heal) ---
-      // Stop other animations
-      if (this.idleAction?.isRunning()) this.idleAction.stop();
       if (this.walkAction?.isRunning()) this.walkAction.stop();
       if (this.runAction?.isRunning()) this.runAction.stop();
       if (this.jumpAction?.isRunning()) this.jumpAction.stop();
-      if (this.isGathering && actionAnimToUse?.isRunning())
-        actionAnimToUse.stop(); // Stop gather if switching to action
 
-      // Play action animation if not already playing (triggered by triggerAction)
-      // The listener handles stopping and switching back
-      if (!actionAnimToUse.isRunning()) {
-        // This case might not be needed if triggerAction always plays it
-        // actionAnimToUse.reset().play();
+      if (this.gatherAttackTimer >= this.gatherAttackInterval) {
+        if (!actionAnimToUse.isRunning()) {
+          if (this.idleAction?.isRunning()) this.idleAction.stop();
+          actionAnimToUse.reset().play();
+          this.gatherAttackTimer = 0;
+        }
       }
+      if (
+        !actionAnimToUse.isRunning() &&
+        this.idleAction &&
+        !this.idleAction.isRunning()
+      ) {
+        this.idleAction.reset().play();
+      } else if (actionAnimToUse.isRunning() && this.idleAction?.isRunning()) {
+        this.idleAction.stop();
+      }
+    } else if (this.isPerformingAction && actionAnimToUse) {
+      // --- Performing Action State (Attack/Heal) ---
+      // Stop other movement/idle animations if the action just started playing
+      if (actionAnimToUse.time === 0) {
+        // Check if just started
+        if (this.idleAction?.isRunning()) this.idleAction.stop();
+        if (this.walkAction?.isRunning()) this.walkAction.stop();
+        if (this.runAction?.isRunning()) this.runAction.stop();
+        if (this.jumpAction?.isRunning()) this.jumpAction.stop();
+      }
+      // Animation is controlled by triggerAction and the 'finished' listener
     } else if (!this.isOnGround) {
       // --- In Air State ---
-      // Stop walk/run/idle
       if (this.idleAction?.isRunning()) this.idleAction.stop();
       if (this.walkAction?.isRunning()) this.walkAction.stop();
       if (this.runAction?.isRunning()) this.runAction.stop();
-      if (actionAnimToUse?.isRunning()) actionAnimToUse.stop(); // Stop action/gather if falling/jumping
+      if (actionAnimToUse?.isRunning()) actionAnimToUse.stop();
 
-      if (this.jumpAction?.isRunning()) {
-        // Jump animation is playing, do nothing else
-      } else if (this.idleAction && !this.idleAction.isRunning()) {
-        // Otherwise play idle (falling animation placeholder)
-        this.idleAction.reset().play();
+      // If jump animation is playing or has played, keep it or transition to idle/fall
+      if (this.jumpAction && !this.jumpAction.isRunning()) {
+        // If jump finished, play idle (as fall anim) if not already playing
+        if (this.idleAction && !this.idleAction.isRunning()) {
+          this.idleAction.reset().play();
+        }
+      } else if (!this.jumpAction) {
+        // If no jump animation exists, play idle
+        if (this.idleAction && !this.idleAction.isRunning()) {
+          this.idleAction.reset().play();
+        }
       }
+      // If this.jumpAction.isRunning() is true, do nothing, let it play out.
     } else {
       // --- On Ground State (Idle/Walk/Run) ---
       const isMoving =
         Math.abs(this.moveState.forward) > 0.1 ||
         Math.abs(this.moveState.right) > 0.1;
 
-      // Determine target action
       let targetAction: AnimationAction | undefined;
       if (isMoving) {
         targetAction =
@@ -751,7 +795,7 @@ export class Character extends Entity {
         targetAction = this.idleAction;
       }
 
-      // Stop other ground/air animations
+      // Stop other animations only if switching
       if (
         this.idleAction &&
         targetAction !== this.idleAction &&
@@ -770,23 +814,29 @@ export class Character extends Entity {
         this.runAction.isRunning()
       )
         this.runAction.stop();
-      if (this.jumpAction?.isRunning()) this.jumpAction.stop(); // Ensure jump stops when grounded
+      if (this.jumpAction?.isRunning()) this.jumpAction.stop();
       if (actionAnimToUse?.isRunning()) actionAnimToUse.stop(); // Stop action/gather if moving
 
-      // Play the target action if it exists and isn't already playing
       if (targetAction && !targetAction.isRunning()) {
         targetAction.reset().play();
       }
     }
   }
 
-  // Renamed from triggerAttack
   triggerAction(actionType: string): void {
-    // Use attackAction for both attack and heal animations
+    // Use attackAction for attack, heal, gather visual feedback
     if (this.attackAction && !this.isPerformingAction && !this.isGathering) {
       this.actionType = actionType;
-      this.isPerformingAction = true;
+      this.isPerformingAction = true; // Mark that an action animation is playing
       this.attackAction.reset().play();
+      // Stop movement animations immediately when action starts
+      if (this.idleAction?.isRunning()) this.idleAction.stop();
+      if (this.walkAction?.isRunning()) this.walkAction.stop();
+      if (this.runAction?.isRunning()) this.runAction.stop();
+      if (this.jumpAction?.isRunning()) this.jumpAction.stop();
+    } else if (actionType === "gather" && this.attackAction) {
+      // Special case for gather, handled in updateAnimations
+      this.actionType = actionType; // Set type, but let update handle looping anim
     }
   }
 
@@ -800,7 +850,6 @@ export class Character extends Entity {
     this.moveState = moveState;
     this.handleStamina(deltaTime);
     if (!this.isPerformingAction && !this.isGathering) {
-      // Check isPerformingAction instead of isAttacking
       this.handleMovement(deltaTime);
     } else {
       this.velocity.x = 0;
@@ -812,7 +861,6 @@ export class Character extends Entity {
     this.checkGround(collidables);
     this.mesh!.position.y += this.velocity.y * deltaTime;
 
-    // Updated to use triggerAction
     if (moveState.attack && !this.attackTriggered) {
       this.attackTriggered = true;
       this.triggerAction("attack");
@@ -830,7 +878,7 @@ export class Character extends Entity {
     super.die(attacker);
     if (this.aiController) this.aiController.aiState = "dead";
     this.isGathering = false;
-    this.isPerformingAction = false; // Reset performing action state
+    this.isPerformingAction = false;
     this.actionType = "none";
     if (this.game) {
       const message = `${this.name} has died!`;
@@ -869,7 +917,7 @@ export class Character extends Entity {
     this.lastVelocityY = 0;
     this.isGathering = false;
     this.gatherAttackTimer = 0;
-    this.isPerformingAction = false; // Reset performing action state
+    this.isPerformingAction = false;
     this.actionType = "none";
     this.attackTriggered = false;
     this.userData.isCollidable = false;
@@ -880,8 +928,8 @@ export class Character extends Entity {
       this.aiController.destination = null;
       this.aiController.targetResource = null;
       this.aiController.target = null;
-      this.aiController.targetAction = null; // Reset target action
-      this.aiController.message = null; // Reset message
+      this.aiController.targetAction = null;
+      this.aiController.message = null;
     }
 
     if (this.idleAction) this.idleAction.reset().play();
@@ -902,10 +950,8 @@ export class Character extends Entity {
     this.updateBoundingBox();
   }
 
-  // Updated interact method to return 'chat' type
   interact(player: Character): InteractionResult | null {
     this.lookAt(player.mesh!.position);
-    // Log interaction start
     if (this.game)
       this.game.logEvent(
         player,

@@ -1,4 +1,5 @@
 // File: /src/system.ts
+// File: /src/system.ts
 //// src/system.ts
 import {
   PerspectiveCamera,
@@ -388,7 +389,7 @@ export class InteractionSystem {
     this.player.isGathering = true; // Set gathering state
     this.player.gatherAttackTimer = 0; // Reset timer
     if (this.player.attackAction) {
-      this.player.attackAction.reset().play(); // Start attack animation
+      this.player.triggerAction("gather"); // Use triggerAction
     }
   }
 
@@ -457,8 +458,12 @@ export class InteractionSystem {
     }
     this.player.isGathering = false; // Reset gathering state
     this.player.gatherAttackTimer = 0; // Reset timer
-    if (this.player.attackAction) {
-      this.player.attackAction.stop(); // Stop attack animation
+    this.player.isPerformingAction = false; // Also reset performing action if gather uses it
+    this.player.actionType = "none";
+    if (this.player.attackAction && this.player.attackAction.isRunning()) {
+      this.player.attackAction.stop(); // Stop attack animation if it was running
+      // Optionally fade back to idle/walk
+      if (this.player.idleAction) this.player.idleAction.reset().play();
     }
     this.activeGather = null;
     this.hidePrompt();
@@ -487,8 +492,12 @@ export class InteractionSystem {
 
     this.player.isGathering = false; // Reset gathering state
     this.player.gatherAttackTimer = 0; // Reset timer
-    if (this.player.attackAction) {
+    this.player.isPerformingAction = false; // Also reset performing action
+    this.player.actionType = "none";
+    if (this.player.attackAction && this.player.attackAction.isRunning()) {
       this.player.attackAction.stop(); // Stop attack animation
+      // Optionally fade back to idle/walk
+      if (this.player.idleAction) this.player.idleAction.reset().play();
     }
     this.activeGather = null;
     this.hidePrompt();
@@ -1081,6 +1090,7 @@ export class Controls {
   onPointerLockChange(): void {
     if (document.pointerLockElement === this.domElement) {
       this.isPointerLocked = true;
+      document.body.classList.add("pointer-locked"); // Add class to body
       this.mouse.dx = 0;
       this.mouse.dy = 0;
       // Attempt to unpause the game when pointer locks
@@ -1093,6 +1103,7 @@ export class Controls {
       }
     } else {
       this.isPointerLocked = false;
+      document.body.classList.remove("pointer-locked"); // Remove class from body
       // Reset keyboard state if lock is lost
       this.keys = {};
       this.mouse.buttons = {};
@@ -1113,6 +1124,7 @@ export class Controls {
   onPointerLockError(): void {
     console.error("Pointer lock failed.");
     this.isPointerLocked = false;
+    document.body.classList.remove("pointer-locked"); // Ensure class is removed on error
   }
 
   // --- Keyboard Input ---
@@ -1171,27 +1183,19 @@ export class Controls {
   }
 
   onClick(event: MouseEvent): void {
-    // Check if the click target is part of the game canvas/container
-    // and not a UI element that should remain interactive.
     const targetElement = event.target as HTMLElement;
-    // Check if the click is on the canvas itself or its container (this.domElement)
     const isGameContainerClick =
       targetElement === this.domElement ||
       (this.domElement.contains(targetElement) &&
         targetElement.closest(
-          "#inventory-display, #journal-display, #chat-container, .touch-button, #minimap-canvas"
+          "#inventory-display, #journal-display, #chat-container, .touch-button, #minimap-canvas, #welcome-banner" // Add banner to exceptions
         ) === null);
 
-    // Check if UI panels that require pointer unlock are open
     const inventoryIsOpen = this.game?.inventoryDisplay?.isOpen ?? false;
     const journalIsOpen = this.game?.journalDisplay?.isOpen ?? false;
     const chatIsOpen = this.game?.interactionSystem?.isChatOpen ?? false;
     const uiBlocksPointerLock = inventoryIsOpen || journalIsOpen || chatIsOpen;
 
-    // Attempt to lock pointer only if:
-    // 1. Pointer is not already locked.
-    // 2. No major UI panel (inventory, journal, chat) is open.
-    // 3. The click was inside the game container and not on an interactive UI element.
     if (isGameContainerClick && !this.isPointerLocked && !uiBlocksPointerLock) {
       this.lockPointer();
     }
