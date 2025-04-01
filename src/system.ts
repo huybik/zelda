@@ -541,7 +541,7 @@ ${recentEvents || "Nothing significant recently."}
 
 The player (${this.player.name}) just said to you: "${playerMessage}"
 
-Respond to the player in character, keeping your response relatively brief (1-2 sentences). Respond ONLY with the text of your reply, without any extra formatting or labels.
+Respond to the player in character, keeping your response relatively brief (1-2 sentences). Respond ONLY with the content of your reply, without any extra formatting or labels. e.g without "response":
 `.trim();
   }
 
@@ -590,11 +590,17 @@ Respond to the player in character, keeping your response relatively brief (1-2 
         // 3. Generate prompt and call API
         const prompt = this.generateChatPrompt(this.chatTarget, message);
         try {
-          const responseJson = await sendToGemini(prompt); // Expecting JSON string
-          let npcMessage = "Hmm..."; // Default response
-
+          const responseJson = await sendToGemini(prompt);
+          let parsedResponse = null;
           if (responseJson) {
-            npcMessage = responseJson.trim();
+            // Expecting JSON string
+            parsedResponse = JSON.parse(responseJson)["response"];
+          }
+          let npcMessage = parsedResponse?.response || "Hmm....";
+
+          if (parsedResponse) {
+            npcMessage = parsedResponse.trim();
+            console.log("NPC response:", npcMessage);
           } else {
             console.warn("Received null or empty response from chat API.");
           }
@@ -603,7 +609,7 @@ Respond to the player in character, keeping your response relatively brief (1-2 
           this.chatTarget.showTemporaryMessage(npcMessage);
 
           // 5. Log NPC's response
-          this.game.logEvent(
+          this.chatTarget.game?.logEvent(
             this.chatTarget,
             "chat",
             `${this.chatTarget.name} said "${npcMessage}" to ${this.player.name}.`,

@@ -683,9 +683,14 @@ export class Game {
     oldPlayer.aiController!.aiState = "idle";
     oldPlayer.aiController!.previousAiState = "idle";
 
-    this.activeCharacter = newPlayer;
     newPlayer.userData.isPlayer = true;
     newPlayer.userData.isNPC = false;
+
+    oldPlayer.initIntentDisplay(); // Reinitialize intent display for old player
+    newPlayer.initIntentDisplay(); // Reinitialize intent display for old player
+
+    this.activeCharacter = newPlayer;
+
     if (newPlayer.aiController) {
       newPlayer.aiController = null; // Player doesn't need AI Controller active
     }

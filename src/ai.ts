@@ -613,7 +613,7 @@ Choose an appropriate action based on your persona and the current situation. En
   async decideNextAction(): Promise<void> {
     const prompt = this.generatePrompt();
     try {
-      // console.log(`AI (${this.character.name}) Prompt:`, prompt);
+      console.log(`AI (${this.character.name}) Prompt:`, prompt);
       const response = await sendToGemini(prompt);
       if (response) {
         try {
@@ -678,7 +678,9 @@ Choose an appropriate action based on your persona and the current situation. En
   }): void {
     const { action, object_id, target_id, message, intent } = actionData;
     this.currentIntent = intent || "Thinking...";
-    this.character.updateIntentDisplay(this.currentIntent);
+    this.character.updateIntentDisplay(
+      `${this.character.name}: ${this.currentIntent}`
+    );
 
     // Reset action-specific properties
     this.destination = null;
@@ -810,7 +812,7 @@ Choose an appropriate action based on your persona and the current situation. En
         actionMessage = `chat with ${target_id}`;
       else actionMessage = action; // Fallback
 
-      const messageLog = `Decided to ${actionMessage} because: ${intent}`;
+      const messageLog = `${this.character.name} decided to ${actionMessage} because: ${intent}`;
       this.character.game.logEvent(
         this.character,
         "decide_action",

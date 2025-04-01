@@ -89,9 +89,14 @@ export class Entity {
     if (this.game?.camera) {
       this.rayCaster.camera = this.game.camera;
     }
+
+    if (this.userData.isPlayer) {
+      return;
+    }
+
     this.intentCanvas = document.createElement("canvas");
     this.intentCanvas.width = 200;
-    this.intentCanvas.height = 60; // Increased height for padding/wrapping
+    this.intentCanvas.height = 70; // Increased height for padding/wrapping
     this.intentContext = this.intentCanvas.getContext("2d")!;
     this.intentTexture = new CanvasTexture(this.intentCanvas);
     const material = new SpriteMaterial({ map: this.intentTexture });
@@ -118,7 +123,7 @@ export class Entity {
     ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; // Slightly darker background
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    ctx.font = "18px Arial"; // Reduced font size
+    ctx.font = "14px Arial"; // Reduced font size
     ctx.fillStyle = "white";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
