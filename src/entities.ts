@@ -150,6 +150,8 @@ export class Character extends Entity {
   isAttacking: boolean = false;
   gatherAttackTimer: number = 0;
   gatherAttackInterval: number = 1.0;
+  searchRadius: number = 30;
+  roamRadius: number = 10;
   attackTriggered: boolean = false;
   inventory: Inventory | null;
   game: Game | null = null;

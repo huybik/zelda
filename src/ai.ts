@@ -72,14 +72,14 @@ export class AIController {
   aiState: string = 'idle';
   previousAiState: string = 'idle';
   homePosition: Vector3;
-  roamRadius: number = 10;
   destination: Vector3 | null = null;
   targetResource: Object3D | null = null;
   gatherTimer: number = 0;
   gatherDuration: number = 0;
   actionTimer: number = 5;
   interactionDistance: number = 3;
-  searchRadius: number = 60;
+  searchRadius: number;
+  roamRadius: number;
   target: Entity | null = null;
   observation: Observation | null = null;
   persona: string = "";
@@ -246,8 +246,10 @@ export class AIController {
       const entityPosition = entityMesh.position;
       const distanceSq = selfPosition.distanceToSquared(entityPosition);
 
-      if (distanceSq > searchRadiusSq) continue;
-
+      if (distanceSq > searchRadiusSq) {
+        continue;
+      }
+      
       if (entity instanceof Character) {
         nearbyCharacters.push({
           id: entity.id,
@@ -316,13 +318,13 @@ export class AIController {
     const prompt = this.generatePrompt();
     try {
       console.log(`AI (${this.character.name}) Prompt:`, prompt);
-      const response = await sendToGemini(prompt);
-      console.log(`AI (${this.character.name}) Response:`, response);
-      if (response) {
-        this.setActionFromAPI(response);
-      } else {
-         this.fallbackToDefaultBehavior();
-      }
+      // const response = await sendToGemini(prompt);
+      // console.log(`AI (${this.character.name}) Response:`, response);
+      // if (response) {
+      //   this.setActionFromAPI(response);
+      // } else {
+      //    this.fallbackToDefaultBehavior();
+      // }
     } catch (error) {
       console.error(`Error querying API for ${this.character.name}:`, error);
       this.fallbackToDefaultBehavior();
