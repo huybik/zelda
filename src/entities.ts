@@ -51,6 +51,10 @@ export class Entity {
   intentContext: CanvasRenderingContext2D | null = null;
   intentTexture: CanvasTexture | null = null;
   intentSprite: Sprite | null = null;
+  nameCanvas: HTMLCanvasElement | null = null;
+  nameContext: CanvasRenderingContext2D | null = null;
+  nameTexture: CanvasTexture | null = null;
+  nameSprite: Sprite | null = null;
   aiController: AIController | null = null;
   rayCaster: Raycaster | null = null;
 
@@ -84,29 +88,80 @@ export class Entity {
 
   update(deltaTime: number, options: UpdateOptions = {}): void {}
 
+  initNameDisplay(): void {
+    if (this.userData.isPlayer) return;
+
+    if (!this.nameCanvas) {
+      this.nameCanvas = document.createElement("canvas");
+      this.nameCanvas.width = 200;
+      this.nameCanvas.height = 30; // Smaller height for name
+      this.nameContext = this.nameCanvas.getContext("2d")!;
+      this.nameTexture = new CanvasTexture(this.nameCanvas);
+    }
+
+    if (!this.nameSprite) {
+      const material = new SpriteMaterial({ map: this.nameTexture });
+      this.nameSprite = new Sprite(material);
+      const aspectRatio = this.nameCanvas.width / this.nameCanvas.height;
+      this.nameSprite.scale.set(aspectRatio * 0.3, 0.3, 1); // Smaller scale than intent
+      this.nameSprite.position.set(0, CHARACTER_HEIGHT + 0.15, 0); // Below intent display
+      this.mesh!.add(this.nameSprite);
+    }
+
+    this.updateNameDisplay(this.name);
+  }
+  updateNameDisplay(name: string): void {
+    if (!this.nameContext || !this.nameCanvas || !this.nameTexture) return;
+
+    const ctx = this.nameContext;
+    const canvas = this.nameCanvas;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.font = "16px Arial";
+    ctx.fillStyle = "blue";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(name, canvas.width / 2, canvas.height / 2);
+
+    this.nameTexture.needsUpdate = true;
+  }
+
   initIntentDisplay(): void {
     this.rayCaster = new Raycaster();
     if (this.game?.camera) {
       this.rayCaster.camera = this.game.camera;
     }
 
-    if (this.userData.isPlayer) {
-      return;
+    if (this.userData.isPlayer) return;
+
+    if (!this.intentCanvas) {
+      this.intentCanvas = document.createElement("canvas");
+      this.intentCanvas.width = 200;
+      this.intentCanvas.height = 70;
+      this.intentContext = this.intentCanvas.getContext("2d")!;
+      this.intentTexture = new CanvasTexture(this.intentCanvas);
     }
 
-    this.intentCanvas = document.createElement("canvas");
-    this.intentCanvas.width = 200;
-    this.intentCanvas.height = 70; // Increased height for padding/wrapping
-    this.intentContext = this.intentCanvas.getContext("2d")!;
-    this.intentTexture = new CanvasTexture(this.intentCanvas);
-    const material = new SpriteMaterial({ map: this.intentTexture });
-    this.intentSprite = new Sprite(material);
-    // Adjust scale based on new height ratio (width/height)
-    const aspectRatio = this.intentCanvas.width / this.intentCanvas.height;
-    this.intentSprite.scale.set(aspectRatio * 0.6, 0.6, 1); // Adjust scale y, then x based on aspect
-    this.intentSprite.position.set(0, CHARACTER_HEIGHT + 0.6, 0); // Slightly raise position
-    this.mesh!.add(this.intentSprite);
+    if (!this.intentSprite) {
+      const material = new SpriteMaterial({ map: this.intentTexture });
+      this.intentSprite = new Sprite(material);
+      const aspectRatio = this.intentCanvas.width / this.intentCanvas.height;
+      this.intentSprite.scale.set(aspectRatio * 0.6, 0.6, 1);
+      this.intentSprite.position.set(0, CHARACTER_HEIGHT + 0.6, 0);
+      this.mesh!.add(this.intentSprite);
+    }
+
     this.updateIntentDisplay("");
+  }
+  removeDisplays(): void {
+    if (this.intentSprite && this.mesh) {
+      this.mesh.remove(this.intentSprite);
+      this.intentSprite = null;
+    }
+    if (this.nameSprite && this.mesh) {
+      this.mesh.remove(this.nameSprite);
+      this.nameSprite = null;
+    }
   }
 
   updateIntentDisplay(text: string): void {

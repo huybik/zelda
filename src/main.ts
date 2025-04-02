@@ -386,6 +386,7 @@ export class Game {
       if (entity instanceof Character) {
         entity.game = this;
         entity.initIntentDisplay();
+        entity.initNameDisplay(); // Add this line
       }
     });
 
@@ -1323,7 +1324,7 @@ export class Game {
       !targetCharacter.mesh ||
       targetCharacter.isDead
     )
-      return; // Don't switch to dead characters
+      return;
 
     const oldPlayer = this.activeCharacter!;
     const newPlayer = targetCharacter;
@@ -1361,13 +1362,15 @@ export class Game {
     newPlayer.userData.isPlayer = true;
     newPlayer.userData.isNPC = false;
 
-    oldPlayer.initIntentDisplay(); // Reinitialize intent display for old player
-    newPlayer.initIntentDisplay(); // Reinitialize intent display for old player
+    // Update displays after flag changes
+    oldPlayer.initIntentDisplay(); // Add displays for old player (now NPC)
+    oldPlayer.initNameDisplay();
+    newPlayer.removeDisplays(); // Remove displays for new player
 
     this.activeCharacter = newPlayer;
 
     if (newPlayer.aiController) {
-      newPlayer.aiController = null; // Player doesn't need AI Controller active
+      newPlayer.aiController = null;
     }
 
     this.controls!.player = newPlayer;
@@ -1376,15 +1379,14 @@ export class Game {
     this.interactionSystem!.player = newPlayer;
     this.interactionSystem!.eventLog = newPlayer.eventLog;
     this.inventory = newPlayer.inventory;
-    this.inventoryDisplay!.setInventory(this.inventory!); // Update inventory display
+    this.inventoryDisplay!.setInventory(this.inventory!);
     this.hud!.player = newPlayer;
     this.minimap!.player = newPlayer;
     this.journalDisplay!.setEventLog(newPlayer.eventLog);
 
-    // Close any open UI panels
     this.inventoryDisplay!.hide();
     this.journalDisplay!.hide();
-    this.interactionSystem!.closeChatInterface(); // Close chat if open
+    this.interactionSystem!.closeChatInterface();
     this.setPauseState(false);
     console.log(`Control switched to: ${newPlayer.name}`);
   }
