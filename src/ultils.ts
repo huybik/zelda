@@ -8,6 +8,7 @@ import {
   Raycaster,
   Box3,
 } from "three";
+import { Character } from "./entities";
 
 export interface EntityUserData {
   entityReference: any | null;
@@ -68,6 +69,17 @@ export interface GameEvent {
   target?: string; // ID or name of the target, if applicable
   details: Record<string, any>; // Additional details like damage, resource type, etc.
   location: Vector3; // Position where the event occurred
+}
+
+// src/ultils.ts
+export interface Quest {
+  name: string;
+  description: string;
+  isCompleted: boolean;
+  checkCompletion: (
+    interactionTarget: Character,
+    chatResponse: string
+  ) => boolean;
 }
 
 export interface EventEntry {

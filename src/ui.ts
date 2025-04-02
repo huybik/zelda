@@ -1,5 +1,6 @@
 // File: /src/ui.ts
 import { Character } from "./entities";
+import { Game } from "./main";
 import { Inventory, EventLog, InventoryItem, EventEntry } from "./ultils"; // Added EventEntry
 import { Object3D, Vector3 } from "three";
 
@@ -188,18 +189,36 @@ export class InventoryDisplay {
 
 export class JournalDisplay {
   eventLog: EventLog;
+  game: Game; // Add game reference
   displayElement: HTMLElement | null;
   eventListElement: HTMLElement | null;
+  questListElement: HTMLElement | null; // Add quest list element
   isOpen: boolean = false;
-  boundUpdateEvents: (entries: EventEntry[]) => void; // Changed to accept EventEntry[]
+  boundUpdateEvents: (entries: EventEntry[]) => void;
+  boundUpdateQuests: () => void; // Add bound method for quests
 
-  constructor(eventLog: EventLog) {
+  constructor(eventLog: EventLog, game: Game) {
     this.eventLog = eventLog;
+    this.game = game; // Store game instance
     this.displayElement = document.getElementById("journal-display");
     this.eventListElement = document.getElementById("event-log");
+    this.questListElement = document.getElementById("quest-log"); // Get quest log element
     this.boundUpdateEvents = this.updateEvents.bind(this);
-    this.eventLog.onChange(this.boundUpdateEvents); // Register listener
+    this.boundUpdateQuests = this.updateQuests.bind(this);
+    this.eventLog.onChange(this.boundUpdateEvents);
     if (this.displayElement) this.displayElement.classList.add("hidden");
+  }
+
+  updateQuests(): void {
+    if (!this.isOpen || !this.questListElement) return;
+    this.questListElement.innerHTML = "";
+    this.game?.quests?.forEach((quest) => {
+      const li = document.createElement("li");
+      li.textContent = `${quest.name}: ${
+        quest.isCompleted ? "Completed" : "In Progress"
+      }`;
+      this.questListElement!.appendChild(li);
+    });
   }
 
   // Method to change the event log being displayed
@@ -247,7 +266,8 @@ export class JournalDisplay {
   show(): void {
     if (!this.displayElement || this.isOpen) return;
     this.isOpen = true;
-    this.updateEvents(this.eventLog.entries); // Pass raw entries
+    this.updateEvents(this.eventLog.entries);
+    this.updateQuests(); // Update quests when showing
     this.displayElement.classList.remove("hidden");
   }
 

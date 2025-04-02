@@ -582,9 +582,6 @@ Respond to the player in character, keeping your response relatively brief (1-2 
         this.chatInput.disabled = true; // Disable input while waiting for response
         this.chatSendButton.disabled = true;
 
-        // 1. Display player's message in html div
-        // this.player.showSpeechBubble(message);
-
         // 2. Log player's message
         this.game.logEvent(
           this.player,
@@ -599,24 +596,14 @@ Respond to the player in character, keeping your response relatively brief (1-2 
         const prompt = this.generateChatPrompt(this.chatTarget, message);
         try {
           const responseJson = await sendToGemini(prompt);
-          let parsedResponse = null;
+          let npcMessage = "Hmm....";
           if (responseJson) {
-            // Expecting JSON string
-            parsedResponse = JSON.parse(responseJson)["response"];
-          }
-          let npcMessage = parsedResponse?.response || "Hmm....";
-
-          if (parsedResponse) {
-            npcMessage = parsedResponse.trim();
+            const parsedResponse = JSON.parse(responseJson)["response"];
+            npcMessage = parsedResponse?.trim() || "Hmm....";
             console.log("NPC response:", npcMessage);
-          } else {
-            console.warn("Received null or empty response from chat API.");
           }
 
-          // 4. Display NPC's response
           this.chatTarget.showTemporaryMessage(npcMessage);
-
-          // 5. Log NPC's response
           this.chatTarget.game?.logEvent(
             this.chatTarget,
             "chat",
@@ -625,6 +612,9 @@ Respond to the player in character, keeping your response relatively brief (1-2 
             { message: npcMessage },
             this.chatTarget.mesh!.position
           );
+
+          // Add quest completion check here
+          this.game.checkQuestCompletion(this.chatTarget, npcMessage);
         } catch (error) {
           console.error("Error during chat API call:", error);
           this.chatTarget.showTemporaryMessage("I... don't know what to say.");
