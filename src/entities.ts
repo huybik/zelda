@@ -132,8 +132,6 @@ export class Entity {
       this.rayCaster.camera = this.game.camera;
     }
 
-    if (this.userData.isPlayer) return;
-
     if (!this.intentCanvas) {
       this.intentCanvas = document.createElement("canvas");
       this.intentCanvas.width = 200;
