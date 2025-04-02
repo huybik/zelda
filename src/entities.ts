@@ -513,7 +513,7 @@ export class Character extends Entity {
       this.currentAction.fadeOut(0.2); // Fade out current animation over 0.2 seconds
     }
     if (newAction) {
-      newAction.reset().fadeIn(0.2).play(); // Fade in new animation
+      newAction.reset().fadeIn(0.1).play(); // Fade in new animation
     }
     this.currentAction = newAction;
   }
