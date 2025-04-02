@@ -505,12 +505,10 @@ export class AIController {
     const observation = this.observation;
     // Format event log to include IDs
     const eventLog = this.character.eventLog.entries
-      .slice(-5)
+      .slice(-10)
       .map((entry) => {
         let logMessage = `[${entry.timestamp}] ${entry.message}`;
-        // Optional: Add more context if needed, but keep it concise
-        // if (entry.actorId) logMessage += ` (Actor ID: ${entry.actorId})`;
-        // if (entry.targetId) logMessage += ` (Target ID: ${entry.targetId})`;
+
         return logMessage;
       })
       .join("\n");
@@ -565,7 +563,7 @@ ${nearbyObjects}
 Here are the recent events you are aware of:
 ${eventLog}
 
-Based on this information, decide your next action. You may want to gather resources, chat with others, attack enemies, or heal allies if necessary. Respond ONLY with a valid JSON object in the following format:
+Based on this information, decide your next action. You may want to gather resources, chat with others, attack enemies, or heal allies if necessary. Imediately proceed to gather resource if player request. Respond ONLY with a valid JSON object in the following format:
 {
   "action": "idle" | "roam" | "gather" | "moveTo" | "attack" | "heal" | "chat",
   "object_id": "object_id_here", // only if action is "gather", choose from nearby objects
@@ -596,7 +594,7 @@ Example - Heal:
 Example - Gather:
 {
   "action": "gather",
-  "object_id": "tree_abc123",
+  "object_id": "Herb Plant_d8a868",
   "intent": "Need wood"
 }
 Example - Idle:
@@ -683,7 +681,7 @@ Choose an appropriate action based on your persona and the current situation. En
     // Reset action-specific properties
     this.destination = null;
     this.targetResource = null;
-    this.target = null; 
+    this.target = null;
     this.targetAction = null;
     this.message = null;
 

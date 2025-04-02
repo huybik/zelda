@@ -553,7 +553,7 @@ Respond to the player in character, keeping your response relatively brief (1-2 
 `.trim();
   }
 
-  openChatInterface(target: Character): void {
+  async openChatInterface(target: Character): Promise<void> {
     if (
       !this.chatContainer ||
       !this.chatInput ||
