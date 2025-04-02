@@ -298,7 +298,7 @@ export class AIController {
             this.character.lookAt(this.target.mesh.position); // Look at target before action
 
             if (this.targetAction === "chat" && this.message) {
-              this.character.showTemporaryMessage(this.message);
+              this.character.updateIntentDisplay(this.message);
               // Log the event
               if (this.character.game) {
                 this.character.game.logEvent(
