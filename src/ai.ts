@@ -528,7 +528,7 @@ export class AIController {
     const observation = this.observation;
     // Format event log to include IDs
     const eventLog = this.character.eventLog.entries
-      .slice(-10)
+      .slice(-7)
       .map((entry) => {
         let logMessage = `[${entry.timestamp}] ${entry.message}`;
 
@@ -555,17 +555,43 @@ export class AIController {
     }
 
     let nearbyObjects = "None";
-    if (observation && observation.nearbyObjects.length > 0) {
-      nearbyObjects = observation.nearbyObjects
-        .map(
-          (o) =>
-            `- ${o.type} (${o.id}) at (${o.position.x.toFixed(
-              1
-            )}, ${o.position.y.toFixed(1)}, ${o.position.z.toFixed(1)}), ${
-              o.resource ? ", resource: " + o.resource : ""
-            }`
-        )
-        .join("\n");
+
+    if (
+      observation &&
+      observation.nearbyObjects &&
+      observation.nearbyObjects.length > 0
+    ) {
+      const typeCounts: Record<string, number> = {}; // Object to store counts for each type
+      const limitedObjects = observation.nearbyObjects.filter((o) => {
+        const type = o.type;
+        // Initialize count if type not seen before
+        typeCounts[type] = typeCounts[type] || 0;
+        // Check if count for this type is less than 5
+        if (typeCounts[type] < 3) {
+          // Increment count and keep the object
+          typeCounts[type]++;
+          return true; // Include this object
+        } else {
+          // Exclude this object if limit for its type is reached
+          return false;
+        }
+      });
+
+      // Proceed only if there are objects left after filtering
+      if (limitedObjects.length > 0) {
+        nearbyObjects = limitedObjects
+          .map(
+            (o) =>
+              `- ${o.type} (${o.id}) at (${o.position.x.toFixed(
+                1
+              )}, ${o.position.y.toFixed(1)}, ${o.position.z.toFixed(1)})${
+                // Note: Removed potential extra comma before resource
+                o.resource ? ", resource: " + o.resource : ""
+              }`
+          )
+          .join("\n");
+      }
+      // If limitedObjects is empty after filtering, nearbyObjects remains "None"
     }
 
     // Updated prompt with new actions and response format
