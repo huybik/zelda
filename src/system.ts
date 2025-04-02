@@ -46,6 +46,7 @@ export class InteractionSystem {
   // Chat UI elements
   chatContainer: HTMLElement | null;
   chatInput: HTMLInputElement | null;
+
   chatSendButton: HTMLButtonElement | null;
   isChatOpen: boolean = false;
   chatTarget: Character | null = null;
@@ -83,6 +84,7 @@ export class InteractionSystem {
     // Initialize chat UI elements
     this.chatContainer = document.getElementById("chat-container");
     this.chatInput = document.getElementById("chat-input") as HTMLInputElement;
+
     this.chatSendButton = document.getElementById(
       "chat-send"
     ) as HTMLButtonElement;
@@ -631,6 +633,7 @@ Respond to the player in brief 1-2 sentences.
     }
 
     // Add event listeners using bound handlers
+
     if (this.chatSendButton) {
       this.chatSendButton.addEventListener("click", this.boundSendMessage);
     }
