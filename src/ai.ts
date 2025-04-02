@@ -4,17 +4,37 @@ import { Character, Entity } from "./entities";
 import { MoveState, getTerrainHeight, EventEntry } from "./ultils";
 import type { Game } from "./main";
 
-const API_KEY = import.meta.env.VITE_API_KEY;
-const API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" +
-  API_KEY; // Updated model
+// Define both API keys
+const API_KEY1 = import.meta.env.VITE_API_KEY1;
+const API_KEY2 = import.meta.env.VITE_API_KEY2;
+let switched = false;
+
+// Store the current API key and URL globally, with ability to switch
+let currentApiKey = API_KEY1 || "";
+let API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${currentApiKey}`;
+
+// Function to switch API key
+function switchApiKey(): void {
+  if (currentApiKey === API_KEY1) {
+    currentApiKey = API_KEY2;
+    console.log("Switched to VITE_API_KEY2 due to rate limit.");
+  } else if (currentApiKey === API_KEY2) {
+    currentApiKey = API_KEY1;
+    console.log("Switched back to VITE_API_KEY1.");
+  } else {
+    console.warn("No alternate API key available for rotation.");
+  }
+  API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${currentApiKey}`;
+}
 
 export async function sendToGemini(prompt: string): Promise<string | null> {
-  if (!API_KEY) {
+  if (!currentApiKey) {
     console.warn(
       "API_KEY is not configured. Please set a valid API_KEY in .env file to use Gemini API."
     );
+    return null;
   }
+
   try {
     const response = await fetch(API_URL, {
       method: "POST",
@@ -27,7 +47,6 @@ export async function sendToGemini(prompt: string): Promise<string | null> {
             parts: [{ text: prompt }],
           },
         ],
-        // Add generation config if needed, e.g., for JSON output
         generationConfig: {
           responseMimeType: "application/json",
         },
@@ -35,6 +54,12 @@ export async function sendToGemini(prompt: string): Promise<string | null> {
     });
 
     if (!response.ok) {
+      if (response.status === 429 && !switched) {
+        // Rate limit hit, switch key and retry once
+        console.warn(`Rate limit hit (429). Switching API key...`);
+        switchApiKey();
+        switched = true;
+      }
       console.error(`HTTP error! status: ${response.status}`);
       const errorData = await response.json();
       console.error("Error details:", errorData);
@@ -49,18 +74,16 @@ export async function sendToGemini(prompt: string): Promise<string | null> {
       data.candidates[0].content.parts &&
       data.candidates[0].content.parts.length > 0
     ) {
-      // Assuming the API returns the JSON string directly in the text part
       return data.candidates[0].content.parts[0].text as string;
     } else {
       console.error(
         "No text content found in the API response or unexpected format:",
         data
       );
-      return null; // Return null if response format is not as expected
+      return null;
     }
   } catch (error) {
     console.error("Error during API call:", error);
-    // Fallback in case of network error etc.
     return JSON.stringify({
       action: "idle",
       intent: "Error fallback",
