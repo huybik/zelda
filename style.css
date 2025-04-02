@@ -49,13 +49,12 @@ canvas {
 }
 
 /* Allow pointer events on specific UI elements */
-#hud,
-#minimap-container,
+
 .ui-panel,
 #chat-container,
 .touch-controls-container, /* Allow touch on controls container */
 .touch-button {
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 /* --- HUD --- */
@@ -493,7 +492,7 @@ li.quest-active strong {
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.3);
   position: absolute; /* Positioned by JS */
-  pointer-events: none; /* Thumb doesn't capture events */
+  pointer-events: auto; /* Thumb doesn't capture events */
 }
 
 #touch-controls-right {
