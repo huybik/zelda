@@ -1,5 +1,4 @@
-///// src/ultils.ts
-
+// File: /src/ultils.ts
 import {
   Vector3,
   Quaternion,

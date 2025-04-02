@@ -1,6 +1,4 @@
 // File: /src/system.ts
-// File: /src/system.ts
-//// src/system.ts
 import {
   PerspectiveCamera,
   Object3D,

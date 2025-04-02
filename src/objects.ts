@@ -1,3 +1,4 @@
+// File: /src/objects.ts
 import {
   Vector3,
   Mesh,

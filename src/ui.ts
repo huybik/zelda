@@ -1,3 +1,4 @@
+// File: /src/ui.ts
 import { Character } from "./entities";
 import { Inventory, EventLog, InventoryItem, EventEntry } from "./ultils"; // Added EventEntry
 import { Object3D, Vector3 } from "three";

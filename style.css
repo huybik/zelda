@@ -479,7 +479,7 @@ li.quest-active strong {
   height: 120px;
   background-color: rgba(128, 128, 128, 0.3); /* Semi-transparent grey */
   border-radius: 50%;
-  pointer-events: auto; /* Enable touch for this area */
+  pointer-events: none; /* Enable touch for this area */
   display: flex;
   justify-content: center;
   align-items: center;
@@ -492,7 +492,7 @@ li.quest-active strong {
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.3);
   position: absolute; /* Positioned by JS */
-  pointer-events: auto; /* Thumb doesn't capture events */
+  pointer-events: auto;
 }
 
 #touch-controls-right {

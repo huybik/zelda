@@ -1,6 +1,4 @@
 // File: /src/entities.ts
-// File: /src/entities.ts
-///// src/entities.ts
 import {
   Scene,
   Vector3,
@@ -122,8 +120,12 @@ export class Entity {
     const x = canvas.width / 2;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; // Slightly darker background
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.5)"; // Slightly darker background
+
+    const borderRadius = 10; // Adjust this value to change the corner radius
+    ctx.beginPath();
+    ctx.roundRect(0, 0, canvas.width, canvas.height, borderRadius);
+    ctx.fill();
 
     ctx.font = "14px Arial"; // Reduced font size
     ctx.fillStyle = "white";
