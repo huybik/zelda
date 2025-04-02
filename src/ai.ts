@@ -651,7 +651,7 @@ Example - Idle:
   "action": "idle",
   "intent": "Resting"
 }
-Choose an appropriate action based on your persona and the current situation. Ensure the target_id exists in the nearby characters list if applicable and is not dead (unless the action is something like 'examine body'). Ensure object_id exists if gathering.
+Choose an appropriate action based on your persona and the current situation. Ensure the target_id exists and object_id exists in nearby list.
 `.trim();
 
     return prompt;

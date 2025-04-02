@@ -542,14 +542,14 @@ export class InteractionSystem {
 
     return `
 You are an NPC named ${target.name} with the following persona: ${persona}
-The player character is named ${this.player.name}.
+The player character is named ${
+      this.player.name
+    } just said to you: "${playerMessage}"
 
-Recent events involving or observed by you (${target.name}):
+Recent events observed by you:
 ${recentEvents || "Nothing significant recently."}
 
-The player (${this.player.name}) just said to you: "${playerMessage}"
-
-Respond to the player in character, keeping your response relatively brief (1-2 sentences). Respond ONLY with the content of your reply, without any extra formatting or labels. e.g without "response":
+Respond to the player in brief 1-2 sentences.
 `.trim();
   }
 
