@@ -54,8 +54,7 @@ canvas {
 .ui-panel,
 #chat-container,
 .touch-controls-container, /* Allow touch on controls container */
-.touch-button, /* Allow touch on buttons */
-#welcome-banner /* Allow potential interaction (though unlikely needed) */ {
+.touch-button {
   pointer-events: none;
 }
 
@@ -645,4 +644,5 @@ body:has(#chat-container:not(.hidden))::after {
   z-index: 30;
   opacity: 1;
   transition: opacity 0.5s ease-out, visibility 0s 0s;
+  pointer-events: none;
 }
