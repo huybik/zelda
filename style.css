@@ -479,10 +479,11 @@ li.quest-active strong {
   height: 120px;
   background-color: rgba(128, 128, 128, 0.3); /* Semi-transparent grey */
   border-radius: 50%;
-  pointer-events: none; /* Enable touch for this area */
+  pointer-events: auto; /* Enable touch for this area */
   display: flex;
   justify-content: center;
   align-items: center;
+  z-index: 1;
 }
 
 #touch-joystick-thumb {
@@ -493,6 +494,7 @@ li.quest-active strong {
   border: 1px solid rgba(255, 255, 255, 0.3);
   position: absolute; /* Positioned by JS */
   pointer-events: auto;
+  z-index: 2;
 }
 
 #touch-controls-right {

@@ -1191,7 +1191,7 @@ export class Controls {
   onTouchStart(event: TouchEvent): void {
     event.preventDefault(); // Prevent default touch actions like scrolling
     if (this.game?.isPaused && !this.game?.interactionSystem?.isChatOpen)
-      return; // Ignore touches if paused (unless chat is open, handled separately)
+      return; // Ignore touches if paused (unless chat is open)
 
     const touches = event.changedTouches;
     for (let i = 0; i < touches.length; i++) {
@@ -1203,6 +1203,7 @@ export class Controls {
       const buttonId = targetElement.closest(".touch-button")?.id;
 
       if (buttonId) {
+        console.log(`Touch started on button: ${buttonId}`); // Debug log
         this.activeTouches.set(touchId, {
           identifier: touchId,
           startX: touch.clientX,
@@ -1215,11 +1216,17 @@ export class Controls {
         continue; // Don't process as movement/look if it's a button
       }
 
-      // Check if touch is on left or right side
-      const isLeftSide = touch.clientX < window.innerWidth / 2;
-
-      if (isLeftSide && this.leftTouchId === null) {
-        // Start movement touch
+      // Check if touch is within joystick base for movement
+      const joystickRect = this.joystickBase?.getBoundingClientRect();
+      if (
+        joystickRect &&
+        this.leftTouchId === null &&
+        touch.clientX >= joystickRect.left &&
+        touch.clientX <= joystickRect.right &&
+        touch.clientY >= joystickRect.top &&
+        touch.clientY <= joystickRect.bottom
+      ) {
+        console.log("Starting joystick touch at", touch.clientX, touch.clientY); // Debug log
         this.leftTouchId = touchId;
         this.activeTouches.set(touchId, {
           identifier: touchId,
@@ -1232,8 +1239,12 @@ export class Controls {
           this.joystickThumb.style.opacity = "0.8";
           this.updateJoystickThumb(touch.clientX, touch.clientY);
         }
-      } else if (!isLeftSide && this.rightTouchId === null) {
-        // Start look touch
+      }
+      // Check if touch is on right side for look (keeping original logic)
+      else if (
+        touch.clientX > window.innerWidth / 2 &&
+        this.rightTouchId === null
+      ) {
         this.rightTouchId = touchId;
         this.activeTouches.set(touchId, {
           identifier: touchId,
@@ -1242,7 +1253,6 @@ export class Controls {
           currentX: touch.clientX,
           currentY: touch.clientY,
         });
-        // Reset dx/dy for the new touch
         this.mouse.dx = 0;
         this.mouse.dy = 0;
       }
