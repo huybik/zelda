@@ -168,10 +168,21 @@ export class Entity {
     if (!this.intentContext || !this.intentCanvas || !this.intentTexture)
       return;
 
+    if (!text || text.trim() === "") {
+      if (this.intentSprite) {
+        this.intentSprite.visible = false;
+      }
+      return;
+    } else {
+      if (this.intentSprite) {
+        this.intentSprite.visible = true;
+      }
+    }
+
     const ctx = this.intentContext;
     const canvas = this.intentCanvas;
     const maxWidth = canvas.width - 10; // Padding
-    const lineHeight = 22; // Slightly more than font size
+    const lineHeight = 20; // Slightly more than font size
     const x = canvas.width / 2;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -182,7 +193,7 @@ export class Entity {
     ctx.roundRect(0, 0, canvas.width, canvas.height, borderRadius);
     ctx.fill();
 
-    ctx.font = "14px Arial"; // Reduced font size
+    ctx.font = "13px Arial"; // Reduced font size
     ctx.fillStyle = "white";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
