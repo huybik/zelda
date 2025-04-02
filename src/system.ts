@@ -46,15 +46,12 @@ export class InteractionSystem {
   // Chat UI elements
   chatContainer: HTMLElement | null;
   chatInput: HTMLInputElement | null;
-  chatSendButton: HTMLButtonElement | null;
-  chatCloseButton: HTMLButtonElement | null; // Added close button element
   isChatOpen: boolean = false;
   chatTarget: Character | null = null;
 
   // Bound event handlers for chat
   boundSendMessage: (() => Promise<void>) | null = null;
   boundHandleChatKeyDown: ((e: KeyboardEvent) => void) | null = null;
-  boundCloseChat: (() => void) | null = null;
 
   private cameraDirection = new Vector3();
   private objectDirection = new Vector3();
@@ -85,12 +82,6 @@ export class InteractionSystem {
     // Initialize chat UI elements
     this.chatContainer = document.getElementById("chat-container");
     this.chatInput = document.getElementById("chat-input") as HTMLInputElement;
-    this.chatSendButton = document.getElementById(
-      "chat-send"
-    ) as HTMLButtonElement;
-    this.chatCloseButton = document.getElementById(
-      "chat-close"
-    ) as HTMLButtonElement; // Get close button
   }
 
   update(deltaTime: number): void {
@@ -554,14 +545,7 @@ Respond to the player in brief 1-2 sentences.
   }
 
   async openChatInterface(target: Character): Promise<void> {
-    if (
-      !this.chatContainer ||
-      !this.chatInput ||
-      !this.chatSendButton ||
-      !this.chatCloseButton ||
-      this.isChatOpen
-    )
-      return;
+    if (!this.chatContainer || !this.chatInput || this.isChatOpen) return;
 
     this.isChatOpen = true;
     this.chatTarget = target;
@@ -573,14 +557,14 @@ Respond to the player in brief 1-2 sentences.
     // Define bound handlers if they don't exist
     if (!this.boundSendMessage) {
       this.boundSendMessage = async () => {
-        if (!this.chatTarget || !this.chatInput || !this.chatSendButton) return;
+        if (!this.chatTarget || !this.chatInput) return;
 
         const message = this.chatInput.value.trim();
         if (!message) return;
+        this.player.showTemporaryMessage(message);
 
         this.chatInput.value = "";
         this.chatInput.disabled = true; // Disable input while waiting for response
-        this.chatSendButton.disabled = true;
 
         // 2. Log player's message
         this.game.logEvent(
@@ -628,7 +612,6 @@ Respond to the player in brief 1-2 sentences.
           );
         } finally {
           this.chatInput.disabled = false; // Re-enable input
-          this.chatSendButton.disabled = false;
           this.chatInput.focus();
         }
       };
@@ -643,27 +626,12 @@ Respond to the player in brief 1-2 sentences.
       };
     }
 
-    if (!this.boundCloseChat) {
-      this.boundCloseChat = () => {
-        this.closeChatInterface();
-      };
-    }
-
     // Add event listeners using bound handlers
-    this.chatSendButton.addEventListener("click", this.boundSendMessage);
     this.chatInput.addEventListener("keydown", this.boundHandleChatKeyDown);
-    this.chatCloseButton.addEventListener("click", this.boundCloseChat); // Add listener for close button
   }
 
   closeChatInterface(): void {
-    if (
-      !this.isChatOpen ||
-      !this.chatContainer ||
-      !this.chatInput ||
-      !this.chatSendButton ||
-      !this.chatCloseButton
-    )
-      return;
+    if (!this.isChatOpen || !this.chatContainer || !this.chatInput) return;
 
     this.isChatOpen = false;
     this.chatTarget = null;
@@ -671,17 +639,12 @@ Respond to the player in brief 1-2 sentences.
     this.game.setPauseState(false); // Unpause game
 
     // Remove event listeners using the same bound handlers
-    if (this.boundSendMessage) {
-      this.chatSendButton.removeEventListener("click", this.boundSendMessage);
-    }
+
     if (this.boundHandleChatKeyDown) {
       this.chatInput.removeEventListener(
         "keydown",
         this.boundHandleChatKeyDown
       );
-    }
-    if (this.boundCloseChat) {
-      this.chatCloseButton.removeEventListener("click", this.boundCloseChat);
     }
   }
 }

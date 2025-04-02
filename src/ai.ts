@@ -634,12 +634,6 @@ Example - Attack:
   "target_id": "Hunter Rex_2",
   "intent": "Defend territory"
 }
-Example - Heal:
-{
-  "action": "heal",
-  "target_id": "Blacksmith Brynn_3",
-  "intent": "Help injured ally"
-}
 Example - Gather:
 {
   "action": "gather",

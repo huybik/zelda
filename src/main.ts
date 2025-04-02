@@ -650,7 +650,6 @@ export class Game {
     this.controls!.addKeyDownListener("Escape", () => {
       if (this.interactionSystem?.isChatOpen) {
         this.interactionSystem.closeChatInterface();
-        this.setPauseState(false);
       } else if (this.inventoryDisplay!.isOpen) {
         this.inventoryDisplay!.hide();
         this.setPauseState(false);
