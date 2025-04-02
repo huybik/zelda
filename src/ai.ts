@@ -683,7 +683,7 @@ Choose an appropriate action based on your persona and the current situation. En
     // Reset action-specific properties
     this.destination = null;
     this.targetResource = null;
-    this.target = null;
+    this.target = null; 
     this.targetAction = null;
     this.message = null;
 
