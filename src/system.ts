@@ -460,7 +460,6 @@ export class InteractionSystem {
     this.player.actionType = "none";
     if (this.player.attackAction && this.player.attackAction.isRunning()) {
       this.player.attackAction.stop(); // Stop attack animation if it was running
-      // Optionally fade back to idle/walk
       if (this.player.idleAction) this.player.idleAction.reset().play();
     }
     this.activeGather = null;
@@ -706,7 +705,7 @@ export class Physics {
   }
 
   update(deltaTime: number): void {
-    if (this.player.isDead || !this.player.mesh) return; // Check if player mesh exists
+    if (this.player.isDead || !this.player.mesh) return;
     const playerBox = this.player.boundingBox;
     if (!playerBox || playerBox.isEmpty()) this.player.updateBoundingBox();
     const playerPos = this.player.mesh!.position;

@@ -381,6 +381,7 @@ export class Character extends Entity {
   game: Game | null = null;
   persona: string = "";
   aiController: AIController | null = null;
+  currentAction?: AnimationAction;
 
   actionType: string = "none"; // 'attack', 'heal', 'gather' etc.
   isPerformingAction: boolean = false;
@@ -464,7 +465,9 @@ export class Character extends Entity {
       this.attackAction.setLoop(LoopOnce, 1);
       this.attackAction.clampWhenFinished = true;
     }
-    if (this.idleAction) this.idleAction.play();
+    if (this.idleAction) {
+      this.switchAction(this.idleAction); // Set initial action with fading
+    }
     this.userData.height = CHARACTER_HEIGHT;
     this.userData.radius = CHARACTER_RADIUS;
     this.updateBoundingBox();
@@ -472,63 +475,47 @@ export class Character extends Entity {
     // Updated mixer listener
     this.mixer.addEventListener("finished", (e) => {
       if (e.action === this.attackAction) {
-        // Assuming attackAction is used for attack, heal, gather
         if (this.actionType === "attack") {
           this.performAttack();
         } else if (this.actionType === "heal") {
-          // If heal is triggered by AI (on another target)
-          if (this.aiController?.target) {
-            const target = this.aiController.target;
-            if (target instanceof Character && !target.isDead && target.mesh) {
-              const healAmount = 20;
-              target.heal(healAmount);
-              if (this.game) {
-                this.game.logEvent(
-                  this,
-                  "heal_target",
-                  `${this.name} healed ${target.name} for ${healAmount} health.`,
-                  target,
-                  { amount: healAmount },
-                  this.mesh!.position
-                );
-                this.game.spawnParticleEffect(target.mesh.position, "green");
-              }
-            }
-          }
-          // Note: Self-heal effect happens instantly on key press,
-          // this just handles animation finish.
+          // Heal logic already applied in selfHeal
         }
-        // Reset action state after animation completes
         this.isPerformingAction = false;
         this.actionType = "none";
-
-        // Reset to appropriate animation (idle or movement)
         const isMoving =
           Math.abs(this.moveState.forward) > 0.1 ||
           Math.abs(this.moveState.right) > 0.1;
+        let targetAction: AnimationAction | undefined;
         if (isMoving) {
-          if (this.isSprinting && this.runAction) this.runAction.play();
-          else if (this.walkAction) this.walkAction.play();
+          targetAction =
+            this.isSprinting && this.runAction
+              ? this.runAction
+              : this.walkAction;
         } else {
-          if (this.idleAction) this.idleAction.play();
+          targetAction = this.idleAction;
         }
+        this.switchAction(targetAction);
       } else if (e.action === this.jumpAction) {
-        // Transition back to idle or walk/run after jump animation finishes
-        const isMoving =
-          Math.abs(this.moveState.forward) > 0.1 ||
-          Math.abs(this.moveState.right) > 0.1;
-        if (isMoving) {
-          if (this.isSprinting && this.runAction) this.runAction.play();
-          else if (this.walkAction) this.walkAction.play();
-        } else {
-          if (this.idleAction) this.idleAction.play();
-        }
+        // Handled in updateAnimations
       }
     });
 
     if (this.userData.isNPC) {
       this.aiController = new AIController(this);
     }
+  }
+  switchAction(newAction: AnimationAction | undefined): void {
+    if (newAction === this.currentAction) {
+      if (newAction && !newAction.isRunning()) newAction.play();
+      return;
+    }
+    if (this.currentAction) {
+      this.currentAction.fadeOut(0.2); // Fade out current animation over 0.2 seconds
+    }
+    if (newAction) {
+      newAction.reset().fadeIn(0.2).play(); // Fade in new animation
+    }
+    this.currentAction = newAction;
   }
 
   performAttack(): void {
@@ -709,7 +696,7 @@ export class Character extends Entity {
           );
       }
       this.moveState.jump = false;
-      if (this.jumpAction) this.jumpAction.reset().play();
+      this.switchAction(this.jumpAction); // Smooth transition to jump
       if (this.game)
         this.game.logEvent(
           this,
@@ -723,8 +710,8 @@ export class Character extends Entity {
   }
 
   applyGravity(deltaTime: number): void {
-    if (!this.isOnGround || this.velocity.y > 0) {
-      this.velocity.y += this.gravity * deltaTime;
+    if (!this.isOnGround) {
+      this.velocity.y += this.gravity * deltaTime * 0.2;
     } else {
       this.velocity.y = Math.max(this.gravity * deltaTime, -0.1);
     }
@@ -765,7 +752,7 @@ export class Character extends Entity {
         this.velocity.y = 0;
         this.isOnGround = true;
         this.canJump = true;
-        if (this.jumpAction?.isRunning()) this.jumpAction.stop();
+        // if (this.jumpAction?.isRunning()) this.jumpAction.stop();
       } else if (this.isOnGround) {
         this.mesh!.position.y = Math.max(this.mesh!.position.y, groundY);
       } else {
@@ -781,69 +768,26 @@ export class Character extends Entity {
   updateAnimations(deltaTime: number): void {
     this.mixer.update(deltaTime);
 
-    // Use attackAction for gather, attack, heal animations
-    const actionAnimToUse = this.attackAction;
-
-    if (this.isGathering && actionAnimToUse) {
-      // --- Gathering State ---
+    if (this.isGathering && this.attackAction) {
       this.gatherAttackTimer += deltaTime;
-      if (this.walkAction?.isRunning()) this.walkAction.stop();
-      if (this.runAction?.isRunning()) this.runAction.stop();
-      if (this.jumpAction?.isRunning()) this.jumpAction.stop();
-
       if (this.gatherAttackTimer >= this.gatherAttackInterval) {
-        if (!actionAnimToUse.isRunning()) {
-          if (this.idleAction?.isRunning()) this.idleAction.stop();
-          actionAnimToUse.reset().play();
-          this.gatherAttackTimer = 0;
-        }
+        this.switchAction(this.attackAction);
+        this.gatherAttackTimer = 0;
+      } else if (!this.attackAction.isRunning()) {
+        this.switchAction(this.idleAction);
       }
-      if (
-        !actionAnimToUse.isRunning() &&
-        this.idleAction &&
-        !this.idleAction.isRunning()
-      ) {
-        this.idleAction.reset().play();
-      } else if (actionAnimToUse.isRunning() && this.idleAction?.isRunning()) {
-        this.idleAction.stop();
-      }
-    } else if (this.isPerformingAction && actionAnimToUse) {
-      // --- Performing Action State (Attack/Heal) ---
-      // Stop other movement/idle animations if the action just started playing
-      if (actionAnimToUse.time === 0) {
-        // Check if just started
-        if (this.idleAction?.isRunning()) this.idleAction.stop();
-        if (this.walkAction?.isRunning()) this.walkAction.stop();
-        if (this.runAction?.isRunning()) this.runAction.stop();
-        if (this.jumpAction?.isRunning()) this.jumpAction.stop();
-      }
-      // Animation is controlled by triggerAction and the 'finished' listener
+    } else if (this.isPerformingAction && this.attackAction) {
+      // Let action play; transition handled in 'finished' listener
     } else if (!this.isOnGround) {
-      // --- In Air State ---
-      if (this.idleAction?.isRunning()) this.idleAction.stop();
-      if (this.walkAction?.isRunning()) this.walkAction.stop();
-      if (this.runAction?.isRunning()) this.runAction.stop();
-      if (actionAnimToUse?.isRunning()) actionAnimToUse.stop();
-
-      // If jump animation is playing or has played, keep it or transition to idle/fall
-      if (this.jumpAction && !this.jumpAction.isRunning()) {
-        // If jump finished, play idle (as fall anim) if not already playing
-        if (this.idleAction && !this.idleAction.isRunning()) {
-          this.idleAction.reset().play();
-        }
-      } else if (!this.jumpAction) {
-        // If no jump animation exists, play idle
-        if (this.idleAction && !this.idleAction.isRunning()) {
-          this.idleAction.reset().play();
-        }
+      if (this.jumpAction && this.jumpAction.isRunning()) {
+        // Let jumpAction continue
+      } else {
+        this.switchAction(this.idleAction); // Use idle as fallback in air
       }
-      // If this.jumpAction.isRunning() is true, do nothing, let it play out.
     } else {
-      // --- On Ground State (Idle/Walk/Run) ---
       const isMoving =
         Math.abs(this.moveState.forward) > 0.1 ||
         Math.abs(this.moveState.right) > 0.1;
-
       let targetAction: AnimationAction | undefined;
       if (isMoving) {
         targetAction =
@@ -851,32 +795,7 @@ export class Character extends Entity {
       } else {
         targetAction = this.idleAction;
       }
-
-      // Stop other animations only if switching
-      if (
-        this.idleAction &&
-        targetAction !== this.idleAction &&
-        this.idleAction.isRunning()
-      )
-        this.idleAction.stop();
-      if (
-        this.walkAction &&
-        targetAction !== this.walkAction &&
-        this.walkAction.isRunning()
-      )
-        this.walkAction.stop();
-      if (
-        this.runAction &&
-        targetAction !== this.runAction &&
-        this.runAction.isRunning()
-      )
-        this.runAction.stop();
-      if (this.jumpAction?.isRunning()) this.jumpAction.stop();
-      if (actionAnimToUse?.isRunning()) actionAnimToUse.stop(); // Stop action/gather if moving
-
-      if (targetAction && !targetAction.isRunning()) {
-        targetAction.reset().play();
-      }
+      this.switchAction(targetAction);
     }
   }
 
