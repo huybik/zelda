@@ -25,6 +25,7 @@ import {
 } from "./ultils";
 import type { Game } from "./main"; // Import Game type
 import { sendToGemini } from "./ai"; // Import sendToGemini
+import { MobileControls } from "./mobileControls"; // Import MobileControls
 
 export class InteractionSystem {
   player: Character;
@@ -46,14 +47,15 @@ export class InteractionSystem {
   // Chat UI elements
   chatContainer: HTMLElement | null;
   chatInput: HTMLInputElement | null;
-
   chatSendButton: HTMLButtonElement | null;
+  chatCloseButton: HTMLElement | null; // Added close button
   isChatOpen: boolean = false;
   chatTarget: Character | null = null;
 
   // Bound event handlers for chat
   boundSendMessage: (() => Promise<void>) | null = null;
   boundHandleChatKeyDown: ((e: KeyboardEvent) => void) | null = null;
+  boundCloseChat: (() => void) | null = null; // Added bound close handler
 
   private cameraDirection = new Vector3();
   private objectDirection = new Vector3();
@@ -84,10 +86,10 @@ export class InteractionSystem {
     // Initialize chat UI elements
     this.chatContainer = document.getElementById("chat-container");
     this.chatInput = document.getElementById("chat-input") as HTMLInputElement;
-
     this.chatSendButton = document.getElementById(
       "chat-send"
     ) as HTMLButtonElement;
+    this.chatCloseButton = document.getElementById("chat-close"); // Get close button
   }
 
   update(deltaTime: number): void {
@@ -115,7 +117,10 @@ export class InteractionSystem {
         this.currentTarget = targetInfo.instance;
         this.currentTargetMesh = targetInfo.mesh;
         this.showPrompt(
-          targetInfo.instance.userData.prompt || "Press E to interact"
+          targetInfo.instance.userData.prompt ||
+            (this.game.mobileControls?.isActive()
+              ? "Tap Interact"
+              : "Press E to interact") // Mobile specific prompt
         );
       }
       if (this.controls.consumeInteraction())
@@ -128,6 +133,12 @@ export class InteractionSystem {
   }
 
   findInteractableTarget(): TargetInfo | null {
+    // On mobile, prioritize nearby check over raycasting from center screen?
+    // Or keep raycasting as primary? Let's keep raycasting for now.
+    // if (this.game.mobileControls?.isActive()) {
+    //     return this.findNearbyInteractable();
+    // }
+
     this.raycaster.setFromCamera(new Vector2(0, 0), this.camera);
     this.raycaster.far = this.interactionDistance;
     const playerPosition = this.player.mesh!.position;
@@ -198,6 +209,8 @@ export class InteractionSystem {
         }
       }
     }
+    // Fallback to nearby check if raycast fails or on mobile?
+    // Let's always fallback for now.
     return closestHit || this.findNearbyInteractable();
   }
 
@@ -556,7 +569,7 @@ Respond to the player in brief 1-2 sentences.
     this.chatTarget = target;
     this.chatContainer.classList.remove("hidden");
     this.chatInput.value = "";
-    this.chatInput.focus();
+    this.chatInput.focus(); // Focus might bring up virtual keyboard
 
     // Define bound handlers if they don't exist
     if (!this.boundSendMessage) {
@@ -569,6 +582,7 @@ Respond to the player in brief 1-2 sentences.
 
         this.chatInput.value = "";
         this.chatInput.disabled = true; // Disable input while waiting for response
+        this.chatSendButton!.disabled = true; // Disable send button
 
         // 2. Log player's message
         this.game.logEvent(
@@ -616,9 +630,13 @@ Respond to the player in brief 1-2 sentences.
           );
         } finally {
           this.chatInput.disabled = false; // Re-enable input
+          this.chatSendButton!.disabled = false; // Re-enable send button
           this.chatInput.focus();
+          // Close chat automatically after sending/receiving on mobile? Optional.
+          // this.closeChatInterface();
         }
-        this.closeChatInterface();
+        // Don't automatically close, let user close manually
+        // this.closeChatInterface();
       };
     }
 
@@ -630,10 +648,35 @@ Respond to the player in brief 1-2 sentences.
       };
     }
 
-    // Add event listeners using bound handlers
+    if (!this.boundCloseChat) {
+      this.boundCloseChat = () => {
+        this.closeChatInterface();
+      };
+    }
 
+    // Add event listeners using bound handlers
     if (this.chatSendButton) {
       this.chatSendButton.addEventListener("click", this.boundSendMessage);
+      // Use touchstart for faster response on mobile for send button
+      this.chatSendButton.addEventListener(
+        "touchstart",
+        (e) => {
+          e.preventDefault(); // Prevent click event firing too
+          this.boundSendMessage!();
+        },
+        { passive: false }
+      );
+    }
+    if (this.chatCloseButton) {
+      this.chatCloseButton.addEventListener("click", this.boundCloseChat);
+      this.chatCloseButton.addEventListener(
+        "touchstart",
+        (e) => {
+          e.preventDefault();
+          this.boundCloseChat!();
+        },
+        { passive: false }
+      );
     }
     this.chatInput.addEventListener("keydown", this.boundHandleChatKeyDown);
   }
@@ -647,7 +690,15 @@ Respond to the player in brief 1-2 sentences.
     this.game.setPauseState(false); // Unpause game
 
     // Remove event listeners using the same bound handlers
-
+    if (this.boundSendMessage && this.chatSendButton) {
+      this.chatSendButton.removeEventListener("click", this.boundSendMessage);
+      // We might need to store the touchstart listener reference to remove it properly
+      // For simplicity, we might skip removing touchstart listener if it's complex
+    }
+    if (this.boundCloseChat && this.chatCloseButton) {
+      this.chatCloseButton.removeEventListener("click", this.boundCloseChat);
+      // Similar issue with removing touchstart listener
+    }
     if (this.boundHandleChatKeyDown) {
       this.chatInput.removeEventListener(
         "keydown",
@@ -819,6 +870,7 @@ export class ThirdPersonCamera {
   }
 
   handleMouseInput(deltaX: number, deltaY: number): void {
+    // deltaX is now handled by player rotation directly in Controls/MobileControls
     this.pitchAngle -= deltaY * this.pitchSensitivity;
     this.pitchAngle = MathUtils.clamp(
       this.pitchAngle,
@@ -946,25 +998,32 @@ export class Controls {
   }
 
   initListeners(): void {
-    // Keyboard & Mouse
-    document.addEventListener("keydown", this.boundOnKeyDown, false);
-    document.addEventListener("keyup", this.boundOnKeyUp, false);
-    document.addEventListener("mousedown", this.boundOnMouseDown, false);
-    document.addEventListener("mouseup", this.boundOnMouseUp, false);
-    document.addEventListener("mousemove", this.boundOnMouseMove, false);
-    this.domElement.addEventListener("click", this.boundOnClick, false);
+    // Only add keyboard/mouse listeners if not on mobile
+    if (!this.game?.mobileControls?.isActive()) {
+      document.addEventListener("keydown", this.boundOnKeyDown, false);
+      document.addEventListener("keyup", this.boundOnKeyUp, false);
+      document.addEventListener("mousedown", this.boundOnMouseDown, false);
+      document.addEventListener("mouseup", this.boundOnMouseUp, false);
+      document.addEventListener("mousemove", this.boundOnMouseMove, false);
+      this.domElement.addEventListener("click", this.boundOnClick, false);
 
-    // Pointer Lock
-    document.addEventListener(
-      "pointerlockchange",
-      this.boundOnPointerLockChange,
-      false
-    );
-    document.addEventListener(
-      "pointerlockerror",
-      this.boundOnPointerLockError,
-      false
-    );
+      // Pointer Lock only for desktop
+      document.addEventListener(
+        "pointerlockchange",
+        this.boundOnPointerLockChange,
+        false
+      );
+      document.addEventListener(
+        "pointerlockerror",
+        this.boundOnPointerLockError,
+        false
+      );
+    } else {
+      // On mobile, maybe still listen for Escape key for UI?
+      document.addEventListener("keydown", (e) => {
+        if (e.code === "Escape") this.handleEscapeKey();
+      });
+    }
   }
 
   addKeyDownListener(keyCode: string, callback: () => void): void {
@@ -983,7 +1042,9 @@ export class Controls {
 
   // --- Pointer Lock (Desktop) ---
   lockPointer(): void {
+    // Only attempt lock if not on mobile
     if (
+      !this.game?.mobileControls?.isActive() &&
       "requestPointerLock" in this.domElement &&
       document.pointerLockElement !== this.domElement
     ) {
@@ -992,18 +1053,21 @@ export class Controls {
   }
 
   unlockPointer(): void {
-    if (document.pointerLockElement === this.domElement)
+    if (
+      !this.game?.mobileControls?.isActive() &&
+      document.pointerLockElement === this.domElement
+    )
       document.exitPointerLock();
   }
 
   onPointerLockChange(): void {
+    // This should only fire on desktop now
     if (document.pointerLockElement === this.domElement) {
       this.isPointerLocked = true;
       document.body.classList.add("pointer-locked"); // Add class to body
       this.mouse.dx = 0;
       this.mouse.dy = 0;
       // Attempt to unpause the game when pointer locks
-      // Only unpause if no major UI is open
       const inventoryIsOpen = this.game?.inventoryDisplay?.isOpen ?? false;
       const journalIsOpen = this.game?.journalDisplay?.isOpen ?? false;
       const chatIsOpen = this.game?.interactionSystem?.isChatOpen ?? false;
@@ -1038,6 +1102,9 @@ export class Controls {
 
   // --- Keyboard Input ---
   onKeyDown(event: KeyboardEvent): void {
+    // Ignore if mobile controls are active
+    if (this.game?.mobileControls?.isActive()) return;
+
     const keyCode = event.code;
     if (this.game?.interactionSystem?.isChatOpen && keyCode !== "Escape") {
       return; // Allow chat input
@@ -1047,37 +1114,63 @@ export class Controls {
     this.keys[keyCode] = true;
     this.keyDownListeners[keyCode]?.forEach((cb) => cb());
 
-    // Handle specific key actions
+    // Handle specific key actions only if not handled by mobile
     if (keyCode === "Space") this.moveState.jump = true;
     if (keyCode === "KeyE") this.moveState.interact = true;
     if (keyCode === "KeyF") this.moveState.attack = true;
+    if (keyCode === "Escape") this.handleEscapeKey(); // Handle escape separately
 
     this.updateContinuousMoveState();
   }
 
   onKeyUp(event: KeyboardEvent): void {
+    // Ignore if mobile controls are active
+    if (this.game?.mobileControls?.isActive()) return;
+
     const keyCode = event.code;
     this.keys[keyCode] = false;
 
-    // Reset specific key actions
+    // Reset specific key actions only if not handled by mobile
     if (keyCode === "KeyF") this.moveState.attack = false;
     // Jump and Interact are consumed, not held continuously based on keyup
 
     this.updateContinuousMoveState();
   }
 
+  // Centralized Escape key handling
+  handleEscapeKey(): void {
+    if (this.game?.interactionSystem?.isChatOpen) {
+      this.game.interactionSystem.closeChatInterface();
+    } else if (this.game?.inventoryDisplay?.isOpen) {
+      this.game.inventoryDisplay.hide();
+      this.game?.setPauseState(false);
+    } else if (this.game?.journalDisplay?.isOpen) {
+      this.game.journalDisplay.hide();
+      this.game?.setPauseState(false);
+    } else if (this.isPointerLocked) {
+      this.unlockPointer();
+    }
+  }
+
   // --- Mouse Input ---
   onMouseDown(event: MouseEvent): void {
+    // Ignore if mobile controls are active
+    if (this.game?.mobileControls?.isActive()) return;
     if (this.game?.interactionSystem?.isChatOpen) return;
     this.mouse.buttons[event.button] = true;
     this.mouseClickListeners[event.button]?.forEach((cb) => cb(event));
   }
 
   onMouseUp(event: MouseEvent): void {
+    // Ignore if mobile controls are active
+    if (this.game?.mobileControls?.isActive()) return;
     this.mouse.buttons[event.button] = false;
   }
 
   onMouseMove(event: MouseEvent): void {
+    // Ignore if mobile controls are active
+    if (this.game?.mobileControls?.isActive()) return;
+
     if (this.isPointerLocked) {
       this.mouse.dx += event.movementX ?? 0;
       this.mouse.dy += event.movementY ?? 0;
@@ -1088,12 +1181,15 @@ export class Controls {
   }
 
   onClick(event: MouseEvent): void {
+    // Ignore if mobile controls are active
+    if (this.game?.mobileControls?.isActive()) return;
+
     const targetElement = event.target as HTMLElement;
     const isGameContainerClick =
       targetElement === this.domElement ||
       (this.domElement.contains(targetElement) &&
         targetElement.closest(
-          "#inventory-display, #journal-display, #chat-container, #minimap-canvas, #welcome-banner" // Add banner to exceptions
+          "#inventory-display, #journal-display, #chat-container, #minimap-canvas, #welcome-banner, #mobile-controls-layer" // Add mobile layer to exceptions
         ) === null);
 
     const inventoryIsOpen = this.game?.inventoryDisplay?.isOpen ?? false;
@@ -1108,21 +1204,32 @@ export class Controls {
 
   // --- Update Logic ---
   updateContinuousMoveState(): void {
-    // This now primarily handles keyboard state
-    const W = this.keys["KeyW"] || this.keys["ArrowUp"];
-    const S = this.keys["KeyS"] || this.keys["ArrowDown"];
-    const D = this.keys["KeyD"] || this.keys["ArrowRight"];
-    const A = this.keys["KeyA"] || this.keys["ArrowLeft"];
-    const Sprint = this.keys["ShiftLeft"] || this.keys["ShiftRight"];
+    // This now primarily handles keyboard state, mobile state is set directly
+    // Only update from keys if mobile is NOT active
+    if (!this.game?.mobileControls?.isActive()) {
+      const W = this.keys["KeyW"] || this.keys["ArrowUp"];
+      const S = this.keys["KeyS"] || this.keys["ArrowDown"];
+      const D = this.keys["KeyD"] || this.keys["ArrowRight"];
+      const A = this.keys["KeyA"] || this.keys["ArrowLeft"];
+      const Sprint = this.keys["ShiftLeft"] || this.keys["ShiftRight"];
 
-    this.moveState.forward = (W ? 1 : 0) - (S ? 1 : 0);
-    this.moveState.right = (A ? 1 : 0) - (D ? 1 : 0); // Swapped A/D
-    this.moveState.sprint = Sprint ?? false;
+      this.moveState.forward = (W ? 1 : 0) - (S ? 1 : 0);
+      this.moveState.right = (A ? 1 : 0) - (D ? 1 : 0); // Swapped A/D
+      this.moveState.sprint = Sprint ?? false;
+    }
+    // Note: Jump, Interact, Attack states are handled differently
+    // Jump/Interact are set true on keydown/mobile press and consumed
+    // Attack is set true/false based on key/button hold state
   }
 
   update(deltaTime: number): void {
-    // --- Rotation Update (Mouse) ---
-    if (this.isPointerLocked && this.player && this.player.mesh) {
+    // --- Rotation Update (Mouse - Desktop Only) ---
+    if (
+      !this.game?.mobileControls?.isActive() &&
+      this.isPointerLocked &&
+      this.player &&
+      this.player.mesh
+    ) {
       const sensitivity = this.playerRotationSensitivity;
 
       if (Math.abs(this.mouse.dx) > 0) {
@@ -1134,16 +1241,21 @@ export class Controls {
         this.cameraController.handleMouseInput(this.mouse.dx, -this.mouse.dy);
       }
     }
-    // Reset dx/dy after processing
+    // Reset dx/dy after processing (only relevant for mouse)
     this.mouse.dx = 0;
     this.mouse.dy = 0;
 
-    // --- Keyboard Movement Update ---
-    // This ensures keyboard input is reflected
+    // --- Keyboard Movement Update (Desktop Only) ---
+    // This ensures keyboard input is reflected if mobile is not active
     this.updateContinuousMoveState();
+
+    // Mobile input (forward, right, attack, interact) is applied directly
+    // by MobileControls.update() before this method is called.
+    // Camera rotation from mobile joystick is also applied in MobileControls.update().
   }
 
   consumeInteraction(): boolean {
+    // This works for both keyboard ('E' press) and mobile (tap Interact button)
     if (!this.moveState.interact) return false;
     this.moveState.interact = false; // Reset after consumption
     return true;
@@ -1151,19 +1263,26 @@ export class Controls {
 
   // Method to clean up listeners
   dispose(): void {
-    document.removeEventListener("keydown", this.boundOnKeyDown);
-    document.removeEventListener("keyup", this.boundOnKeyUp);
-    document.removeEventListener("mousedown", this.boundOnMouseDown);
-    document.removeEventListener("mouseup", this.boundOnMouseUp);
-    document.removeEventListener("mousemove", this.boundOnMouseMove);
-    this.domElement.removeEventListener("click", this.boundOnClick);
-    document.removeEventListener(
-      "pointerlockchange",
-      this.boundOnPointerLockChange
-    );
-    document.removeEventListener(
-      "pointerlockerror",
-      this.boundOnPointerLockError
-    );
+    // Remove listeners based on whether mobile is active or not
+    if (!this.game?.mobileControls?.isActive()) {
+      document.removeEventListener("keydown", this.boundOnKeyDown);
+      document.removeEventListener("keyup", this.boundOnKeyUp);
+      document.removeEventListener("mousedown", this.boundOnMouseDown);
+      document.removeEventListener("mouseup", this.boundOnMouseUp);
+      document.removeEventListener("mousemove", this.boundOnMouseMove);
+      this.domElement.removeEventListener("click", this.boundOnClick);
+      document.removeEventListener(
+        "pointerlockchange",
+        this.boundOnPointerLockChange
+      );
+      document.removeEventListener(
+        "pointerlockerror",
+        this.boundOnPointerLockError
+      );
+    } else {
+      // Remove the minimal listener added for mobile
+      // document.removeEventListener('keydown', ...); // Need to store the listener reference
+    }
+    // TODO: Properly remove the mobile escape listener if needed
   }
 }

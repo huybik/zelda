@@ -15,6 +15,8 @@ body {
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
+  /* Improve touch interaction responsiveness */
+  touch-action: manipulation; /* Prevent double-tap zoom etc. on controls */
 }
 
 #game-container {
@@ -49,9 +51,10 @@ canvas {
 }
 
 /* Allow pointer events on specific UI elements */
-
 .ui-panel,
-#chat-container {
+#chat-container,
+#mobile-controls-layer > * {
+  /* Allow events on children of mobile layer */
   pointer-events: auto;
 }
 
@@ -185,6 +188,7 @@ canvas {
 }
 
 #inventory-display {
+  /* Adjust position/size for mobile if needed */
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%) scale(1); /* Initial transform state */
@@ -199,6 +203,7 @@ canvas {
 }
 
 #journal-display {
+  /* Adjust position/size for mobile if needed */
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%) scale(1); /* Initial transform state */
@@ -396,14 +401,18 @@ li.quest-active strong {
   bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: rgba(0, 0, 0, 0.8); /* Darker background */
   padding: 10px;
-  border-radius: 5px;
+  border-radius: 8px; /* Slightly larger radius */
   display: flex;
   gap: 10px;
+  align-items: center; /* Vertically align items */
   z-index: 25; /* Above other UI panels */
   transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
   opacity: 1;
+  width: 90%; /* Wider on mobile */
+  max-width: 500px; /* Max width */
+  box-sizing: border-box;
 }
 
 #chat-container.hidden {
@@ -415,12 +424,13 @@ li.quest-active strong {
 }
 
 #chat-input {
-  width: 300px;
-  padding: 8px; /* Increased padding */
+  flex-grow: 1; /* Take available space */
+  padding: 10px 12px; /* Larger padding */
   border: 1px solid #555;
-  border-radius: 3px;
+  border-radius: 5px;
   background-color: #f0f0f0;
   color: #333;
+  font-size: 16px; /* Larger font for mobile */
 }
 #chat-input:focus {
   outline: none;
@@ -429,13 +439,15 @@ li.quest-active strong {
 
 #chat-send,
 #chat-close {
-  padding: 8px 15px; /* Increased padding */
+  padding: 10px 15px; /* Larger padding */
   border: none;
-  border-radius: 3px;
+  border-radius: 5px;
   background-color: #555;
   color: white;
   cursor: pointer;
   transition: background-color 0.15s ease;
+  font-size: 16px; /* Match input font size */
+  flex-shrink: 0; /* Prevent buttons from shrinking */
 }
 #chat-send:hover,
 #chat-close:hover {
@@ -444,6 +456,14 @@ li.quest-active strong {
 #chat-send:disabled {
   background-color: #444;
   cursor: not-allowed;
+  opacity: 0.6;
+}
+#chat-close {
+  background-color: #800; /* Red for close */
+  padding: 10px 12px; /* Adjust padding for 'X' */
+}
+#chat-close:hover {
+  background-color: #a00;
 }
 
 /* --- Utility --- */
@@ -471,16 +491,17 @@ body::after {
   user-select: none;
 }
 
-/* Hide crosshair when pointer is locked */
+/* Hide crosshair when pointer is locked (Desktop) */
 body.pointer-locked::after {
   display: none;
 }
 
-/* Hide crosshair when UI is open (optional, keep this if desired) */
+/* Hide crosshair when UI is open or on mobile */
 body:has(.ui-panel:not(.hidden))::after,
-body:has(#chat-container:not(.hidden))::after {
-  /* Hide when chat is open too */
-  display: none; /* Uncomment to hide crosshair when panels are open */
+body:has(#chat-container:not(.hidden))::after,
+body:has(#mobile-controls-layer:not(.hidden))::after {
+  /* Hide when mobile controls are visible */
+  display: none;
 }
 
 #fps-display {
@@ -539,4 +560,263 @@ body:has(#chat-container:not(.hidden))::after {
   pointer-events: none;
 }
 
-/* Add to the bottom of style.css */
+/* --- Mobile Controls --- */
+#mobile-controls-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* Layer itself doesn't block, only its children */
+  z-index: 15; /* Above game, below panels */
+  overflow: hidden; /* Prevent accidental scrolling */
+}
+
+#mobile-controls-layer.hidden {
+  display: none; /* Use display none when completely inactive */
+}
+
+/* Joystick Zones */
+#joystick-zone-left,
+#joystick-zone-right {
+  position: absolute;
+  bottom: 10%; /* Adjust vertical position */
+  width: 40%; /* Adjust width */
+  height: 40%; /* Adjust height */
+  /* background-color: rgba(255, 0, 0, 0.1); */ /* Debug visual */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: auto; /* Zones need pointer events */
+}
+
+#joystick-zone-left {
+  left: 5%; /* Adjust horizontal position */
+}
+
+#joystick-zone-right {
+  right: 5%; /* Adjust horizontal position */
+}
+
+/* NippleJS specific styles (ensure they don't conflict) */
+.nipple {
+  pointer-events: auto !important; /* Ensure nipplejs elements are interactive */
+  z-index: 20; /* Above zones */
+}
+.nipple .front {
+  background-color: rgba(200, 200, 200, 0.7) !important;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+.nipple .back {
+  background-color: rgba(50, 50, 50, 0.4) !important;
+}
+
+/* Action Buttons Container (around right joystick) */
+.action-buttons-container {
+  position: absolute;
+  bottom: 10%; /* Align with joystick zone */
+  right: 5%; /* Align with joystick zone */
+  width: 40%; /* Match joystick zone width */
+  height: 40%; /* Match joystick zone height */
+  pointer-events: none; /* Container doesn't block */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Mobile Button Base Style */
+.mobile-button {
+  position: absolute;
+  background-color: rgba(50, 50, 50, 0.6);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%; /* Circular buttons */
+  width: 65px; /* Adjust size */
+  height: 65px; /* Adjust size */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-size: 10px;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent; /* Remove tap highlight */
+  transition: background-color 0.1s ease, transform 0.1s ease;
+  pointer-events: auto; /* Buttons need pointer events */
+  z-index: 18; /* Below nipplejs joystick */
+}
+
+.mobile-button svg {
+  width: 28px; /* Adjust icon size */
+  height: 28px;
+  margin-bottom: 2px;
+}
+
+.mobile-button span {
+  line-height: 1.1;
+}
+
+/* Active state for buttons */
+.mobile-button.active,
+.mobile-button:active {
+  background-color: rgba(80, 80, 80, 0.8);
+  transform: scale(0.95);
+}
+
+/* Positioning Action Buttons around Right Joystick (Example) */
+/* Uses transform relative to the center of action-buttons-container */
+/* Adjust translate values and angles as needed */
+#button-interact {
+  transform: translate(-80px, -20px); /* Position top-left relative to center */
+}
+
+#button-attack {
+  transform: translate(0px, -80px); /* Position top-center relative to center */
+}
+
+/* Bottom Icon Buttons */
+.bottom-icon-buttons {
+  position: absolute;
+  bottom: 15px; /* Position from bottom */
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 20px; /* Space between buttons */
+  z-index: 16; /* Above joysticks/action buttons */
+  pointer-events: auto; /* Container needs events for buttons */
+}
+
+.icon-button {
+  position: relative; /* Needed for static positioning within flex */
+  width: 55px; /* Smaller icon buttons */
+  height: 55px;
+  background-color: rgba(40, 40, 40, 0.7);
+}
+
+.icon-button svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* Media Query for Mobile Adjustments (Example) */
+@media (max-width: 768px) {
+  /* Hide desktop-specific elements if needed */
+  /* body::after { display: none; } */ /* Crosshair already hidden by mobile layer check */
+
+  /* Adjust HUD position/size */
+  #hud {
+    top: 10px;
+    left: 10px;
+  }
+  .bar-container {
+    width: 130px;
+  }
+  .bar {
+    height: 14px;
+  }
+  .bar-label {
+    font-size: 10px;
+    line-height: 16px;
+  }
+  #fps-display {
+    font-size: 12px;
+    top: 5px;
+  }
+
+  /* Adjust Minimap size/position */
+  #minimap-container {
+    top: 10px;
+    right: 10px;
+  }
+  #minimap-canvas {
+    width: 100px;
+    height: 100px;
+  }
+
+  /* Make UI Panels take more screen space */
+  #inventory-display,
+  #journal-display {
+    width: 95%;
+    max-height: 70vh;
+    padding: 15px;
+  }
+  #inventory-slots {
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 10px;
+  }
+  .inventory-slot {
+    width: 60px;
+    height: 60px;
+  }
+  .item-icon {
+    width: 35px;
+    height: 35px;
+  }
+  .item-count {
+    font-size: 12px;
+  }
+
+  /* Adjust Chat UI */
+  #chat-container {
+    bottom: 5px;
+    width: 95%;
+    padding: 8px;
+    gap: 8px;
+  }
+  #chat-input {
+    padding: 8px 10px;
+    font-size: 15px;
+  }
+  #chat-send,
+  #chat-close {
+    padding: 8px 12px;
+    font-size: 15px;
+  }
+
+  /* Adjust Mobile Controls Layout */
+  #joystick-zone-left,
+  #joystick-zone-right {
+    bottom: 5%;
+    width: 45%;
+    height: 45%;
+  }
+  #joystick-zone-left {
+    left: 2%;
+  }
+  #joystick-zone-right {
+    right: 2%;
+  }
+  .action-buttons-container {
+    bottom: 5%;
+    right: 2%;
+    width: 45%;
+    height: 45%;
+  }
+  .mobile-button {
+    width: 60px;
+    height: 60px;
+  }
+  .mobile-button svg {
+    width: 26px;
+    height: 26px;
+  }
+  #button-interact {
+    transform: translate(-70px, -15px);
+  }
+  #button-attack {
+    transform: translate(0px, -70px);
+  }
+  .bottom-icon-buttons {
+    bottom: 10px;
+    gap: 15px;
+  }
+  .icon-button {
+    width: 50px;
+    height: 50px;
+  }
+  .icon-button svg {
+    width: 22px;
+    height: 22px;
+  }
+}

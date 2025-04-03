@@ -56,6 +56,7 @@ import {
   Quest,
 } from "./ultils";
 import { AIController } from "./ai";
+import { MobileControls } from "./mobileControls"; // Import MobileControls
 
 const WORLD_SIZE = 100;
 const TERRAIN_SEGMENTS = 15;
@@ -317,6 +318,7 @@ export class Game {
   activeCharacter: Character | null = null;
   thirdPersonCamera: ThirdPersonCamera | null = null;
   controls: Controls | null = null;
+  mobileControls: MobileControls | null = null; // Added mobile controls instance
   physics: Physics | null = null;
   inventory: Inventory | null = null;
   interactionSystem: InteractionSystem | null = null;
@@ -364,13 +366,14 @@ export class Game {
     this.startPortalOriginalParams = urlParams; // Store all original params
 
     this.initPlayer(models);
-    this.initControls();
+    this.initControls(); // Initialize desktop controls first
+    this.initMobileControls(); // Initialize mobile controls (will check if needed)
     this.initPhysics();
     this.initEnvironment(models);
     this.initSystems();
     this.initQuests();
     this.initUI();
-    this.setupUIControls();
+    this.setupUIControls(); // Setup desktop keybinds
 
     this.createExitPortal();
     if (this.hasEnteredFromPortal && this.startPortalRefUrl) {
@@ -575,6 +578,11 @@ export class Game {
     );
   }
 
+  // New method to initialize mobile controls
+  initMobileControls(): void {
+    this.mobileControls = new MobileControls(this, this.controls!);
+  }
+
   initPhysics(): void {
     this.physics = new Physics(this.activeCharacter!, this.collidableObjects);
   }
@@ -622,6 +630,7 @@ export class Game {
   }
 
   setupUIControls(): void {
+    // These are primarily for desktop/keyboard
     this.controls!.addKeyDownListener("KeyI", () => {
       if (this.interactionSystem?.isChatOpen) return;
       this.journalDisplay!.hide();
@@ -689,18 +698,21 @@ export class Game {
     if (this.isPaused === paused) return;
     this.isPaused = paused;
 
-    if (this.isPaused) {
-      if (this.controls?.isPointerLocked) {
-        this.controls.unlockPointer();
-      }
-    } else {
-      if (
-        !this.inventoryDisplay?.isOpen &&
-        !this.journalDisplay?.isOpen &&
-        !this.interactionSystem?.isChatOpen &&
-        !document.pointerLockElement
-      ) {
-        this.controls?.lockPointer();
+    // Don't manage pointer lock if mobile controls are active
+    if (!this.mobileControls?.isActive()) {
+      if (this.isPaused) {
+        if (this.controls?.isPointerLocked) {
+          this.controls.unlockPointer();
+        }
+      } else {
+        if (
+          !this.inventoryDisplay?.isOpen &&
+          !this.journalDisplay?.isOpen &&
+          !this.interactionSystem?.isChatOpen &&
+          !document.pointerLockElement
+        ) {
+          this.controls?.lockPointer();
+        }
       }
     }
     console.log("Game Paused:", this.isPaused);
@@ -711,15 +723,20 @@ export class Game {
 
     const banner = document.getElementById("welcome-banner");
     if (banner) {
-      banner.textContent =
-        "Welcome!  [I] Inventory,  [J] Journal,  [F] Attack,  [H] Heal,  [C] Switch Control";
+      const welcomeText = this.mobileControls?.isActive()
+        ? "Welcome! Use joysticks to move/look, buttons to act."
+        : "Welcome! [WASD] Move, Mouse Look, [I] Inv, [J] Journal, [E] Interact, [F] Attack, [H] Heal, [C] Switch, [Esc] Unlock/Close";
+      banner.textContent = welcomeText;
       banner.classList.remove("hidden");
       setTimeout(() => {
         banner.classList.add("hidden");
       }, 5000);
     } else {
+      // Fallback log entry
       this.activeCharacter!.eventLog.addEntry(
-        "Welcome! Click window to lock controls. [WASD] Move, Mouse Look, [I] Inventory, [J] Journal, [E] Interact, [F] Attack, [H] Heal, [C] Switch Control, [Esc] Unlock/Close UI"
+        this.mobileControls?.isActive()
+          ? "Welcome! Use joysticks to move/look, buttons to act."
+          : "Welcome! Click window to lock controls. [WASD] Move, Mouse Look, [I] Inventory, [J] Journal, [E] Interact, [F] Attack, [H] Heal, [C] Switch Control, [Esc] Unlock/Close UI"
       );
     }
 
@@ -738,6 +755,9 @@ export class Game {
     const deltaTime = Math.min(this.clock.getDelta(), 0.05);
     const elapsedTime = this.clock.elapsedTime;
 
+    // Update mobile controls first if active
+    this.mobileControls?.update(deltaTime);
+    // Update desktop controls (will incorporate mobile input if active)
     this.controls!.update(deltaTime);
 
     if (!this.isPaused) {
@@ -1396,6 +1416,9 @@ export class Game {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
+      // Potentially re-initialize or reposition mobile controls if layout changes significantly
+      // this.mobileControls?.destroy(); // If nipplejs has a destroy method
+      // this.initMobileControls();
     }
   }
 
