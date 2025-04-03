@@ -47,8 +47,6 @@ export class InteractionSystem {
   // Chat UI elements
   chatContainer: HTMLElement | null;
   chatInput: HTMLInputElement | null;
-  chatSendButton: HTMLButtonElement | null;
-  chatCloseButton: HTMLElement | null; // Added close button
   isChatOpen: boolean = false;
   chatTarget: Character | null = null;
 
@@ -86,10 +84,6 @@ export class InteractionSystem {
     // Initialize chat UI elements
     this.chatContainer = document.getElementById("chat-container");
     this.chatInput = document.getElementById("chat-input") as HTMLInputElement;
-    this.chatSendButton = document.getElementById(
-      "chat-send"
-    ) as HTMLButtonElement;
-    this.chatCloseButton = document.getElementById("chat-close"); // Get close button
   }
 
   update(deltaTime: number): void {
@@ -582,7 +576,6 @@ Respond to the player in brief 1-2 sentences.
 
         this.chatInput.value = "";
         this.chatInput.disabled = true; // Disable input while waiting for response
-        this.chatSendButton!.disabled = true; // Disable send button
 
         // 2. Log player's message
         this.game.logEvent(
@@ -630,13 +623,8 @@ Respond to the player in brief 1-2 sentences.
           );
         } finally {
           this.chatInput.disabled = false; // Re-enable input
-          this.chatSendButton!.disabled = false; // Re-enable send button
           this.chatInput.focus();
-          // Close chat automatically after sending/receiving on mobile? Optional.
-          // this.closeChatInterface();
         }
-        // Don't automatically close, let user close manually
-        // this.closeChatInterface();
       };
     }
 
@@ -644,6 +632,7 @@ Respond to the player in brief 1-2 sentences.
       this.boundHandleChatKeyDown = (e: KeyboardEvent) => {
         if (e.key === "Enter" && this.boundSendMessage) {
           this.boundSendMessage();
+          this.closeChatInterface();
         }
       };
     }
@@ -655,29 +644,7 @@ Respond to the player in brief 1-2 sentences.
     }
 
     // Add event listeners using bound handlers
-    if (this.chatSendButton) {
-      this.chatSendButton.addEventListener("click", this.boundSendMessage);
-      // Use touchstart for faster response on mobile for send button
-      this.chatSendButton.addEventListener(
-        "touchstart",
-        (e) => {
-          e.preventDefault(); // Prevent click event firing too
-          this.boundSendMessage!();
-        },
-        { passive: false }
-      );
-    }
-    if (this.chatCloseButton) {
-      this.chatCloseButton.addEventListener("click", this.boundCloseChat);
-      this.chatCloseButton.addEventListener(
-        "touchstart",
-        (e) => {
-          e.preventDefault();
-          this.boundCloseChat!();
-        },
-        { passive: false }
-      );
-    }
+
     this.chatInput.addEventListener("keydown", this.boundHandleChatKeyDown);
   }
 
@@ -689,16 +656,6 @@ Respond to the player in brief 1-2 sentences.
     this.chatContainer.classList.add("hidden");
     this.game.setPauseState(false); // Unpause game
 
-    // Remove event listeners using the same bound handlers
-    if (this.boundSendMessage && this.chatSendButton) {
-      this.chatSendButton.removeEventListener("click", this.boundSendMessage);
-      // We might need to store the touchstart listener reference to remove it properly
-      // For simplicity, we might skip removing touchstart listener if it's complex
-    }
-    if (this.boundCloseChat && this.chatCloseButton) {
-      this.chatCloseButton.removeEventListener("click", this.boundCloseChat);
-      // Similar issue with removing touchstart listener
-    }
     if (this.boundHandleChatKeyDown) {
       this.chatInput.removeEventListener(
         "keydown",

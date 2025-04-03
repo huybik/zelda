@@ -10,12 +10,10 @@ body {
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   color: #333;
   background-color: #87ceeb; /* Fallback sky */
-  /* Prevent text selection on UI elements */
   user-select: none;
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
-  /* Improve touch interaction responsiveness */
   touch-action: manipulation; /* Prevent double-tap zoom etc. on controls */
 }
 
@@ -25,16 +23,18 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  cursor: default; /* Default cursor for the container */
+  cursor: default;
+  /* Ensure touch events are captured here for camera control */
+  pointer-events: auto;
+  touch-action: none; /* Prevent browser default touch actions like scroll/zoom */
 }
 
-/* When pointer is locked, hide the system cursor */
 #game-container:focus-within {
-  /* cursor: none; */ /* Browser usually handles this with pointer lock */
+  /* cursor: none; */
 }
 
 canvas {
-  display: block; /* Remove extra space below canvas */
+  display: block;
 }
 
 /* --- UI Container --- */
@@ -44,23 +44,27 @@ canvas {
   left: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none; /* Allow clicks through to canvas by default */
+  pointer-events: none; /* Allow clicks/touches through to canvas/game-container by default */
   z-index: 10;
-  display: flex; /* Use flex/grid for positioning if needed, or absolute */
+  display: flex;
   flex-direction: column;
 }
 
 /* Allow pointer events on specific UI elements */
 .ui-panel,
 #chat-container,
-#mobile-controls-layer > * {
-  /* Allow events on children of mobile layer */
+#mobile-controls-layer > *, /* Allow events on direct children of mobile layer */
+#mobile-controls-layer .mobile-button /* Explicitly allow events on buttons */ {
+  pointer-events: auto;
+}
+/* Ensure joystick zone allows events for nipplejs */
+#joystick-zone-left {
   pointer-events: auto;
 }
 
 /* --- HUD --- */
 #hud {
-  position: absolute; /* Position within ui-container */
+  position: absolute;
   top: 15px;
   left: 15px;
   color: white;
@@ -118,14 +122,14 @@ canvas {
   left: 6px;
   font-size: 11px;
   font-weight: bold;
-  line-height: 18px; /* Match bar height + padding */
+  line-height: 18px;
   color: white;
   text-shadow: 1px 1px 2px black;
   pointer-events: none;
 }
 
 #interaction-prompt {
-  position: fixed; /* Position relative to viewport */
+  position: fixed;
   bottom: 20%;
   left: 50%;
   transform: translateX(-50%);
@@ -137,8 +141,8 @@ canvas {
   text-align: center;
   border: 1px solid rgba(255, 255, 255, 0.2);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
-  display: none; /* Controlled by JS */
-  z-index: 15; /* Above HUD elements */
+  display: none;
+  z-index: 15;
 }
 
 /* --- Minimap --- */
@@ -159,40 +163,36 @@ canvas {
 
 /* --- Panels (Inventory & Journal) --- */
 .ui-panel {
-  position: fixed; /* Relative to viewport */
-  background-color: rgba(235, 235, 235, 0.97); /* Slightly more opaque */
+  position: fixed;
+  background-color: rgba(235, 235, 235, 0.97);
   border: 1px solid #aaa;
   border-radius: 8px;
   padding: 20px;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-  z-index: 20; /* Above other UI */
-  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out; /* Add transitions */
+  z-index: 20;
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
   opacity: 1;
   transform: scale(1);
 }
 
-/* Hidden state for panels */
 .ui-panel.hidden {
   opacity: 0;
   transform: scale(0.95);
-  pointer-events: none; /* Disable interaction when hidden */
-  /* Use visibility: hidden instead of display: none for transitions */
+  pointer-events: none;
   visibility: hidden;
   transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out,
     visibility 0s 0.2s;
 }
 .ui-panel {
-  /* Ensure visibility is set when not hidden */
   visibility: visible;
   transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
 }
 
 #inventory-display {
-  /* Adjust position/size for mobile if needed */
   bottom: 20px;
   left: 50%;
   bottom: 50%;
-  transform: translateX(-50%) scale(1); /* Initial transform state */
+  transform: translateX(-50%) scale(1);
   width: 85%;
   max-width: 700px;
   max-height: 60vh;
@@ -204,10 +204,9 @@ canvas {
 }
 
 #journal-display {
-  /* Adjust position/size for mobile if needed */
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%) scale(1); /* Initial transform state */
+  transform: translate(-50%, -50%) scale(1);
   width: 80%;
   max-width: 650px;
   max-height: 75vh;
@@ -227,7 +226,7 @@ canvas {
   margin-bottom: 18px;
   font-size: 1.3em;
   user-select: none;
-  flex-shrink: 0; /* Prevent header shrinking */
+  flex-shrink: 0;
 }
 
 /* Inventory Slots */
@@ -237,7 +236,7 @@ canvas {
   gap: 12px;
   overflow-y: auto;
   padding: 5px;
-  flex-grow: 1; /* Allow grid to fill space */
+  flex-grow: 1;
 }
 
 .inventory-slot {
@@ -263,15 +262,14 @@ canvas {
 .item-icon {
   width: 40px;
   height: 40px;
-  background-color: #ddd; /* Placeholder bg */
+  background-color: #ddd;
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
   border-radius: 3px;
   box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.2);
-  visibility: hidden; /* JS controls visibility */
+  visibility: hidden;
 }
-/* Specific Item Icon Styles (using classes generated by JS) */
 .item-icon.wood {
   background-color: #8b4513;
 }
@@ -280,7 +278,7 @@ canvas {
 }
 .item-icon.herb {
   background-color: #228b22;
-} /* Darker green */
+}
 .item-icon.feather {
   background-color: #ffffff;
   border: 1px solid #eee;
@@ -288,7 +286,7 @@ canvas {
 .item-icon.health_potion {
   background-color: #ff4500;
   border-radius: 50%;
-} /* Round potion */
+}
 .item-icon.gold {
   background-color: #ffd700;
   border-radius: 50%;
@@ -297,10 +295,10 @@ canvas {
   background-color: #a0522d;
   width: 50px;
   height: 15px;
-} /* Bow shape */
+}
 .item-icon.default_icon {
   background-color: #aaa;
-} /* Fallback */
+}
 
 .item-count {
   position: absolute;
@@ -337,16 +335,15 @@ canvas {
   list-style: none;
   padding: 0;
   margin: 0;
-  max-height: 25vh; /* Limit height of each list */
+  max-height: 25vh;
   overflow-y: auto;
   border: 1px solid #ddd;
   background-color: rgba(255, 255, 255, 0.6);
   border-radius: 4px;
   padding: 10px;
-  scrollbar-width: thin; /* Firefox scrollbar styling */
-  scrollbar-color: #aaa #eee; /* Firefox scrollbar thumb and track */
+  scrollbar-width: thin;
+  scrollbar-color: #aaa #eee;
 }
-/* Webkit scrollbar styling */
 #quest-log::-webkit-scrollbar,
 #event-log::-webkit-scrollbar {
   width: 8px;
@@ -377,7 +374,6 @@ canvas {
   margin-bottom: 0;
 }
 
-/* Quest Status Styling */
 li.quest-completed {
   color: #555;
   font-style: italic;
@@ -391,10 +387,10 @@ li.quest-failed {
 }
 li.quest-available {
   color: #005a9c;
-} /* Dark blue */
+}
 li.quest-active strong {
   color: #006400;
-} /* Dark green */
+}
 
 /* --- Chat Interface --- */
 #chat-container {
@@ -402,17 +398,17 @@ li.quest-active strong {
   bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
-  background-color: rgba(0, 0, 0, 0.8); /* Darker background */
+  background-color: rgba(0, 0, 0, 0.8);
   padding: 10px;
-  border-radius: 8px; /* Slightly larger radius */
+  border-radius: 8px;
   display: flex;
   gap: 10px;
-  align-items: center; /* Vertically align items */
-  z-index: 25; /* Above other UI panels */
+  align-items: center;
+  z-index: 25;
   transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
   opacity: 1;
-  width: 90%; /* Wider on mobile */
-  max-width: 500px; /* Max width */
+  width: 90%;
+  max-width: 500px;
   box-sizing: border-box;
 }
 
@@ -425,13 +421,13 @@ li.quest-active strong {
 }
 
 #chat-input {
-  flex-grow: 1; /* Take available space */
-  padding: 10px 12px; /* Larger padding */
+  flex-grow: 1;
+  padding: 10px 12px;
   border: 1px solid #555;
   border-radius: 5px;
   background-color: #f0f0f0;
   color: #333;
-  font-size: 16px; /* Larger font for mobile */
+  font-size: 16px;
 }
 #chat-input:focus {
   outline: none;
@@ -440,15 +436,15 @@ li.quest-active strong {
 
 #chat-send,
 #chat-close {
-  padding: 10px 15px; /* Larger padding */
+  padding: 10px 15px;
   border: none;
   border-radius: 5px;
   background-color: #555;
   color: white;
   cursor: pointer;
   transition: background-color 0.15s ease;
-  font-size: 16px; /* Match input font size */
-  flex-shrink: 0; /* Prevent buttons from shrinking */
+  font-size: 16px;
+  flex-shrink: 0;
 }
 #chat-send:hover,
 #chat-close:hover {
@@ -460,15 +456,14 @@ li.quest-active strong {
   opacity: 0.6;
 }
 #chat-close {
-  background-color: #800; /* Red for close */
-  padding: 10px 12px; /* Adjust padding for 'X' */
+  background-color: #800;
+  padding: 10px 12px;
 }
 #chat-close:hover {
   background-color: #a00;
 }
 
 /* --- Utility --- */
-/* Using class-based hiding instead of !important */
 .hidden {
   opacity: 0;
   visibility: hidden;
@@ -487,32 +482,26 @@ body::after {
   font-weight: bold;
   color: rgba(255, 255, 255, 0.5);
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
-  pointer-events: none; /* Allow clicks through */
-  z-index: 5; /* Below UI panels */
+  pointer-events: none;
+  z-index: 5;
   user-select: none;
 }
 
-/* Hide crosshair when pointer is locked (Desktop) */
 body.pointer-locked::after {
   display: none;
 }
-
-/* Hide crosshair when UI is open or on mobile */
 body:has(.ui-panel:not(.hidden))::after,
 body:has(#chat-container:not(.hidden))::after,
 body:has(#mobile-controls-layer:not(.hidden))::after {
-  /* Hide when mobile controls are visible */
   display: none;
 }
 
 #fps-display {
   position: relative;
   top: 10px;
-  /* right: 10px; */
   color: white;
   font-family: Arial, sans-serif;
   font-size: 14px;
-  /* background-color: rgba(0, 0, 0, 0.5); */
   padding: 2px 5px;
 }
 
@@ -524,12 +513,12 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   width: 100%;
   height: 100%;
   pointer-events: none;
-  z-index: 5; /* Below UI panels but above game */
+  z-index: 5;
 }
 
 .intent-text {
   position: absolute;
-  transform: translateX(-50%); /* Center horizontally */
+  transform: translateX(-50%);
   background-color: rgba(0, 0, 0, 0.6);
   color: #eee;
   padding: 3px 6px;
@@ -537,7 +526,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   font-size: 11px;
   white-space: nowrap;
   user-select: none;
-  display: none; /* Hidden by default */
+  display: none;
 }
 
 /* Welcome Banner */
@@ -568,41 +557,35 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   left: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none; /* Layer itself doesn't block, only its children */
-  z-index: 15; /* Above game, below panels */
-  overflow: hidden; /* Prevent accidental scrolling */
+  pointer-events: none; /* Layer itself doesn't block */
+  z-index: 15;
+  overflow: hidden;
 }
 
 #mobile-controls-layer.hidden {
-  display: none; /* Use display none when completely inactive */
+  display: none;
 }
 
-/* Joystick Zones */
-#joystick-zone-left,
-#joystick-zone-right {
+/* Joystick Zone (Left Only) */
+#joystick-zone-left {
   position: absolute;
-  bottom: 10%; /* Adjust vertical position */
-  width: 40%; /* Adjust width */
-  height: 40%; /* Adjust height */
-  /* background-color: rgba(255, 0, 0, 0.1); */ /* Debug visual */
+  bottom: calc(10% + env(safe-area-inset-bottom));
+  left: 5%;
+  width: 40%;
+  height: 40%;
   display: flex;
   justify-content: center;
   align-items: center;
-  pointer-events: auto; /* Zones need pointer events */
+  /* pointer-events: auto; */ /* Moved to general UI rules */
 }
 
-#joystick-zone-left {
-  left: 5%; /* Adjust horizontal position */
-}
+/* Removed Right Joystick Zone Style */
+/* #joystick-zone-right { ... } */
 
-#joystick-zone-right {
-  right: 5%; /* Adjust horizontal position */
-}
-
-/* NippleJS specific styles (ensure they don't conflict) */
+/* NippleJS specific styles */
 .nipple {
-  pointer-events: auto !important; /* Ensure nipplejs elements are interactive */
-  z-index: 20; /* Above zones */
+  pointer-events: auto !important;
+  z-index: 20;
 }
 .nipple .front {
   background-color: rgba(200, 200, 200, 0.7) !important;
@@ -612,28 +595,33 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   background-color: rgba(50, 50, 50, 0.4) !important;
 }
 
-/* Action Buttons Container (around right joystick) */
-.action-buttons-container {
+/* Removed Old Action Buttons Container Style */
+/* .action-buttons-container { ... } */
+
+/* New Right Action Buttons Container */
+#right-action-buttons {
   position: absolute;
-  bottom: 10%; /* Align with joystick zone */
-  right: 5%; /* Align with joystick zone */
-  width: 40%; /* Match joystick zone width */
-  height: 40%; /* Match joystick zone height */
-  pointer-events: none; /* Container doesn't block */
+  right: calc(5% + env(safe-area-inset-right));
+  /* top: 50%; */ /* Remove */
+  bottom: calc(15% + env(safe-area-inset-bottom)); /* Add */
+  /* transform: translateY(-50%); */ /* Remove */
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
+  gap: 20px;
+  pointer-events: none;
+  z-index: 18;
 }
 
 /* Mobile Button Base Style */
 .mobile-button {
-  position: absolute;
+  position: relative; /* Change from absolute as flex handles positioning */
   background-color: rgba(50, 50, 50, 0.6);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%; /* Circular buttons */
-  width: 65px; /* Adjust size */
-  height: 65px; /* Adjust size */
+  border-radius: 50%;
+  width: 65px;
+  height: 65px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -642,14 +630,16 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   text-align: center;
   cursor: pointer;
   user-select: none;
-  -webkit-tap-highlight-color: transparent; /* Remove tap highlight */
+  -webkit-tap-highlight-color: transparent;
   transition: background-color 0.1s ease, transform 0.1s ease;
   pointer-events: auto; /* Buttons need pointer events */
-  z-index: 18; /* Below nipplejs joystick */
+  /* z-index: 18; */ /* No longer needed if container has z-index */
+  /* Remove absolute positioning transforms */
+  /* transform: translate(...) */
 }
 
 .mobile-button svg {
-  width: 28px; /* Adjust icon size */
+  width: 28px;
   height: 28px;
   margin-bottom: 2px;
 }
@@ -662,35 +652,28 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
 .mobile-button.active,
 .mobile-button:active {
   background-color: rgba(80, 80, 80, 0.8);
-  transform: scale(0.95);
+  transform: scale(0.95); /* Keep scale feedback */
 }
 
-/* Positioning Action Buttons around Right Joystick (Example) */
-/* Uses transform relative to the center of action-buttons-container */
-/* Adjust translate values and angles as needed */
-#button-interact {
-  transform: translate(-80px, -20px); /* Position top-left relative to center */
-}
-
-#button-attack {
-  transform: translate(0px, -80px); /* Position top-center relative to center */
-}
+/* Removed specific positioning for interact/attack buttons */
+/* #button-interact { transform: ... } */
+/* #button-attack { transform: ... } */
 
 /* Bottom Icon Buttons */
 .bottom-icon-buttons {
   position: absolute;
-  bottom: 15px; /* Position from bottom */
+  bottom: calc(15px + env(safe-area-inset-bottom)); /* Adjust for safe area */
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 20px; /* Space between buttons */
-  z-index: 16; /* Above joysticks/action buttons */
-  pointer-events: auto; /* Container needs events for buttons */
+  gap: 20px;
+  z-index: 16;
+  pointer-events: auto;
 }
 
 .icon-button {
-  position: relative; /* Needed for static positioning within flex */
-  width: 55px; /* Smaller icon buttons */
+  position: relative;
+  width: 55px;
   height: 55px;
   background-color: rgba(40, 40, 40, 0.7);
 }
@@ -700,12 +683,9 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   height: 24px;
 }
 
-/* Media Query for Mobile Adjustments (Example) */
+/* Media Query for Mobile Adjustments */
 @media (max-width: 768px) {
-  /* Hide desktop-specific elements if needed */
-  /* body::after { display: none; } */ /* Crosshair already hidden by mobile layer check */
-
-  /* Adjust HUD position/size */
+  /* Adjust HUD */
   #hud {
     top: 10px;
     left: 10px;
@@ -725,7 +705,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
     top: 5px;
   }
 
-  /* Adjust Minimap size/position */
+  /* Adjust Minimap */
   #minimap-container {
     top: 10px;
     right: 10px;
@@ -735,7 +715,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
     height: 100px;
   }
 
-  /* Make UI Panels take more screen space */
+  /* Adjust Panels */
   #inventory-display,
   #journal-display {
     width: 95%;
@@ -758,7 +738,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
     font-size: 12px;
   }
 
-  /* Adjust Chat UI */
+  /* Adjust Chat */
   #chat-container {
     bottom: 5px;
     width: 95%;
@@ -776,24 +756,19 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   }
 
   /* Adjust Mobile Controls Layout */
-  #joystick-zone-left,
-  #joystick-zone-right {
-    bottom: 5%;
-    width: 45%;
-    height: 45%;
-  }
   #joystick-zone-left {
+    bottom: calc(5% + env(safe-area-inset-bottom));
     left: 2%;
-  }
-  #joystick-zone-right {
-    right: 2%;
-  }
-  .action-buttons-container {
-    bottom: 5%;
-    right: 2%;
     width: 45%;
     height: 45%;
   }
+  /* Removed right zone adjustments */
+
+  #right-action-buttons {
+    right: calc(2% + env(safe-area-inset-right));
+    gap: 15px; /* Reduce gap slightly */
+  }
+
   .mobile-button {
     width: 60px;
     height: 60px;
@@ -802,14 +777,10 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
     width: 26px;
     height: 26px;
   }
-  #button-interact {
-    transform: translate(-70px, -15px);
-  }
-  #button-attack {
-    transform: translate(0px, -70px);
-  }
+  /* Removed specific button transform adjustments */
+
   .bottom-icon-buttons {
-    bottom: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
     gap: 15px;
   }
   .icon-button {

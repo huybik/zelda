@@ -1,5 +1,3 @@
-<!-- // File: /src/index.html -->
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -18,6 +16,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
   </head>
   <body>
+    <!-- Game Container: Touch events for camera will be attached here -->
     <div id="game-container">
       <div id="intent-container"></div>
       <!-- Canvas will be appended here by main.ts -->
@@ -67,9 +66,6 @@
       <!-- Chat Interface -->
       <div id="chat-container" class="hidden">
         <input type="text" id="chat-input" placeholder="Type your message..." />
-        <button id="chat-send">Send</button>
-        <button id="chat-close">X</button>
-        <!-- Added Close Button -->
       </div>
 
       <!-- Welcome Banner -->
@@ -77,12 +73,13 @@
 
       <!-- Mobile Controls Layer (Initially hidden, shown by JS if mobile) -->
       <div id="mobile-controls-layer" class="hidden">
-        <!-- Joystick Zones -->
+        <!-- Joystick Zone (Left Only) -->
         <div id="joystick-zone-left"></div>
-        <div id="joystick-zone-right"></div>
+        <!-- <div id="joystick-zone-right"></div> -->
+        <!-- Removed Right Zone -->
 
-        <!-- Action Buttons (around right joystick) -->
-        <div class="action-buttons-container">
+        <!-- Action Buttons (Vertically aligned on the right) -->
+        <div id="right-action-buttons">
           <button id="button-interact" class="mobile-button interact">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -110,10 +107,11 @@
             </svg>
             <span>Attack</span>
           </button>
-          <!-- Add more buttons here if needed -->
+
+          <!-- Add more buttons here if needed, they will stack vertically -->
         </div>
 
-        <!-- Bottom Icon Buttons -->
+        <!-- Bottom Icon Buttons (Remain the same) -->
         <div class="bottom-icon-buttons">
           <button id="button-inventory" class="mobile-button icon-button">
             <svg
