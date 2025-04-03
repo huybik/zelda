@@ -1,7 +1,7 @@
 // File: /src/ui.ts
 import { Character } from "./entities";
 import { Game } from "./main";
-import { Inventory, EventLog, InventoryItem, EventEntry } from "./ultils"; // Added EventEntry
+import { Inventory, EventLog, InventoryItem, EventEntry } from "./utils"; // Added EventEntry
 import { Object3D, Vector3 } from "three";
 
 export class HUD {

@@ -29,7 +29,7 @@ import {
   EventEntry,
   GameEvent,
   InteractionResult,
-} from "./ultils"; // Added InteractionResult
+} from "./utils"; // Added InteractionResult
 import { Raycaster } from "three";
 import type { Game } from "./main";
 import { AIController } from "./ai";
@@ -720,7 +720,7 @@ export class Character extends Entity {
 
   applyGravity(deltaTime: number): void {
     if (!this.isOnGround) {
-      this.velocity.y += this.gravity * deltaTime * 0.2;
+      this.velocity.y += this.gravity * deltaTime;
     } else {
       this.velocity.y = Math.max(this.gravity * deltaTime, -0.1);
     }

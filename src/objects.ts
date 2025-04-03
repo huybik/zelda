@@ -19,7 +19,7 @@ import {
   InteractionResult,
   Colors,
   randomFloat,
-} from "./ultils";
+} from "./utils";
 
 const treeTrunkMat = new MeshLambertMaterial({ color: Colors.PASTEL_BROWN });
 const treeFoliageMat = new MeshLambertMaterial({ color: Colors.PASTEL_GREEN });

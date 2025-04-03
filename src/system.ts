@@ -22,7 +22,7 @@ import {
   smoothVectorLerp,
   KeyState,
   MouseState,
-} from "./ultils";
+} from "./utils";
 import type { Game } from "./main"; // Import Game type
 import { sendToGemini } from "./ai"; // Import sendToGemini
 import { MobileControls } from "./mobileControls"; // Import MobileControls
@@ -622,8 +622,9 @@ Respond to the player in brief 1-2 sentences.
             this.chatTarget.mesh!.position
           );
         } finally {
-          this.chatInput.disabled = false; // Re-enable input
-          this.chatInput.focus();
+          this.closeChatInterface();
+          // this.chatInput.disabled = false; // Re-enable input
+          // this.chatInput.focus();
         }
       };
     }
@@ -632,7 +633,6 @@ Respond to the player in brief 1-2 sentences.
       this.boundHandleChatKeyDown = (e: KeyboardEvent) => {
         if (e.key === "Enter" && this.boundSendMessage) {
           this.boundSendMessage();
-          this.closeChatInterface();
         }
       };
     }

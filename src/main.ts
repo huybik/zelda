@@ -54,7 +54,7 @@ import {
   smoothstep,
   EventEntry,
   Quest,
-} from "./ultils";
+} from "./utils";
 import { AIController } from "./ai";
 import { MobileControls } from "./mobileControls"; // Import MobileControls
 
