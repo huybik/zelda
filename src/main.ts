@@ -349,13 +349,19 @@ export class Game {
 
   constructor() {}
 
+  isMobileDevice(): boolean {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
+  }
+
   async init(): Promise<void> {
     this.clock = new Clock();
     this.initRenderer();
     this.initScene();
     this.initCamera();
     this.initInventory();
-    this.initAudio(); // Initialize audio
+    this.initAudio();
     const models = await loadModels();
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -371,6 +377,14 @@ export class Game {
     this.initQuests();
     this.initUI();
     this.setupUIControls();
+
+    // Show mobile controls if on a mobile device
+    if (this.isMobileDevice()) {
+      const mobileControls = document.getElementById("mobile-controls");
+      if (mobileControls) {
+        mobileControls.classList.remove("hidden");
+      }
+    }
 
     this.createExitPortal();
     if (this.hasEnteredFromPortal && this.startPortalRefUrl) {
