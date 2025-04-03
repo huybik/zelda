@@ -1,7 +1,17 @@
 ///// src/ai.ts
 import { Vector3, Object3D } from "three";
 import { Character, Entity } from "./entities";
-import { MoveState, getTerrainHeight, EventEntry } from "./ultils";
+import { MoveState, EventEntry } from "./core/types";
+import { getTerrainHeight } from "./core/utils";
+import { ResourceNode } from "./objects"; // Corrected import path
+import {
+  AI_INTERACTION_DISTANCE,
+  AI_API_CALL_COOLDOWN_MS,
+  AI_ACTION_TIMER_BASE_S,
+  AI_ACTION_TIMER_RANDOM_S,
+  AI_SEARCH_RADIUS, // Already used via Character property
+  AI_ROAM_RADIUS, // Already used via Character property
+} from "./core/constants";
 import type { Game } from "./main";
 
 // Define both API keys
@@ -122,33 +132,46 @@ export class AIController {
   previousAiState: string = "idle";
   homePosition: Vector3;
   destination: Vector3 | null = null;
-  targetResource: Object3D | null = null;
+  targetResource: Object3D | ResourceNode | null = null; // Allow ResourceNode type
   gatherTimer: number = 0;
   gatherDuration: number = 0;
-  actionTimer: number = 5;
-  interactionDistance: number = 3; // Increased slightly for actions
-  searchRadius: number;
-  roamRadius: number;
+  actionTimer: number; // Assigned in constructor
+  interactionDistance: number = AI_INTERACTION_DISTANCE; // Use constant
+  searchRadius: number; // Assigned from character in constructor
+  roamRadius: number; // Assigned from character in constructor
   target: Entity | null = null;
   observation: Observation | null = null;
   persona: string = "";
   currentIntent: string = "";
-
-  // New properties for actions
-  targetAction: string | null = null; // 'chat', 'attack', 'heal'
-  message: string | null = null; // For chat action
-
-  // New properties for optimization
+  targetAction: string | null = null;
+  message: string | null = null;
   private lastApiCallTime: number = 0;
-  private apiCallCooldown: number = 10000; // 5 seconds minimum between API calls
-  private lastObservation: Observation | null = null; // To track changes
+  private apiCallCooldown: number = AI_API_CALL_COOLDOWN_MS; // Use constant
+  private lastObservation: Observation | null = null;
+  observationCooldown: number = 0.5;
+  observationTimer: number = 0;
 
   constructor(character: Character) {
     this.character = character;
     this.homePosition = character.mesh!.position.clone();
+    // Use constants assigned to character properties
     this.searchRadius = character.searchRadius;
     this.roamRadius = character.roamRadius;
     this.persona = character.persona;
+    // Initialize actionTimer using constants
+    this.actionTimer = AI_ACTION_TIMER_BASE_S + Math.random() * AI_ACTION_TIMER_RANDOM_S;
+  }
+
+  // ADDED: Method to reset AI state on character respawn
+  resetAIState(): void {
+      this.aiState = "idle";
+      this.previousAiState = "idle";
+      this.destination = null;
+      this.targetResource = null;
+      this.target = null;
+      this.targetAction = null;
+      this.message = null;
+      this.observationTimer = 0; // Reset observation timer too
   }
 
   computeAIMoveState(deltaTime: number): MoveState {
@@ -177,14 +200,14 @@ export class AIController {
           console.log(`AI (${this.character.name}) reacting to entity change.`);
           this.decideNextAction();
           this.lastApiCallTime = currentTime;
-          this.actionTimer = 5 + Math.random() * 5; // Reset idle timer after API call
+          this.actionTimer = AI_ACTION_TIMER_BASE_S + Math.random() * AI_ACTION_TIMER_RANDOM_S; // Reset timer with constants
           break; // Exit idle state processing for this frame
         }
 
         // --- Regular Idle Timer Check ---
         this.actionTimer -= deltaTime;
         if (this.actionTimer <= 0) {
-          this.actionTimer = 5 + Math.random() * 5; // Reset timer
+          this.actionTimer = AI_ACTION_TIMER_BASE_S + Math.random() * AI_ACTION_TIMER_RANDOM_S; // Reset timer with constants
 
           if (canCallApi && this.justCompletedAction()) {
             console.log(
@@ -231,67 +254,107 @@ export class AIController {
         break;
 
       case "movingToResource":
+        // Check visibility on the mesh if it's a ResourceNode
+        const isTargetVisible =
+          this.targetResource instanceof ResourceNode
+            ? this.targetResource.mesh?.visible
+            : this.targetResource?.visible;
+
         if (
           this.targetResource &&
-          this.targetResource.visible &&
+          isTargetVisible &&
           this.targetResource.userData.isInteractable
         ) {
-          const direction = this.targetResource.position
+          const targetPosition = this.targetResource instanceof ResourceNode
+                ? this.targetResource.mesh!.position // Use mesh position for ResourceNode
+                : this.targetResource.position; // Use direct position for Object3D
+
+          const direction = targetPosition
             .clone()
             .sub(this.character.mesh!.position);
           direction.y = 0;
           const distance = direction.length();
           if (distance > 1) {
             direction.normalize();
-            this.character.lookAt(this.targetResource.position);
+            this.character.lookAt(targetPosition);
             moveState.forward = 1;
           } else {
             this.aiState = "gathering";
             this.gatherTimer = 0;
-            this.gatherDuration =
-              this.targetResource.userData.gatherTime || 3000;
-            this.character.isGathering = true;
+            this.gatherDuration = this.targetResource.userData.gatherTime || 3000;
+            this.character.switchState('Gathering');
           }
         } else {
+          if(this.character.currentState === 'Gathering') this.character.switchState('Idle');
           this.aiState = "idle";
           this.targetResource = null;
         }
         break;
 
       case "gathering":
+        if (!this.targetResource) {
+          if(this.character.currentState === 'Gathering') this.character.switchState('Idle');
+          this.aiState = "idle";
+          break;
+        }
+
         this.gatherTimer += deltaTime * 1000;
         if (this.gatherTimer >= this.gatherDuration) {
-          if (this.targetResource && this.character.inventory) {
-            const resourceName = this.targetResource.userData.resource;
-            this.character.inventory.addItem(resourceName, 1);
-            if (this.character.game) {
-              this.character.game.logEvent(
-                this.character,
-                "gather",
-                `${this.character.name} gathered 1 ${resourceName}.`,
-                undefined,
-                { resource: resourceName },
-                this.character.mesh!.position
-              );
-            }
-          }
-          if (this.targetResource?.userData.isDepletable) {
-            this.targetResource.visible = false;
-            this.targetResource.userData.isInteractable = false;
-            const respawnTime =
-              this.targetResource.userData.respawnTime || 15000;
-            const resourceToRespawn = this.targetResource;
-            setTimeout(() => {
-              if (resourceToRespawn && resourceToRespawn.userData) {
-                resourceToRespawn.visible = true;
-                resourceToRespawn.userData.isInteractable = true;
+          let gatheredSuccessfully = false;
+          if (this.character.inventory) {
+              const resourceName = this.targetResource.userData.resource;
+              if (this.character.inventory.addItem(resourceName, 1)) {
+                  gatheredSuccessfully = true;
+                  if (this.character.game) {
+                      this.character.game.logEvent(
+                          this.character,
+                          "gather",
+                          `${this.character.name} gathered 1 ${resourceName}.`,
+                          undefined,
+                          { resource: resourceName },
+                          this.character.mesh!.position
+                      );
+                  }
+              } else {
+                  // Log inventory full failure
+                  if (this.character.game) {
+                      this.character.game.logEvent(
+                          this.character,
+                          "gather_fail",
+                          `${this.character.name}'s inventory is full. Could not gather ${resourceName}.`,
+                          undefined,
+                          { resource: resourceName },
+                          this.character.mesh!.position
+                      );
+                  }
               }
-            }, respawnTime);
           }
+
+          // --- Refactored Depletion --- //
+          if (gatheredSuccessfully && this.targetResource instanceof ResourceNode) {
+            this.targetResource.deplete();
+          } else if (gatheredSuccessfully && this.targetResource?.userData?.isDepletable) {
+              // Fallback for non-ResourceNode (e.g., Group directly)
+              if (this.targetResource instanceof Object3D) { // Type guard
+                  this.targetResource.visible = false;
+              }
+              this.targetResource.userData.isInteractable = false;
+              const respawnTime =
+                  this.targetResource.userData.respawnTime || 15000;
+              const resourceToRespawn = this.targetResource; // Capture ref
+              console.warn("Depleting non-ResourceNode object via AI:", this.targetResource.name);
+              // Respawn logic for non-ResourceNode objects moved to ResourceNode class
+              // setTimeout(() => { ... }); // Remove setTimeout from here
+          }
+          // --- End Refactored Depletion ---
+
           this.targetResource = null;
           this.aiState = "idle";
-          this.character.isGathering = false;
           this.currentIntent = "";
+
+          if (this.character.currentState === 'Gathering') {
+              this.character.switchState('Idle');
+          }
         }
         break;
 
@@ -318,10 +381,14 @@ export class AIController {
             moveState.forward = 1;
           } else {
             // In range, perform the action
-            this.character.lookAt(this.target.mesh.position); // Look at target before action
+            this.character.lookAt(this.target.mesh.position);
 
             if (this.targetAction === "chat" && this.message) {
-              this.character.showTemporaryMessage(this.message);
+              // Use EntityDisplayManager to show the message
+              this.character.game?.entityDisplayManager?.showTemporaryMessage(
+                  this.character,
+                  this.message
+              );
               // Log the event
               if (this.character.game) {
                 this.character.game.logEvent(
@@ -339,9 +406,7 @@ export class AIController {
               this.targetAction = null;
               this.message = null;
             } else if (this.targetAction === "attack") {
-              this.character.triggerAction("attack"); // Trigger animation, actual attack happens on finish
-              // Stay in this state until animation finishes? No, let animation handler reset state.
-              // For now, assume action is triggered and go idle. Re-evaluation will happen.
+              this.character.switchState('Attacking');
               this.aiState = "idle";
               this.target = null;
               this.targetAction = null;
@@ -350,9 +415,8 @@ export class AIController {
                 this.target instanceof Character &&
                 this.target.health < this.target.maxHealth
               ) {
-                this.character.triggerAction("heal"); // Trigger animation, heal happens on finish
+                this.character.switchState('Healing');
               }
-              // Go idle after triggering heal attempt
               this.aiState = "idle";
               this.target = null;
               this.targetAction = null;
@@ -719,7 +783,17 @@ Choose an appropriate action based on your persona and the current situation. En
   }): void {
     const { action, object_id, target_id, message, intent } = actionData;
     this.currentIntent = intent || "Thinking...";
-    this.character.updateIntentDisplay(`${this.currentIntent}`);
+
+    // Update display via manager
+    if (this.character.game?.entityDisplayManager) {
+      // Find the display data for this character
+      const displayData = this.character.game.entityDisplayManager['displayMap'].get(this.character.id);
+      if (displayData) {
+        this.character.game.entityDisplayManager.updateIntentDisplay(displayData, this.currentIntent);
+      }
+    } else {
+        console.warn(`EntityDisplayManager not found on game instance for ${this.character.name}`);
+    }
 
     // Reset action-specific properties
     this.destination = null;
@@ -747,20 +821,39 @@ Choose an appropriate action based on your persona and the current situation. En
         );
       }
     } else if (action === "gather" && object_id) {
-      const targetObject = this.character.scene?.children.find(
-        (child) =>
-          child.userData.id === object_id &&
-          child.userData.isInteractable &&
-          child.visible
+      const targetObject = this.character.game?.entities.find(
+        (entity) =>
+            // Check if it's the ResourceNode instance OR the mesh associated with it
+            (entity instanceof ResourceNode && entity.id === object_id) ||
+            (entity instanceof Object3D && entity.userData?.id === object_id)
       );
+
+      // Find the actual ResourceNode instance if we found the mesh
+      let targetNode: ResourceNode | null = null;
+      if (targetObject instanceof ResourceNode) {
+          targetNode = targetObject;
+      } else if (targetObject instanceof Object3D && targetObject.userData?.entityReference instanceof ResourceNode) {
+          targetNode = targetObject.userData.entityReference;
+      }
+
       if (
-        targetObject &&
+        targetNode &&
+        !targetNode.isDepleted &&
+        targetNode.isActive &&
         this.observation?.nearbyObjects.some((o) => o.id === object_id)
       ) {
-        this.targetResource = targetObject;
+        this.targetResource = targetNode;
         this.aiState = "movingToResource";
+        this.gatherDuration = targetNode.gatherTime || 3000;
       } else {
-        this.currentIntent += ` (couldn't find object ${object_id})`;
+        this.currentIntent += ` (couldn't find or use object ${object_id})`;
+        // Update display again if intent string changed due to error
+        if (this.character.game?.entityDisplayManager) {
+          const displayData = this.character.game.entityDisplayManager['displayMap'].get(this.character.id);
+          if (displayData) {
+             this.character.game.entityDisplayManager.updateIntentDisplay(displayData, this.currentIntent);
+          }
+        }
         this.aiState = "idle";
       }
     } else if (

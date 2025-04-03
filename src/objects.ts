@@ -13,13 +13,22 @@ import {
 } from "three";
 import { Character } from "./entities";
 import {
-  Inventory,
-  EventLog,
   EntityUserData,
   InteractionResult,
+} from "./core/types";
+import {
   Colors,
-  randomFloat,
-} from "./ultils";
+  TREE_GATHER_TIME,
+  TREE_RESPAWN_TIME,
+  ROCK_GATHER_TIME,
+  ROCK_RESPAWN_TIME,
+  HERB_GATHER_TIME,
+  HERB_RESPAWN_TIME,
+  getNextEntityId,
+} from "./core/constants";
+import { randomFloat } from "./core/utils";
+// Inventory and EventLog are used within the 'interact' method via player object,
+// so direct imports might not be needed here unless used elsewhere.
 
 const treeTrunkMat = new MeshLambertMaterial({ color: Colors.PASTEL_BROWN });
 const treeFoliageMat = new MeshLambertMaterial({ color: Colors.PASTEL_GREEN });
@@ -44,6 +53,7 @@ export class InteractableObject {
     interactionType: string,
     data: any,
     prompt: string,
+    mesh: Mesh | Group | null = null,
     scene: Scene | null = null
   ) {
     this.id = id;
@@ -52,8 +62,9 @@ export class InteractableObject {
     this.interactionType = interactionType;
     this.data = data;
     this.prompt = prompt;
-    this.mesh = null;
+    this.mesh = mesh;
     this.isActive = true;
+
     this.userData = {
       id: this.id,
       entityReference: this,
@@ -67,16 +78,19 @@ export class InteractableObject {
       isNPC: false,
       isCollidable: false,
     };
+
+    if (this.mesh) {
+      this.mesh.userData = this.userData;
+      this.mesh.position.copy(this.position);
+    }
   }
 
-  // Updated interact method signature
   interact(player: Character): InteractionResult | null {
     if (!this.isActive) return { type: "error", message: "Already used." };
     let message = "";
     let action = "interact";
     let details: Record<string, any> = {};
 
-    // Use player's inventory and game instance for logging
     const inventory = player.inventory;
     const game = player.game;
 
@@ -161,7 +175,96 @@ export class InteractableObject {
   }
 }
 
-export function createTree(position: Vector3): Group {
+export class ResourceNode extends InteractableObject {
+  resourceName: string;
+  gatherTime: number;
+  respawnTime: number;
+  isDepletable: boolean;
+  isDepleted: boolean = false;
+  respawnTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(
+    id: string,
+    name: string,
+    position: Vector3,
+    mesh: Group,
+    resourceName: string,
+    gatherTime: number,
+    respawnTime: number,
+    isDepletable: boolean,
+    isCollidable: boolean,
+    prompt: string
+  ) {
+    super(id, name, position, "gather", {}, prompt, mesh);
+
+    this.resourceName = resourceName;
+    this.gatherTime = gatherTime;
+    this.respawnTime = respawnTime;
+    this.isDepletable = isDepletable;
+
+    this.userData.resource = this.resourceName;
+    this.userData.gatherTime = this.gatherTime;
+    this.userData.isDepletable = this.isDepletable;
+    this.userData.respawnTime = this.respawnTime;
+    this.userData.isCollidable = isCollidable;
+    this.userData.isSimpleObject = false;
+    this.userData.boundingBox = new Box3().setFromObject(mesh);
+    if (mesh) {
+      mesh.userData = this.userData;
+    }
+  }
+
+  interact(player: Character): InteractionResult | null {
+    if (this.isDepleted || !this.isActive) {
+      return { type: "error", message: `${this.name} is depleted.` };
+    }
+    return { type: "gather_start" };
+  }
+
+  deplete(): void {
+    if (!this.isDepletable || this.isDepleted) return;
+
+    this.isDepleted = true;
+    this.isActive = false;
+    this.userData.isInteractable = false;
+    if (this.mesh) {
+      this.mesh.visible = false;
+    }
+    console.log(`${this.name} depleted.`);
+
+    if (this.respawnTimeout) {
+      clearTimeout(this.respawnTimeout);
+      this.respawnTimeout = null;
+    }
+
+    this.respawnTimeout = setTimeout(() => {
+      this.respawn();
+    }, this.respawnTime);
+  }
+
+  respawn(): void {
+    if (!this.isDepletable || !this.isDepleted) return;
+
+    this.isDepleted = false;
+    this.isActive = true;
+    this.userData.isInteractable = true;
+    if (this.mesh) {
+      this.mesh.visible = true;
+    }
+    this.respawnTimeout = null;
+    console.log(`${this.name} respawned.`);
+  }
+
+  removeFromWorld(): void {
+    super.removeFromWorld();
+    if (this.respawnTimeout) {
+      clearTimeout(this.respawnTimeout);
+      this.respawnTimeout = null;
+    }
+  }
+}
+
+export function createTree(position: Vector3): ResourceNode {
   const trunkHeight = randomFloat(3, 5);
   const trunkRadius = randomFloat(0.3, 0.5);
   const foliageHeight = trunkHeight * 1.2 + randomFloat(0, 1);
@@ -184,23 +287,23 @@ export function createTree(position: Vector3): Group {
   foliageMesh.position.y = trunkHeight + foliageHeight / 3;
   foliageMesh.castShadow = true;
   treeGroup.add(foliageMesh);
-  treeGroup.position.copy(position).setY(0);
-  treeGroup.userData = {
-    isCollidable: true,
-    isInteractable: true,
-    interactionType: "gather",
-    resource: "wood",
-    gatherTime: 3000,
-    prompt: "Press E to gather Wood",
-    isDepletable: true,
-    respawnTime: 20000,
-    entityReference: treeGroup,
-    boundingBox: new Box3().setFromObject(treeGroup),
-  };
-  return treeGroup;
+
+  const node = new ResourceNode(
+    `${treeGroup.name}_${getNextEntityId()}`,
+    treeGroup.name,
+    position,
+    treeGroup,
+    "wood",
+    TREE_GATHER_TIME,
+    TREE_RESPAWN_TIME,
+    true,
+    true,
+    "Press E to gather Wood"
+  );
+  return node;
 }
 
-export function createRock(position: Vector3, size: number): Group {
+export function createRock(position: Vector3, size: number): ResourceNode {
   const rockGroup = new Group();
   rockGroup.name = "Rock";
   const height = size * randomFloat(0.5, 1.0);
@@ -214,23 +317,23 @@ export function createRock(position: Vector3, size: number): Group {
     randomFloat(-0.1, 0.1) * Math.PI
   );
   rockGroup.add(mesh);
-  rockGroup.position.copy(position).setY(0);
-  rockGroup.userData = {
-    isCollidable: true,
-    isInteractable: true,
-    interactionType: "gather",
-    resource: "stone",
-    gatherTime: 4000,
-    prompt: "Press E to gather Stone",
-    isDepletable: true,
-    respawnTime: 30000,
-    entityReference: rockGroup,
-    boundingBox: new Box3().setFromObject(rockGroup),
-  };
-  return rockGroup;
+
+  const node = new ResourceNode(
+    `${rockGroup.name}_${getNextEntityId()}`,
+    rockGroup.name,
+    position,
+    rockGroup,
+    "stone",
+    ROCK_GATHER_TIME,
+    ROCK_RESPAWN_TIME,
+    true,
+    true,
+    "Press E to gather Stone"
+  );
+  return node;
 }
 
-export function createHerb(position: Vector3): Group {
+export function createHerb(position: Vector3): ResourceNode {
   const herbGroup = new Group();
   herbGroup.name = "Herb Plant";
   const size = 0.25;
@@ -238,18 +341,19 @@ export function createHerb(position: Vector3): Group {
   const mesh = new Mesh(geo, herbMat);
   mesh.castShadow = true;
   herbGroup.add(mesh);
-  herbGroup.position.copy(position).setY(size);
-  herbGroup.userData = {
-    isCollidable: false,
-    isInteractable: true,
-    interactionType: "gather",
-    resource: "herb",
-    gatherTime: 1500,
-    prompt: "Press E to gather Herb",
-    isDepletable: true,
-    respawnTime: 15000,
-    entityReference: herbGroup,
-    boundingBox: new Box3().setFromObject(herbGroup),
-  };
-  return herbGroup;
+
+  const node = new ResourceNode(
+    `${herbGroup.name}_${getNextEntityId()}`,
+    herbGroup.name,
+    position,
+    herbGroup,
+    "herb",
+    HERB_GATHER_TIME,
+    HERB_RESPAWN_TIME,
+    true,
+    false,
+    "Press E to gather Herb"
+  );
+  node.mesh!.position.copy(position).setY(size);
+  return node;
 }

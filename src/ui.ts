@@ -1,8 +1,11 @@
 // File: /src/ui.ts
 import { Character } from "./entities";
 import { Game } from "./main";
-import { Inventory, EventLog, InventoryItem, EventEntry } from "./ultils"; // Added EventEntry
+import { InventoryItem, EventEntry } from "./core/types";
+import { Inventory } from "./core/Inventory";
+import { EventLog } from "./core/EventLog";
 import { Object3D, Vector3 } from "three";
+import { ResourceNode, InteractableObject } from "./objects";
 
 export class HUD {
   player: Character;
@@ -353,69 +356,59 @@ export class Minimap {
     const playerMapZ = this.worldToMapZ(this.playerPosition.z);
     this.ctx.translate(-playerMapX, -playerMapZ);
 
+    // console.log(`Minimap Update: Processing ${this.entities.length} entities.`); // Optional: Log total entities
+
     this.entities.forEach((entity) => {
-      if (
-        !entity ||
-        entity === this.player ||
-        (entity instanceof Character && entity.isDead)
-      ) {
-        return;
+      // --- Initial Filtering (Player, Dead, Invalid Mesh) ---
+      // console.log(`Minimap: Checking entity ${entity?.name || entity?.id || 'Unknown'}`); // Log entity check
+      if (!entity || entity === this.player || (entity instanceof Character && entity.isDead)) { 
+          // console.log(`Minimap: Filtered out ${entity?.name || 'entity'} (self, dead, or null).`);
+          return; 
       }
-
-      const mesh =
-        entity instanceof Character || entity instanceof Object3D
-          ? (entity as any).mesh ?? entity
-          : null; // Handle non-mesh entities better
-      if (
-        !mesh ||
-        !(mesh instanceof Object3D) ||
-        !mesh.parent ||
-        !mesh.visible
-      ) {
-        return;
+      const mesh = entity instanceof Character || entity instanceof Object3D ? (entity as any).mesh ?? entity : null;
+      if (!mesh || !(mesh instanceof Object3D) || !mesh.parent || !mesh.visible) { 
+          // console.log(`Minimap: Filtered out ${entity?.name || 'entity'} (invalid/invisible mesh).`);
+          return; 
       }
+      // console.log(`Minimap: Passed filters: ${entity.name}`); // Log passed filter
 
+      // --- Get Position & Calculate Map Coords ---
       mesh.getWorldPosition(this.entityPosition);
-
       const entityMapX = this.worldToMapX(this.entityPosition.x);
       const entityMapZ = this.worldToMapZ(this.entityPosition.z);
 
-      let color = "gray";
-      let size = this.dotSize;
-      let draw = false;
+      // --- Determine Style & Draw ---
+      let color = "gray"; // Default color
+      let size = this.dotSize; // Default size
+      let draw = true; // Default to true after basic filters
+      let styledAs = 'default'; // Track styling reason
 
+      // Override style based on type (userData checks)
       if (entity.userData?.resource) {
+        styledAs = `resource (${entity.userData.resource})`;
         switch (entity.userData.resource) {
-          case "wood":
-            color = "saddlebrown";
-            break;
-          case "stone":
-            color = "darkgray";
-            break;
-          case "herb":
-            color = "limegreen";
-            break;
-          default:
-            color = "white";
+          case "wood": color = "saddlebrown"; break;
+          case "stone": color = "darkgray"; break;
+          case "herb": color = "limegreen"; break;
+          default: color = "white";
         }
-        draw = true;
       } else if (entity.userData?.isNPC) {
-        // Use isNPC flag
+        styledAs = 'npc';
         color = this.npcColor;
         size += 1;
-        draw = true;
       } else if (entity.userData?.isEnemy) {
-        // Assuming an isEnemy flag might exist
+        styledAs = 'enemy';
         color = "red";
         size += 1;
-        draw = true;
       } else if (entity.userData?.isInteractable) {
-        // Generic interactable
+        styledAs = 'interactable';
         color = "lightblue";
-        draw = true;
       }
+      // console.log(`Minimap: Styling ${entity.name} as ${styledAs}`); // Log styling result
 
+      // Draw if the flag is true
       if (draw) {
+        // console.log(`Minimap: Drawing ${entity.name} at (${entityMapX.toFixed(1)}, ${entityMapZ.toFixed(1)}) with color ${color}`); // Log drawing
         this.drawDot(entityMapX, entityMapZ, color, size);
       }
     });

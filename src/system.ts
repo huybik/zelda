@@ -13,19 +13,37 @@ import {
 import { Character, Entity } from "./entities"; // Added Entity import
 import { InteractableObject } from "./objects";
 import {
-  Inventory,
-  EventLog,
   InteractionResult,
   TargetInfo,
   ActiveGather,
   MoveState,
-  smoothVectorLerp,
   KeyState,
   MouseState,
-} from "./ultils";
+} from "./core/types"; // Interfaces from types.ts
+import { Inventory } from "./core/Inventory"; // Class from Inventory.ts
+import { EventLog } from "./core/EventLog"; // Class from EventLog.ts
+import { smoothVectorLerp } from "./core/utils"; // Function from utils.ts
 import type { Game } from "./main"; // Import Game type
 import { sendToGemini } from "./ai"; // Import sendToGemini
 import { MobileControls } from "./mobileControls"; // Import MobileControls
+import {
+  INTERACTION_DISTANCE,
+  INTERACTION_AIM_TOLERANCE,
+  PHYSICS_COLLISION_CHECK_RADIUS,
+  CAMERA_IDEAL_OFFSET_Y,
+  CAMERA_IDEAL_OFFSET_Z,
+  CAMERA_MIN_OFFSET_DISTANCE,
+  CAMERA_MAX_OFFSET_DISTANCE,
+  CAMERA_INITIAL_PITCH_ANGLE,
+  CAMERA_MIN_PITCH,
+  CAMERA_MAX_PITCH,
+  CAMERA_PITCH_SENSITIVITY,
+  CAMERA_LERP_ALPHA_POSITION_BASE,
+  CAMERA_LERP_ALPHA_LOOKAT_BASE,
+  CAMERA_COLLISION_OFFSET,
+  CONTROLS_PLAYER_ROTATION_SENSITIVITY,
+} from "./core/constants";
+import { ResourceNode } from "./objects"; // Import ResourceNode
 
 export class InteractionSystem {
   player: Character;
@@ -35,8 +53,8 @@ export class InteractionSystem {
   inventory: Inventory;
   eventLog: EventLog; // Now references the current player's event log
   raycaster: Raycaster;
-  interactionDistance: number = 3.0;
-  aimTolerance: number = Math.PI / 6;
+  interactionDistance: number = INTERACTION_DISTANCE;
+  aimTolerance: number = INTERACTION_AIM_TOLERANCE;
   currentTarget: any | null = null;
   currentTargetMesh: Object3D | null = null;
   interactionPromptElement: HTMLElement | null;
@@ -366,7 +384,7 @@ export class InteractionSystem {
   }
 
   startGatherAction(targetInstance: any): void {
-    if (this.activeGather) return;
+    if (this.activeGather || this.player.currentState !== 'Idle') return; // Only start gathering from Idle
     const resource = targetInstance.userData.resource as string;
     const gatherTime = (targetInstance.userData.gatherTime as number) || 2000;
     this.activeGather = {
@@ -386,13 +404,8 @@ export class InteractionSystem {
         { resource },
         this.player.mesh!.position
       );
-    this.player.velocity.x = 0;
-    this.player.velocity.z = 0;
-    this.player.isGathering = true; // Set gathering state
-    this.player.gatherAttackTimer = 0; // Reset timer
-    if (this.player.attackAction) {
-      this.player.triggerAction("gather"); // Use triggerAction
-    }
+    // Switch player state to Gathering
+    this.player.switchState('Gathering');
   }
 
   updateGatherAction(deltaTime: number): void {
@@ -413,95 +426,56 @@ export class InteractionSystem {
     const targetName = targetInstance.name || targetInstance.id;
     const targetPosition = (targetInstance.mesh ?? targetInstance).position;
 
+    let gathered = false;
     if (this.inventory.addItem(resource, 1)) {
-      // Log gather success event
-      if (this.player.game)
-        this.player.game.logEvent(
-          this.player,
-          "gather_complete",
-          `Gathered 1 ${resource}.`,
-          targetName,
-          { resource },
-          targetPosition
-        );
+      gathered = true;
+      if (this.player.game) this.player.game.logEvent( this.player, "gather_complete", `Gathered 1 ${resource}.`, targetName, { resource }, targetPosition );
 
-      if (targetInstance.userData.isDepletable) {
-        targetInstance.userData.isInteractable = false;
-        const meshToHide = targetInstance.mesh ?? targetInstance;
-        if (meshToHide instanceof Object3D) meshToHide.visible = false;
-
-        const respawnTime = targetInstance.userData.respawnTime || 15000;
-        setTimeout(() => {
-          if (targetInstance.userData) {
-            targetInstance.userData.isInteractable = true;
-            if (meshToHide instanceof Object3D) meshToHide.visible = true;
-            // Optional: Log respawn event
-            // if (this.player.game) this.player.game.logEvent(this.player, 'respawn_object', `${targetName} respawned.`, targetName, {}, targetPosition);
-          }
-        }, respawnTime);
-      } else if (
-        targetInstance.userData.isSimpleObject &&
-        typeof (targetInstance as InteractableObject).removeFromWorld ===
-          "function"
-      ) {
-        (targetInstance as InteractableObject).removeFromWorld();
+      // --- Refactored Depletion --- //
+      if (targetInstance instanceof ResourceNode) {
+        targetInstance.deplete();
+      } else {
+        if (targetInstance.userData.isDepletable) {
+            targetInstance.userData.isInteractable = false;
+            const meshToHide = targetInstance.mesh ?? targetInstance;
+            if (meshToHide instanceof Object3D) meshToHide.visible = false;
+            console.warn("Depleting non-ResourceNode object:", targetName);
+        } else if (targetInstance instanceof InteractableObject) {
+            targetInstance.removeFromWorld();
+        }
       }
+      // --- End Refactored Depletion --- //
     } else {
-      // Log gather fail (inventory full) event
-      if (this.player.game)
-        this.player.game.logEvent(
-          this.player,
-          "gather_fail",
-          `Inventory full, could not gather ${resource}.`,
-          targetName,
-          { resource },
-          targetPosition
-        );
+      if (this.player.game) this.player.game.logEvent( this.player, "gather_fail", `Inventory full, could not gather ${resource}.`, targetName, { resource }, targetPosition );
     }
-    this.player.isGathering = false; // Reset gathering state
-    this.player.gatherAttackTimer = 0; // Reset timer
-    this.player.isPerformingAction = false; // Also reset performing action if gather uses it
-    this.player.actionType = "none";
-    if (this.player.attackAction && this.player.attackAction.isRunning()) {
-      this.player.attackAction.stop(); // Stop attack animation if it was running
-      if (this.player.idleAction) this.player.idleAction.reset().play();
-    }
+
+    // Reset active gather state in InteractionSystem
     this.activeGather = null;
     this.hidePrompt();
     this.currentTarget = null;
     this.currentTargetMesh = null;
+
+    // Switch player state back to Idle (FSM handles animation/flag resets)
+    if (this.player.currentState === 'Gathering') {
+        this.player.switchState('Idle');
+    }
   }
 
   cancelGatherAction(): void {
     if (!this.activeGather) return;
-    const targetName =
-      this.activeGather.targetInstance.name ||
-      this.activeGather.targetInstance.id;
-    const targetPosition = (
-      this.activeGather.targetInstance.mesh ?? this.activeGather.targetInstance
-    ).position;
-    // Log gather cancel event
-    if (this.player.game)
-      this.player.game.logEvent(
-        this.player,
-        "gather_cancel",
-        `Gathering ${this.activeGather.resource} cancelled.`,
-        targetName,
-        { resource: this.activeGather.resource },
-        targetPosition
-      );
+    const targetName = this.activeGather.targetInstance.name || this.activeGather.targetInstance.id;
+    const targetPosition = (this.activeGather.targetInstance.mesh ?? this.activeGather.targetInstance).position;
 
-    this.player.isGathering = false; // Reset gathering state
-    this.player.gatherAttackTimer = 0; // Reset timer
-    this.player.isPerformingAction = false; // Also reset performing action
-    this.player.actionType = "none";
-    if (this.player.attackAction && this.player.attackAction.isRunning()) {
-      this.player.attackAction.stop(); // Stop attack animation
-      // Optionally fade back to idle/walk
-      if (this.player.idleAction) this.player.idleAction.reset().play();
-    }
+    if (this.player.game) this.player.game.logEvent( this.player, "gather_cancel", `Gathering ${this.activeGather.resource} cancelled.`, targetName, { resource: this.activeGather.resource }, targetPosition );
+
+    // Reset active gather state in InteractionSystem
     this.activeGather = null;
     this.hidePrompt();
+
+    // Switch player state back to Idle (FSM handles animation/flag resets)
+    if (this.player.currentState === 'Gathering') {
+        this.player.switchState('Idle');
+    }
   }
 
   showPrompt(text: string, duration: number | null = null): void {
@@ -563,84 +537,91 @@ Respond to the player in brief 1-2 sentences.
     this.chatTarget = target;
     this.chatContainer.classList.remove("hidden");
     this.chatInput.value = "";
-    this.chatInput.focus(); // Focus might bring up virtual keyboard
+    this.chatInput.focus();
 
-    // Define bound handlers if they don't exist
     if (!this.boundSendMessage) {
       this.boundSendMessage = async () => {
-        if (!this.chatTarget || !this.chatInput) return;
+        if (!this.chatTarget || !this.chatInput) return; // Check chatTarget still exists
 
         const message = this.chatInput.value.trim();
         if (!message) return;
-        this.player.showTemporaryMessage(message);
 
-        this.chatInput.value = "";
-        this.chatInput.disabled = true; // Disable input while waiting for response
+        // Use EntityDisplayManager immediately for player message
+        this.game.entityDisplayManager?.showTemporaryMessage(this.player, message);
 
-        // 2. Log player's message
+        this.chatInput.value = ""; // Clear input
+        this.chatInput.disabled = true; // Disable while waiting
+
+        const currentChatTarget = this.chatTarget; // Capture target at start
+        if (!currentChatTarget) return; // Exit if target already null
+
+        // Log player message using captured target
         this.game.logEvent(
           this.player,
           "chat",
-          `${this.player.name} said "${message}" to ${this.chatTarget.name}.`,
-          this.chatTarget,
+          `${this.player.name} said "${message}" to ${currentChatTarget.name}.`,
+          currentChatTarget, // Use captured target
           { message: message },
           this.player.mesh!.position
         );
 
-        // 3. Generate prompt and call API
-        const prompt = this.generateChatPrompt(this.chatTarget, message);
+        const prompt = this.generateChatPrompt(currentChatTarget, message); // Use captured target
+
         try {
           const responseJson = await sendToGemini(prompt);
           let npcMessage = "Hmm....";
           if (responseJson) {
             const parsedResponse = JSON.parse(responseJson)["response"];
             npcMessage = parsedResponse?.trim() || "Hmm....";
-            console.log("NPC response:", npcMessage);
           }
 
-          this.chatTarget.showTemporaryMessage(npcMessage);
-          this.chatTarget.game?.logEvent(
-            this.chatTarget,
+          // Use captured target for displaying response and logging
+          this.game.entityDisplayManager?.showTemporaryMessage(currentChatTarget, npcMessage);
+          this.game.logEvent(
+            currentChatTarget,
             "chat",
-            `${this.chatTarget.name} said "${npcMessage}" to ${this.player.name}.`,
+            `${currentChatTarget.name} said "${npcMessage}" to ${this.player.name}.`,
             this.player,
             { message: npcMessage },
-            this.chatTarget.mesh!.position
+            currentChatTarget.mesh!.position
           );
+          this.game.checkQuestCompletion(currentChatTarget, npcMessage);
 
-          // Add quest completion check here
-          this.game.checkQuestCompletion(this.chatTarget, npcMessage);
         } catch (error) {
           console.error("Error during chat API call:", error);
-          this.chatTarget.showTemporaryMessage("I... don't know what to say.");
+          // Use captured target for displaying error and logging
+          this.game.entityDisplayManager?.showTemporaryMessage(currentChatTarget, "I... don't know what to say.");
           this.game.logEvent(
-            this.chatTarget,
+            currentChatTarget,
             "chat_error",
-            `${this.chatTarget.name} failed to respond to ${this.player.name}.`,
+            `${currentChatTarget.name} failed to respond to ${this.player.name}.`,
             this.player,
             { error: (error as Error).message },
-            this.chatTarget.mesh!.position
+            currentChatTarget.mesh!.position
           );
         } finally {
-          this.chatInput.disabled = false; // Re-enable input
-          this.chatInput.focus();
+          // Close interface and re-enable input
+          this.closeChatInterface();
+          if (this.chatInput) { // Check if input still exists
+            this.chatInput.disabled = false;
+            this.chatInput.focus();
+          }
         }
       };
     }
 
     if (!this.boundHandleChatKeyDown) {
       this.boundHandleChatKeyDown = (e: KeyboardEvent) => {
-        if (e.key === "Enter" && this.boundSendMessage) {
+        // Only trigger send on Enter, DO NOT close here anymore
+        if (e.key === "Enter" && this.boundSendMessage && !this.chatInput?.disabled) {
           this.boundSendMessage();
-          this.closeChatInterface();
+          // REMOVED: this.closeChatInterface();
         }
       };
     }
 
     if (!this.boundCloseChat) {
-      this.boundCloseChat = () => {
-        this.closeChatInterface();
-      };
+      this.boundCloseChat = () => { this.closeChatInterface(); };
     }
 
     // Add event listeners using bound handlers
@@ -652,23 +633,24 @@ Respond to the player in brief 1-2 sentences.
     if (!this.isChatOpen || !this.chatContainer || !this.chatInput) return;
 
     this.isChatOpen = false;
+    // Set chatTarget to null *after* potential use in finally block
+    const targetBeingClosed = this.chatTarget; // Keep reference if needed for final cleanup
     this.chatTarget = null;
+
     this.chatContainer.classList.add("hidden");
     this.game.setPauseState(false); // Unpause game
 
     if (this.boundHandleChatKeyDown) {
-      this.chatInput.removeEventListener(
-        "keydown",
-        this.boundHandleChatKeyDown
-      );
+      this.chatInput.removeEventListener("keydown", this.boundHandleChatKeyDown);
     }
+    // Remove other listeners if added (e.g., close button)
   }
 }
 
 export class Physics {
   player: Character;
   collidableObjects: Object3D[];
-  collisionCheckRadiusSq: number = 20 * 20;
+  collisionCheckRadiusSq: number = PHYSICS_COLLISION_CHECK_RADIUS * PHYSICS_COLLISION_CHECK_RADIUS;
   private overlap = new Vector3();
   private centerPlayer = new Vector3();
   private centerObject = new Vector3();
@@ -791,17 +773,17 @@ export class Physics {
 export class ThirdPersonCamera {
   camera: PerspectiveCamera;
   target: Object3D;
-  idealOffset: Vector3 = new Vector3(0, 2.5, -2.5);
-  minOffsetDistance: number = 1.5;
-  maxOffsetDistance: number = 12.0;
-  pitchAngle: number = 0.15;
-  minPitch: number = -Math.PI / 3;
-  maxPitch: number = Math.PI / 2.5;
-  pitchSensitivity: number = 0.0025;
-  lerpAlphaPositionBase: number = 0.05;
-  lerpAlphaLookatBase: number = 0.1;
+  idealOffset: Vector3 = new Vector3(0, CAMERA_IDEAL_OFFSET_Y, CAMERA_IDEAL_OFFSET_Z);
+  minOffsetDistance: number = CAMERA_MIN_OFFSET_DISTANCE;
+  maxOffsetDistance: number = CAMERA_MAX_OFFSET_DISTANCE;
+  pitchAngle: number = CAMERA_INITIAL_PITCH_ANGLE;
+  minPitch: number = CAMERA_MIN_PITCH;
+  maxPitch: number = CAMERA_MAX_PITCH;
+  pitchSensitivity: number = CAMERA_PITCH_SENSITIVITY;
+  lerpAlphaPositionBase: number = CAMERA_LERP_ALPHA_POSITION_BASE;
+  lerpAlphaLookatBase: number = CAMERA_LERP_ALPHA_LOOKAT_BASE;
   collisionRaycaster: Raycaster;
-  collisionOffset: number = 0.3;
+  collisionOffset: number = CAMERA_COLLISION_OFFSET;
   currentPosition: Vector3;
   currentLookat: Vector3;
   private targetPosition = new Vector3();
@@ -908,7 +890,7 @@ export class Controls {
   keys: KeyState = {};
   mouse: MouseState = { x: 0, y: 0, dx: 0, dy: 0, buttons: {} };
   isPointerLocked: boolean = false;
-  playerRotationSensitivity: number = 0.0025;
+  playerRotationSensitivity: number = CONTROLS_PLAYER_ROTATION_SENSITIVITY;
   moveState: MoveState = {
     forward: 0,
     right: 0,

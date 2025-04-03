@@ -1,44 +1,45 @@
 // File: /src/main.ts
 import * as THREE from "three";
 import {
+  WebGLRenderer,
   Scene,
   PerspectiveCamera,
-  WebGLRenderer,
   Clock,
   Vector3,
   Color,
-  Fog,
+  Box3,
   Mesh,
-  PlaneGeometry,
-  MeshLambertMaterial,
-  AmbientLight,
-  DirectionalLight,
-  HemisphereLight,
-  BoxGeometry,
-  MeshBasicMaterial,
-  DoubleSide,
-  PCFSoftShadowMap,
-  MathUtils,
   Object3D,
   Group,
   AnimationClip,
-  Vector2,
-  SphereGeometry, // Added for particles
-  TorusGeometry,
-  CircleGeometry,
+  MeshLambertMaterial,
+  MeshBasicMaterial,
+  HemisphereLight,
+  DirectionalLight,
+  PlaneGeometry,
   MeshPhongMaterial,
+  MathUtils,
+  Raycaster,
   PointsMaterial,
+  Points,
   BufferGeometry,
-  BufferAttribute,
-  CanvasTexture,
+  Float32BufferAttribute,
+  TorusGeometry,
+  Fog,
+  AmbientLight,
+  BoxGeometry,
+  DoubleSide,
+  PCFSoftShadowMap,
+  SphereGeometry,
+  CircleGeometry,
   TextureLoader,
-  Box3,
+  CanvasTexture,
 } from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { SimplexNoise } from "three/examples/jsm/math/SimplexNoise.js";
 import WebGL from "three/examples/jsm/capabilities/WebGL.js";
-import { Character, Entity } from "./entities"; // Removed Observation import
-import { createTree, createRock, createHerb } from "./objects";
+import { Character, Entity } from "./entities";
 import {
   InteractionSystem,
   Physics,
@@ -46,17 +47,29 @@ import {
   Controls,
 } from "./system";
 import { HUD, InventoryDisplay, JournalDisplay, Minimap } from "./ui";
+import { EntityDisplayManager } from "./ui/EntityDisplayManager";
+import { InteractableObject, createTree, createRock, createHerb, ResourceNode } from "./objects";
+import { MobileControls } from "./mobileControls";
+import { AIController } from "./ai";
+
+// Updated imports from ./core/*
 import {
-  Inventory,
-  EventLog,
+  Quest,
+  EntityUserData,
+  UpdateOptions,
+  InteractionResult,
+  GameEvent,
+  InventoryItem,
+  EventEntry,
+} from "./core/types";
+import { Inventory } from "./core/Inventory";
+import { EventLog } from "./core/EventLog";
+import {
   getTerrainHeight,
   randomFloat,
   smoothstep,
-  EventEntry,
-  Quest,
-} from "./ultils";
-import { AIController } from "./ai";
-import { MobileControls } from "./mobileControls"; // Import MobileControls
+} from "./core/utils";
+import { Colors, getNextEntityId } from "./core/constants";
 
 const WORLD_SIZE = 100;
 const TERRAIN_SEGMENTS = 15;
@@ -151,7 +164,7 @@ function populateEnvironment(
   entities: Array<any>,
   inventory: Inventory,
   models: Record<string, { scene: Group; animations: AnimationClip[] }>,
-  gameInstance: Game // Added gameInstance
+  gameInstance: Game
 ): void {
   const halfSize = worldSize / 2;
   const villageCenter = new Vector3(5, 0, 10);
@@ -220,7 +233,7 @@ function populateEnvironment(
     hunterRex.aiController.persona = hunterRex.persona;
 
   const addObject = (
-    creator: (pos: Vector3, ...args: any[]) => Group,
+    creator: (pos: Vector3, ...args: any[]) => ResourceNode,
     count: number,
     minDistSq: number,
     ...args: any[]
@@ -230,15 +243,27 @@ function populateEnvironment(
       const z = randomFloat(-halfSize * 0.95, halfSize * 0.95);
       const distSq = (x - villageCenter.x) ** 2 + (z - villageCenter.z) ** 2;
       if (distSq < minDistSq) continue;
-      const obj = creator(new Vector3(x, 0, z), ...args);
+
+      const resourceNode = creator(new Vector3(x, 0, z), ...args);
+      if (!resourceNode.mesh) continue;
+
       const height = getTerrainHeight(scene, x, z);
-      obj.position.y = height;
-      if (obj.name === "Herb Plant") obj.position.y = height + 0.1;
-      scene.add(obj);
-      if (obj.userData.isCollidable) collidableObjects.push(obj);
-      if (obj.userData.isInteractable) interactableObjects.push(obj);
-      entities.push(obj);
-      obj.userData.id = `${obj.name}_${obj.uuid.substring(0, 6)}`;
+      resourceNode.mesh.position.y = height;
+      if (resourceNode.name === "Herb Plant") {
+        // Herb position is already adjusted in createHerb
+      } else {
+        resourceNode.mesh.position.y = height;
+      }
+      resourceNode.position.copy(resourceNode.mesh.position);
+      resourceNode.userData.boundingBox = new Box3().setFromObject(resourceNode.mesh);
+
+      scene.add(resourceNode.mesh);
+
+      if (resourceNode.userData.isCollidable) {
+        collidableObjects.push(resourceNode.mesh);
+      }
+      interactableObjects.push(resourceNode);
+      entities.push(resourceNode);
     }
   };
   addObject(createTree, 100, 25 * 25);
@@ -318,7 +343,7 @@ export class Game {
   activeCharacter: Character | null = null;
   thirdPersonCamera: ThirdPersonCamera | null = null;
   controls: Controls | null = null;
-  mobileControls: MobileControls | null = null; // Added mobile controls instance
+  mobileControls: MobileControls | null = null;
   physics: Physics | null = null;
   inventory: Inventory | null = null;
   interactionSystem: InteractionSystem | null = null;
@@ -326,13 +351,15 @@ export class Game {
   minimap: Minimap | null = null;
   inventoryDisplay: InventoryDisplay | null = null;
   journalDisplay: JournalDisplay | null = null;
+  entityDisplayManager: EntityDisplayManager | null = null;
   entities: Array<any> = [];
   collidableObjects: Object3D[] = [];
   interactableObjects: Array<any> = [];
   isPaused: boolean = false;
   intentContainer: HTMLElement | null = null;
-  particleEffects: Group[] = []; // Array to hold active particle effects
-  audioElement: HTMLAudioElement | null = null; // For background music
+  particleEffects: THREE.Points[] = [];
+  audioElement: HTMLAudioElement | null = null;
+  quests: Quest[] | undefined;
 
   // Portal variables
   exitPortalGroup: THREE.Group | null = null;
@@ -347,7 +374,8 @@ export class Game {
   startPortalRefUrl: string | null = null;
   startPortalOriginalParams: URLSearchParams | null = null;
   hasEnteredFromPortal: boolean = false;
-  quests: Quest[] | undefined;
+
+  private particlePool: THREE.Points[] = [];
 
   constructor() {}
 
@@ -356,6 +384,10 @@ export class Game {
     this.initRenderer();
     this.initScene();
     this.initCamera();
+
+    // Initialize EntityDisplayManager AFTER scene and camera are ready
+    this.entityDisplayManager = new EntityDisplayManager(this, this.scene!, this.camera!);
+
     this.initInventory();
     this.initAudio();
     const models = await loadModels();
@@ -366,14 +398,14 @@ export class Game {
     this.startPortalOriginalParams = urlParams; // Store all original params
 
     this.initPlayer(models);
-    this.initControls(); // Initialize desktop controls first
-    this.initMobileControls(); // Initialize mobile controls (will check if needed)
+    this.initControls();
+    this.initMobileControls();
     this.initPhysics();
     this.initEnvironment(models);
     this.initSystems();
     this.initQuests();
     this.initUI();
-    this.setupUIControls(); // Setup desktop keybinds
+    this.setupUIControls();
 
     this.createExitPortal();
     if (this.hasEnteredFromPortal && this.startPortalRefUrl) {
@@ -385,11 +417,10 @@ export class Game {
       }
     }
 
+    // Add all relevant entities (Characters) to the display manager
     this.entities.forEach((entity) => {
       if (entity instanceof Character) {
-        entity.game = this;
-        entity.initIntentDisplay();
-        entity.initNameDisplay(); // Add this line
+        this.entityDisplayManager!.addEntity(entity);
       }
     });
 
@@ -764,6 +795,7 @@ export class Game {
       this.activeCharacter.update(deltaTime, {
         moveState: this.controls!.moveState,
         collidables: this.collidableObjects,
+        camera: this.camera!,
       });
       this.physics!.update(deltaTime);
 
@@ -774,6 +806,7 @@ export class Game {
           entity.update(deltaTime, {
             moveState: aiMoveState,
             collidables: this.collidableObjects,
+            camera: this.camera!,
           });
         } else if (entity.update && !(entity instanceof Character)) {
           entity.update(deltaTime);
@@ -794,6 +827,8 @@ export class Game {
       this.checkPortalCollisions();
     }
 
+    // Update UI Systems
+    this.entityDisplayManager!.update();
     this.updateParticleEffects(elapsedTime);
     this.hud!.update();
     this.minimap!.update();
@@ -1178,121 +1213,128 @@ export class Game {
   // --- End Portal Methods ---
 
   spawnParticleEffect(position: Vector3, colorName: "red" | "green"): void {
-    if (!this.scene || !this.clock) return;
+    const particleCount = 50;
+    const lifeSpan = 0.6;
 
-    const particleCount = 10;
-    const particleSize = 0.07;
-    const effectDuration = 1; // seconds
-    const spreadRadius = 0.3;
-    const particleSpeed = 1.5;
+    let effect: THREE.Points | null = null;
+    let geometry: THREE.BufferGeometry | null = null;
+    let material: THREE.PointsMaterial | null = null;
 
-    const color = colorName === "red" ? 0xff0000 : 0x00ff00;
+    // Try to reuse from pool
+    if (this.particlePool.length > 0) {
+        effect = this.particlePool.pop()!;
+        geometry = effect.geometry as THREE.BufferGeometry;
+        material = effect.material as THREE.PointsMaterial;
 
-    const effectGroup = new Group();
-    effectGroup.position.copy(position);
+        // Reset effect state
+        effect.position.copy(position);
+        effect.userData = {
+            startTime: this.clock!.getElapsedTime(),
+            life: lifeSpan
+        };
+        effect.visible = true;
+        if (material) {
+            material.opacity = 1.0; // Reset opacity
+            // Update color - Assuming colors don't change frequently, maybe pre-create red/green materials?
+            // For now, just update the color directly
+            material.color.set(colorName === "red" ? 0xff0000 : 0x00ff00);
+            material.needsUpdate = true;
+        }
+        // Ensure attributes are updated if necessary (less critical if just reusing)
+        // geometry.attributes.position.needsUpdate = true; 
+        // geometry.attributes.color.needsUpdate = true;
 
-    const geometry = new SphereGeometry(particleSize, 4, 2); // Simple geometry
+    } else {
+        // Create new effect if pool is empty
+        geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(particleCount * 3);
+        const colors = new Float32Array(particleCount * 3);
+        const velocities = new Float32Array(particleCount * 3);
 
-    for (let i = 0; i < particleCount; i++) {
-      const material = new MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 1.0,
-      });
-      const particle = new Mesh(geometry, material);
+        const color = new THREE.Color(colorName === "red" ? 0xff0000 : 0x00ff00);
 
-      // Random initial position within a small sphere
-      const initialOffset = new Vector3(
-        (Math.random() - 0.5) * spreadRadius,
-        (Math.random() - 0.5) * spreadRadius,
-        (Math.random() - 0.5) * spreadRadius
-      );
-      particle.position.copy(initialOffset);
+        for (let i = 0; i < particleCount; i++) {
+            const i3 = i * 3;
+            positions[i3] = 0;
+            positions[i3 + 1] = 0;
+            positions[i3 + 2] = 0;
 
-      // Store direction and speed in userData
-      particle.userData.velocity = initialOffset
-        .clone()
-        .normalize()
-        .multiplyScalar(particleSpeed * (0.5 + Math.random() * 0.5));
+            colors[i3] = color.r;
+            colors[i3 + 1] = color.g;
+            colors[i3 + 2] = color.b;
 
-      effectGroup.add(particle);
+            // Initial velocity (random outward burst)
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos(2 * Math.random() - 1);
+            const speed = Math.random() * 3 + 1;
+            velocities[i3] = Math.sin(phi) * Math.cos(theta) * speed;
+            velocities[i3 + 1] = Math.sin(phi) * Math.sin(theta) * speed;
+            velocities[i3 + 2] = Math.cos(phi) * speed;
+        }
+
+        geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+        geometry.setAttribute("velocity", new THREE.BufferAttribute(velocities, 3)); // Store velocity
+
+        material = new THREE.PointsMaterial({
+            size: 0.1,
+            vertexColors: true,
+            transparent: true,
+            opacity: 1.0,
+            sizeAttenuation: true,
+            depthWrite: false, // Often good for transparent particles
+        });
+
+        effect = new THREE.Points(geometry, material);
+        effect.position.copy(position);
+        effect.userData = {
+            startTime: this.clock!.getElapsedTime(),
+            life: lifeSpan
+        };
     }
 
-    // Store effect metadata
-    effectGroup.userData.startTime = this.clock.elapsedTime;
-    effectGroup.userData.duration = effectDuration;
-
-    this.scene.add(effectGroup);
-    this.particleEffects.push(effectGroup);
+    if (effect && this.scene) {
+        this.scene.add(effect);
+        this.particleEffects.push(effect); // Add to active list
+    }
   }
 
   updateParticleEffects(elapsedTime: number): void {
-    if (!this.scene || !this.clock) return;
-
-    const effectsToRemove: Group[] = [];
-    const particleDeltaTime = this.isPaused ? 0 : this.clock!.getDelta(); // Use 0 delta if paused
+    const currentTime = this.clock!.getElapsedTime();
+    const gravity = -5; // Simple downward force for particles
 
     for (let i = this.particleEffects.length - 1; i >= 0; i--) {
       const effect = this.particleEffects[i];
-      const effectElapsedTime = elapsedTime - effect.userData.startTime;
-      const progress = Math.min(
-        1.0,
-        effectElapsedTime / effect.userData.duration
-      );
+      const elapsedTime = currentTime - effect.userData.startTime;
+      effect.userData.life -= elapsedTime;
 
-      if (progress >= 1.0) {
-        effectsToRemove.push(effect);
-        this.particleEffects.splice(i, 1);
-        continue;
+      if (effect.userData.life <= 0) {
+        // Instead of removing and disposing, make invisible and move to pool
+        effect.visible = false;
+        this.particlePool.push(effect); // Add to inactive pool
+        this.particleEffects.splice(i, 1); // Remove from active list
+        continue; // Skip further updates for this effect
       }
 
-      // Animate individual particles only if not paused
-      if (!this.isPaused) {
-        effect.children.forEach((particle) => {
-          if (particle instanceof Mesh && particle.userData.velocity) {
-            // Move particle outwards
-            particle.position.addScaledVector(
-              particle.userData.velocity,
-              particleDeltaTime
-            ); // Use delta time for movement
-          }
-        });
-      }
+      // Update opacity based on remaining life
+      const material = effect.material as THREE.PointsMaterial;
+      material.opacity = Math.max(0, effect.userData.life / 0.6); // Fade out
+      material.needsUpdate = true; // Important if material properties change
 
-      // Update fade effect regardless of pause state
-      effect.children.forEach((particle) => {
-        if (particle instanceof Mesh) {
-          // Fade out particle
-          if (Array.isArray(particle.material)) {
-            particle.material.forEach((mat) => {
-              if (mat instanceof MeshBasicMaterial) {
-                mat.opacity = 1.0 - progress;
-                mat.needsUpdate = true;
-              }
-            });
-          } else if (particle.material instanceof MeshBasicMaterial) {
-            particle.material.opacity = 1.0 - progress;
-            particle.material.needsUpdate = true;
-          }
-        }
-      });
+      // Update particle positions based on velocity and gravity
+      const geometry = effect.geometry as THREE.BufferGeometry;
+      const positions = geometry.attributes.position.array as Float32Array;
+      const velocities = geometry.attributes.velocity.array as Float32Array;
+
+      for (let j = 0; j < positions.length; j += 3) {
+          velocities[j+1] += gravity * elapsedTime; // Apply gravity to Y velocity
+
+          positions[j] += velocities[j] * elapsedTime;
+          positions[j+1] += velocities[j+1] * elapsedTime;
+          positions[j+2] += velocities[j+2] * elapsedTime;
+      }
+      geometry.attributes.position.needsUpdate = true;
     }
-
-    // Remove completed effects from the scene
-    effectsToRemove.forEach((effect) => {
-      // Dispose geometries and materials
-      effect.traverse((child) => {
-        if (child instanceof Mesh) {
-          child.geometry?.dispose();
-          if (Array.isArray(child.material)) {
-            child.material.forEach((mat) => mat.dispose());
-          } else {
-            child.material?.dispose();
-          }
-        }
-      });
-      this.scene!.remove(effect);
-    });
   }
 
   worldToScreenPosition(worldPos: Vector3): { x: number; y: number } | null {
@@ -1382,10 +1424,9 @@ export class Game {
     newPlayer.userData.isPlayer = true;
     newPlayer.userData.isNPC = false;
 
-    // Update displays after flag changes
-    oldPlayer.initIntentDisplay(); // Add displays for old player (now NPC)
-    oldPlayer.initNameDisplay();
-    newPlayer.removeDisplays(); // Remove displays for new player
+    // Update displays before changing activeCharacter
+    this.entityDisplayManager?.removeEntity(newPlayer);
+    this.entityDisplayManager?.addEntity(oldPlayer);
 
     this.activeCharacter = newPlayer;
 

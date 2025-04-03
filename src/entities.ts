@@ -13,23 +13,49 @@ import {
   AnimationClip,
   AnimationAction,
   LoopOnce,
-  Sprite, // Added Sprite
+  Sprite,
   CanvasTexture,
   SpriteMaterial,
+  Camera,
 } from "three";
 import {
-  EventLog,
-  Inventory,
   EntityUserData,
   UpdateOptions,
-  smoothQuaternionSlerp,
-  getNextEntityId,
   MoveState,
-  getTerrainHeight,
-  EventEntry,
-  GameEvent,
   InteractionResult,
-} from "./ultils"; // Added InteractionResult
+  EventEntry,
+} from "./core/types";
+import {
+  smoothQuaternionSlerp,
+  getTerrainHeight,
+} from "./core/utils";
+import { EventLog } from "./core/EventLog";
+import { Inventory } from "./core/Inventory";
+import {
+  Colors,
+  getNextEntityId,
+  CHARACTER_HEIGHT,
+  CHARACTER_RADIUS,
+  CHARACTER_MAX_HEALTH,
+  CHARACTER_MAX_STAMINA,
+  CHARACTER_WALK_SPEED,
+  CHARACTER_RUN_SPEED,
+  CHARACTER_JUMP_FORCE,
+  CHARACTER_STAMINA_DRAIN_RATE,
+  CHARACTER_STAMINA_REGEN_RATE,
+  CHARACTER_STAMINA_JUMP_COST,
+  CHARACTER_EXHAUSTION_THRESHOLD,
+  CHARACTER_GRAVITY,
+  CHARACTER_GROUND_CHECK_DISTANCE,
+  CHARACTER_GATHER_ATTACK_INTERVAL,
+  AI_SEARCH_RADIUS,
+  AI_ROAM_RADIUS,
+  CHARACTER_ATTACK_RANGE,
+  CHARACTER_PLAYER_ATTACK_DAMAGE,
+  CHARACTER_NPC_ATTACK_DAMAGE,
+  CHARACTER_SELF_HEAL_AMOUNT,
+} from "./core/constants";
+
 import { Raycaster } from "three";
 import type { Game } from "./main";
 import { AIController } from "./ai";
@@ -47,14 +73,6 @@ export class Entity {
   isDead: boolean;
   userData: EntityUserData;
   game: Game | null = null;
-  intentCanvas: HTMLCanvasElement | null = null;
-  intentContext: CanvasRenderingContext2D | null = null;
-  intentTexture: CanvasTexture | null = null;
-  intentSprite: Sprite | null = null;
-  nameCanvas: HTMLCanvasElement | null = null;
-  nameContext: CanvasRenderingContext2D | null = null;
-  nameTexture: CanvasTexture | null = null;
-  nameSprite: Sprite | null = null;
   aiController: AIController | null = null;
   rayCaster: Raycaster | null = null;
 
@@ -66,8 +84,8 @@ export class Entity {
     this.mesh.position.copy(position);
     this.velocity = new Vector3();
     this.boundingBox = new Box3();
-    this.health = 100;
-    this.maxHealth = 100;
+    this.health = CHARACTER_MAX_HEALTH;
+    this.maxHealth = CHARACTER_MAX_HEALTH;
     this.isDead = false;
 
     this.userData = {
@@ -79,6 +97,7 @@ export class Entity {
       isInteractable: false,
       id: this.id,
     };
+    this.rayCaster = new Raycaster();
     if (this.mesh) {
       this.mesh.userData = this.userData;
       this.mesh.name = this.name;
@@ -88,193 +107,10 @@ export class Entity {
 
   update(deltaTime: number, options: UpdateOptions = {}): void {}
 
-  initNameDisplay(): void {
-    if (this.userData.isPlayer) return;
-
-    if (!this.nameCanvas) {
-      this.nameCanvas = document.createElement("canvas");
-      this.nameCanvas.width = 200;
-      this.nameCanvas.height = 30; // Smaller height for name
-      this.nameContext = this.nameCanvas.getContext("2d")!;
-      this.nameTexture = new CanvasTexture(this.nameCanvas);
-    }
-
-    if (!this.nameSprite) {
-      const material = new SpriteMaterial({ map: this.nameTexture });
-      this.nameSprite = new Sprite(material);
-      const aspectRatio = this.nameCanvas.width / this.nameCanvas.height;
-      this.nameSprite.scale.set(aspectRatio * 0.3, 0.3, 1); // Smaller scale than intent
-      this.nameSprite.position.set(0, CHARACTER_HEIGHT + 0.15, 0); // Below intent display
-      this.mesh!.add(this.nameSprite);
-    }
-
-    this.updateNameDisplay(this.name);
-  }
-  updateNameDisplay(name: string): void {
-    if (!this.nameContext || !this.nameCanvas || !this.nameTexture) return;
-
-    const ctx = this.nameContext;
-    const canvas = this.nameCanvas;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.font = "16px Arial";
-    ctx.fillStyle = "blue";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(name, canvas.width / 2, canvas.height / 2);
-
-    this.nameTexture.needsUpdate = true;
-  }
-
-  initIntentDisplay(): void {
-    this.rayCaster = new Raycaster();
-    if (this.game?.camera) {
-      this.rayCaster.camera = this.game.camera;
-    }
-
-    if (!this.intentCanvas) {
-      this.intentCanvas = document.createElement("canvas");
-      this.intentCanvas.width = 200;
-      this.intentCanvas.height = 70;
-      this.intentContext = this.intentCanvas.getContext("2d")!;
-      this.intentTexture = new CanvasTexture(this.intentCanvas);
-    }
-
-    if (!this.intentSprite) {
-      const material = new SpriteMaterial({ map: this.intentTexture });
-      this.intentSprite = new Sprite(material);
-      const aspectRatio = this.intentCanvas.width / this.intentCanvas.height;
-      this.intentSprite.scale.set(aspectRatio * 0.6, 0.6, 1);
-      this.intentSprite.position.set(0, CHARACTER_HEIGHT + 0.6, 0);
-      this.mesh!.add(this.intentSprite);
-    }
-
-    this.updateIntentDisplay("");
-  }
-  removeDisplays(): void {
-    if (this.intentSprite && this.mesh) {
-      this.mesh.remove(this.intentSprite);
-      this.intentSprite = null;
-    }
-    if (this.nameSprite && this.mesh) {
-      this.mesh.remove(this.nameSprite);
-      this.nameSprite = null;
-    }
-  }
-
-  updateIntentDisplay(text: string): void {
-    if (!this.intentContext || !this.intentCanvas || !this.intentTexture)
-      return;
-
-    if (!text || text.trim() === "") {
-      if (this.intentSprite) {
-        this.intentSprite.visible = false;
-      }
-      return;
-    } else {
-      if (this.intentSprite) {
-        this.intentSprite.visible = true;
-      }
-    }
-
-    const ctx = this.intentContext;
-    const canvas = this.intentCanvas;
-    const maxWidth = canvas.width - 10; // Padding
-    const lineHeight = 20; // Slightly more than font size
-    const x = canvas.width / 2;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)"; // Slightly darker background
-
-    const borderRadius = 10; // Adjust this value to change the corner radius
-    ctx.beginPath();
-    ctx.roundRect(0, 0, canvas.width, canvas.height, borderRadius);
-    ctx.fill();
-
-    ctx.font = "13px Arial"; // Reduced font size
-    ctx.fillStyle = "white";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    // Basic Text Wrapping Logic
-    const words = text.split(" ");
-    let lines = [];
-    let currentLine = "";
-
-    for (let i = 0; i < words.length; i++) {
-      const testLine = currentLine + words[i] + " ";
-      const metrics = ctx.measureText(testLine);
-      const testWidth = metrics.width;
-      if (testWidth > maxWidth && i > 0) {
-        lines.push(currentLine.trim());
-        currentLine = words[i] + " ";
-      } else {
-        currentLine = testLine;
-      }
-    }
-    lines.push(currentLine.trim());
-
-    // Calculate starting Y position for vertical centering
-    const totalTextHeight = lines.length * lineHeight;
-    let startY = (canvas.height - totalTextHeight) / 2 + lineHeight / 2;
-
-    // Draw lines
-    for (let i = 0; i < lines.length; i++) {
-      // Prevent drawing too many lines if text is excessively long
-      if (startY + i * lineHeight > canvas.height - lineHeight / 2) {
-        // Optional: Indicate truncation if needed
-        if (i > 0) {
-          // Check if we drew at least one line
-          const lastLineIndex = i - 1;
-          const lastLineText = lines[lastLineIndex];
-          // Remove last drawn line and replace with ellipsis
-          ctx.clearRect(
-            0,
-            startY + lastLineIndex * lineHeight - lineHeight / 2,
-            canvas.width,
-            lineHeight
-          );
-          ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-          ctx.fillRect(
-            0,
-            startY + lastLineIndex * lineHeight - lineHeight / 2,
-            canvas.width,
-            lineHeight
-          );
-          ctx.fillStyle = "white";
-          ctx.fillText(
-            lastLineText.substring(0, lastLineText.length - 1) + "...",
-            x,
-            startY + lastLineIndex * lineHeight
-          );
-        }
-        break;
-      }
-      ctx.fillText(lines[i], x, startY + i * lineHeight);
-    }
-
-    this.intentTexture.needsUpdate = true;
-  }
-
-  showTemporaryMessage(message: string, duration: number = 7000): void {
-    if (!this.intentSprite) return;
-    const originalText = this.aiController
-      ? `${this.name}: ${this.aiController.currentIntent}`
-      : "";
-    this.updateIntentDisplay(message);
-    setTimeout(() => {
-      // Check if the AI controller still exists and has an intent before resetting
-      const currentIntentText = this.aiController
-        ? `${this.name}: ${this.aiController.currentIntent}`
-        : "";
-      this.updateIntentDisplay(currentIntentText || originalText); // Fallback to original if no current intent
-    }, duration);
-  }
-
   updateBoundingBox(): void {
     if (!this.mesh) return;
-    const height = this.userData.height ?? 1.8;
-    const radius = this.userData.radius ?? 0.4;
+    const height = this.userData.height ?? CHARACTER_HEIGHT;
+    const radius = this.userData.radius ?? CHARACTER_RADIUS;
     const center = this.mesh.position
       .clone()
       .add(new Vector3(0, height / 2, 0));
@@ -331,9 +167,12 @@ export class Entity {
     this.health = 0;
     this.userData.isCollidable = false;
     this.userData.isInteractable = false;
+    if (this.aiController) this.aiController.aiState = "dead";
+    this.game?.entityDisplayManager?.removeEntity(this);
   }
 
   destroy(): void {
+    this.game?.entityDisplayManager?.removeEntity(this);
     if (!this.mesh || !this.scene) return;
     this.mesh.traverse((child) => {
       if (child instanceof Mesh) {
@@ -352,8 +191,18 @@ export class Entity {
   }
 }
 
-const CHARACTER_HEIGHT = 1.8;
-const CHARACTER_RADIUS = 0.4;
+// Define Character States
+export type CharacterState = 
+  | 'Idle'
+  | 'Walking'
+  | 'Running'
+  | 'Jumping'
+  | 'Falling'
+  | 'Attacking'
+  | 'Healing'
+  | 'Gathering'
+  // | 'Interacting' // Optional future state
+  | 'Dead';
 
 export class Character extends Entity {
   maxStamina: number;
@@ -379,21 +228,18 @@ export class Character extends Entity {
   walkAction?: AnimationAction;
   runAction?: AnimationAction;
   jumpAction?: AnimationAction;
-  attackAction?: AnimationAction; // Can be used for heal animation too
-  isGathering: boolean = false;
+  attackAction?: AnimationAction;
   gatherAttackTimer: number = 0;
-  gatherAttackInterval: number = 1.0;
-  searchRadius: number = 30;
-  roamRadius: number = 10;
+  gatherAttackInterval: number;
+  searchRadius: number;
+  roamRadius: number;
   attackTriggered: boolean = false;
   inventory: Inventory | null;
   game: Game | null = null;
   persona: string = "";
   aiController: AIController | null = null;
   currentAction?: AnimationAction;
-
-  actionType: string = "none"; // 'attack', 'heal', 'gather' etc.
-  isPerformingAction: boolean = false;
+  currentState: CharacterState = 'Idle';
 
   private groundCheckOrigin = new Vector3();
   private groundCheckDirection = new Vector3(0, -1, 0);
@@ -407,24 +253,24 @@ export class Character extends Entity {
     inventory: Inventory | null
   ) {
     super(scene, position, name);
-    this.userData.isCollidable = false;
+    this.userData.isCollidable = true;
     this.userData.isInteractable = true;
     this.userData.interactionType = "talk";
     this.userData.isNPC = true;
-    this.maxHealth = 100;
+    this.maxHealth = CHARACTER_MAX_HEALTH;
     this.health = this.maxHealth;
-    this.maxStamina = 100;
+    this.maxStamina = CHARACTER_MAX_STAMINA;
     this.stamina = this.maxStamina;
-    this.walkSpeed = 4.0;
-    this.runSpeed = 8.0;
-    this.jumpForce = 8.0;
-    this.staminaDrainRate = 15;
-    this.staminaRegenRate = 10;
-    this.staminaJumpCost = 10;
+    this.walkSpeed = CHARACTER_WALK_SPEED;
+    this.runSpeed = CHARACTER_RUN_SPEED;
+    this.jumpForce = CHARACTER_JUMP_FORCE;
+    this.staminaDrainRate = CHARACTER_STAMINA_DRAIN_RATE;
+    this.staminaRegenRate = CHARACTER_STAMINA_REGEN_RATE;
+    this.staminaJumpCost = CHARACTER_STAMINA_JUMP_COST;
     this.canJump = false;
     this.isSprinting = false;
     this.isExhausted = false;
-    this.exhaustionThreshold = 20;
+    this.exhaustionThreshold = CHARACTER_EXHAUSTION_THRESHOLD;
     this.moveState = {
       forward: 0,
       right: 0,
@@ -433,12 +279,15 @@ export class Character extends Entity {
       interact: false,
       attack: false,
     };
-    this.gravity = -25;
+    this.gravity = CHARACTER_GRAVITY;
     this.isOnGround = false;
-    this.groundCheckDistance = 0.15;
+    this.groundCheckDistance = CHARACTER_GROUND_CHECK_DISTANCE;
     this.lastVelocityY = 0;
     this.inventory = inventory;
     this.eventLog = new EventLog(50);
+    this.gatherAttackInterval = CHARACTER_GATHER_ATTACK_INTERVAL;
+    this.searchRadius = AI_SEARCH_RADIUS;
+    this.roamRadius = AI_ROAM_RADIUS;
     const box = new Box3().setFromObject(model);
     const currentHeight = box.max.y - box.min.y;
     const scale = CHARACTER_HEIGHT / currentHeight;
@@ -474,62 +323,138 @@ export class Character extends Entity {
       this.attackAction.setLoop(LoopOnce, 1);
       this.attackAction.clampWhenFinished = true;
     }
-    if (this.idleAction) {
-      this.switchAction(this.idleAction); // Set initial action with fading
-    }
     this.userData.height = CHARACTER_HEIGHT;
     this.userData.radius = CHARACTER_RADIUS;
     this.updateBoundingBox();
+    this.switchState('Idle', true);
 
-    // Updated mixer listener
     this.mixer.addEventListener("finished", (e) => {
-      if (e.action === this.attackAction) {
-        if (this.actionType === "attack") {
-          this.performAttack();
-        } else if (this.actionType === "heal") {
-          // Heal logic already applied in selfHeal
-        }
-        this.isPerformingAction = false;
-        this.actionType = "none";
-        const isMoving =
-          Math.abs(this.moveState.forward) > 0.1 ||
-          Math.abs(this.moveState.right) > 0.1;
-        let targetAction: AnimationAction | undefined;
-        if (isMoving) {
-          targetAction =
-            this.isSprinting && this.runAction
-              ? this.runAction
-              : this.walkAction;
-        } else {
-          targetAction = this.idleAction;
-        }
-        this.switchAction(targetAction);
-      } else if (e.action === this.jumpAction) {
-        // Handled in updateAnimations
-      }
+       this.handleAnimationFinished(e.action);
     });
 
     if (this.userData.isNPC) {
       this.aiController = new AIController(this);
     }
   }
-  switchAction(newAction: AnimationAction | undefined): void {
-    if (newAction === this.currentAction) {
-      if (newAction && !newAction.isRunning()) newAction.play();
+
+  switchState(newState: CharacterState, force: boolean = false): void {
+    if (this.currentState === newState && !force) return;
+
+    const oldState = this.currentState;
+
+    switch (oldState) {
+        case 'Running':
+            this.isSprinting = false;
+            break;
+        case 'Gathering':
+            this.gatherAttackTimer = 0;
+            break;
+        case 'Attacking':
+        case 'Healing':
+            break;
+    }
+
+    this.currentState = newState;
+
+    let targetAnimation: AnimationAction | undefined;
+    switch (newState) {
+        case 'Idle':
+            targetAnimation = this.idleAction;
+            this.velocity.x = 0;
+            this.velocity.z = 0;
+            this.isSprinting = false;
+            break;
+        case 'Walking':
+            targetAnimation = this.walkAction;
+            this.isSprinting = false;
+            break;
+        case 'Running':
+            targetAnimation = this.runAction;
+            this.isSprinting = true;
+            break;
+        case 'Jumping':
+            targetAnimation = this.jumpAction;
+            this.isSprinting = false;
+            break;
+        case 'Falling':
+            targetAnimation = this.idleAction;
+            this.isSprinting = false;
+            break;
+        case 'Attacking':
+            targetAnimation = this.attackAction;
+            this.velocity.x = 0;
+            this.velocity.z = 0;
+            targetAnimation?.reset().play();
+            break;
+        case 'Healing':
+            targetAnimation = this.attackAction;
+            this.velocity.x = 0;
+            this.velocity.z = 0;
+            targetAnimation?.reset().play();
+            break;
+        case 'Gathering':
+            targetAnimation = this.idleAction;
+            this.velocity.x = 0;
+            this.velocity.z = 0;
+            break;
+        case 'Dead':
+            this.currentAction?.stop();
+            targetAnimation = undefined;
+            this.velocity.set(0,0,0);
+            this.isSprinting = false;
+            this.isExhausted = false;
+            break;
+    }
+
+    this.switchAnimation(targetAnimation, force);
+  }
+
+  switchAnimation(newAnimation: AnimationAction | undefined, force: boolean = false): void {
+    if (newAnimation === this.currentAction && !force) {
+      if (newAnimation && !newAnimation.isRunning()) newAnimation.play();
       return;
     }
+
+    const fadeDuration = force ? 0 : 0.2;
+
     if (this.currentAction) {
-      this.currentAction.fadeOut(0.2); // Fade out current animation over 0.2 seconds
+      this.currentAction.fadeOut(fadeDuration);
     }
-    if (newAction) {
-      newAction.reset().fadeIn(0.1).play(); // Fade in new animation
+
+    if (newAnimation) {
+        if (newAnimation === this.jumpAction || newAnimation === this.attackAction) {
+            newAnimation.reset().setLoop(LoopOnce, 1).fadeIn(fadeDuration).play();
+        } else {
+            newAnimation.reset().fadeIn(fadeDuration).play();
+        }
     }
-    this.currentAction = newAction;
+    this.currentAction = newAnimation;
+  }
+
+  handleAnimationFinished(action: AnimationAction): void {
+    if (action === this.attackAction) {
+         if (this.currentState === 'Attacking' || this.currentState === 'Healing') {
+            const isMoving = Math.abs(this.moveState.forward) > 0.1 || Math.abs(this.moveState.right) > 0.1;
+            this.switchState(isMoving ? (this.moveState.sprint && !this.isExhausted ? 'Running' : 'Walking') : 'Idle');
+         }
+    } else if (action === this.jumpAction) {
+        if (this.currentState === 'Jumping') {
+            if (this.isOnGround) {
+                 const isMoving = Math.abs(this.moveState.forward) > 0.1 || Math.abs(this.moveState.right) > 0.1;
+                 this.switchState(isMoving ? (this.moveState.sprint && !this.isExhausted ? 'Running' : 'Walking') : 'Idle');
+            } else {
+                 this.switchState('Falling');
+            }
+        }
+    }
   }
 
   performAttack(): void {
-    const range = 2.0;
-    const damage = this.name === "Player" ? 10 : 5;
+    const range = CHARACTER_ATTACK_RANGE;
+    const damage =
+      this.name === "Player"
+        ? CHARACTER_PLAYER_ATTACK_DAMAGE
+        : CHARACTER_NPC_ATTACK_DAMAGE;
     if (!this.rayCaster || !this.mesh || !this.scene || !this.game) return;
 
     const rayOrigin = this.mesh.position
@@ -544,7 +469,9 @@ export class Character extends Entity {
         entity instanceof Character &&
         entity !== this &&
         !entity.isDead &&
-        entity.mesh !== null
+        entity.mesh !== null &&
+        entity.mesh.visible &&
+        entity.userData?.isCollidable
     );
     const targetMeshes = potentialTargets.map((char) => char.mesh!);
     const intersects = this.rayCaster.intersectObjects(targetMeshes, true);
@@ -571,368 +498,309 @@ export class Character extends Entity {
   }
 
   selfHeal(): void {
-    if (
-      this.isDead ||
-      this.isPerformingAction ||
-      this.health >= this.maxHealth
-    ) {
-      if (this.health >= this.maxHealth) {
-        this.game?.logEvent(
-          this,
-          "heal_fail",
-          `${this.name} is already at full health.`,
-          undefined,
-          {},
-          this.mesh!.position
-        );
-      }
-      return;
+    if (this.isDead || this.currentState === 'Dead' || this.currentState === 'Healing' || this.currentState === 'Attacking' || this.currentState === 'Jumping' || this.currentState === 'Falling' || this.currentState === 'Gathering') return;
+
+    if (this.health >= this.maxHealth) {
+        if (this.game) {
+            this.game.logEvent(
+                this,
+                "heal_fail",
+                `${this.name} is already at full health.`,
+                undefined,
+                {},
+                this.mesh!.position
+            );
+        }
+        return;
     }
 
-    const healAmount = 25; // Amount to heal
+    const healAmount = CHARACTER_SELF_HEAL_AMOUNT;
     const actualHeal = Math.min(healAmount, this.maxHealth - this.health);
 
     if (actualHeal > 0) {
-      this.heal(actualHeal); // Apply the heal immediately
-
-      // Log the event
+      this.heal(actualHeal);
       if (this.game) {
-        this.game.logEvent(
-          this,
-          "self_heal",
-          `${this.name} healed for ${actualHeal} health.`,
-          undefined,
-          { amount: actualHeal },
-          this.mesh!.position
-        );
-        // Spawn heal particles at character's feet/center
-        this.game.spawnParticleEffect(
-          this.mesh!.position.clone().add(
-            new Vector3(0, CHARACTER_HEIGHT / 2, 0)
-          ),
-          "green"
-        );
+          this.game.logEvent(
+            this,
+            "self_heal",
+            `${this.name} healed for ${actualHeal} health.`,
+            undefined,
+            { amount: actualHeal },
+            this.mesh!.position
+          );
+          this.game.spawnParticleEffect(
+            this.mesh!.position.clone().add(new Vector3(0, CHARACTER_HEIGHT / 2, 0)),
+            "green"
+          );
       }
-
-      // Trigger the heal animation (using attackAction slot for now)
-      this.triggerAction("heal");
+      this.switchState('Healing');
     }
   }
 
   handleStamina(deltaTime: number): void {
-    const isMoving = this.moveState.forward !== 0 || this.moveState.right !== 0;
-    this.isSprinting =
-      this.moveState.sprint &&
-      isMoving &&
-      !this.isExhausted &&
-      this.stamina > 0;
-    if (this.isSprinting) {
-      this.stamina -= this.staminaDrainRate * deltaTime;
-      if (this.stamina <= 0) {
-        this.stamina = 0;
-        this.isExhausted = true;
-        this.isSprinting = false;
-        if (this.game)
-          this.game.logEvent(
-            this,
-            "exhausted",
-            `${this.name} is exhausted!`,
-            undefined,
-            {},
-            this.mesh!.position
-          );
-      }
+    if (this.currentState === 'Running') {
+        const isMoving = this.moveState.forward !== 0 || this.moveState.right !== 0;
+        if (isMoving && !this.isExhausted && this.stamina > 0) {
+            this.stamina -= this.staminaDrainRate * deltaTime;
+            if (this.stamina <= 0) {
+                this.stamina = 0;
+                this.isExhausted = true;
+                this.isSprinting = false;
+                this.switchState('Walking');
+                 if (this.game) this.game.logEvent(this, "exhausted", `${this.name} is exhausted!`, undefined, {}, this.mesh!.position);
+            }
+        } else if (!isMoving) {
+             this.switchState('Idle');
+        }
     } else {
       let regenRate = this.staminaRegenRate;
       if (this.isExhausted) {
         regenRate /= 2;
         if (this.stamina >= this.exhaustionThreshold) {
           this.isExhausted = false;
-          if (this.game)
-            this.game.logEvent(
-              this,
-              "recovered",
-              `${this.name} feels recovered.`,
-              undefined,
-              {},
-              this.mesh!.position
-            );
+          if (this.game) this.game.logEvent(this, "recovered", `${this.name} feels recovered.`, undefined, {}, this.mesh!.position);
         }
       }
-      this.stamina = Math.min(
-        this.maxStamina,
-        this.stamina + regenRate * deltaTime
-      );
+      this.stamina = Math.min(this.maxStamina, this.stamina + regenRate * deltaTime);
     }
   }
 
   handleMovement(deltaTime: number): void {
     const forward = new Vector3(0, 0, 1).applyQuaternion(this.mesh!.quaternion);
     const right = new Vector3(1, 0, 0).applyQuaternion(this.mesh!.quaternion);
-    const moveDirection = new Vector3(
-      this.moveState.right,
-      0,
-      this.moveState.forward
-    ).normalize();
-    const moveVelocity = new Vector3()
-      .addScaledVector(forward, moveDirection.z)
-      .addScaledVector(right, moveDirection.x);
-    const currentSpeed = this.isSprinting ? this.runSpeed : this.walkSpeed;
-    if (moveDirection.lengthSq() > 0) {
-      moveVelocity.normalize().multiplyScalar(currentSpeed);
+    const moveDirection = new Vector3(this.moveState.right, 0, this.moveState.forward).normalize();
+
+    let currentSpeed = 0;
+    if (this.currentState === 'Running') {
+        currentSpeed = this.runSpeed;
+    } else if (this.currentState === 'Walking') {
+        currentSpeed = this.walkSpeed;
     }
-    this.velocity.x = moveVelocity.x;
-    this.velocity.z = moveVelocity.z;
-    if (
-      this.moveState.jump &&
-      this.canJump &&
-      this.stamina >= this.staminaJumpCost
-    ) {
-      this.velocity.y = this.jumpForce;
-      this.stamina -= this.staminaJumpCost;
-      this.canJump = false;
-      this.isOnGround = false;
-      if (this.stamina <= 0 && !this.isExhausted) {
-        this.isExhausted = true;
-        if (this.game)
-          this.game.logEvent(
-            this,
-            "exhausted",
-            `${this.name} is exhausted!`,
-            undefined,
-            {},
-            this.mesh!.position
-          );
-      }
-      this.moveState.jump = false;
-      this.switchAction(this.jumpAction); // Smooth transition to jump
-      if (this.game)
-        this.game.logEvent(
-          this,
-          "jump",
-          `${this.name} jumped.`,
-          undefined,
-          {},
-          this.mesh!.position
-        );
+
+    const moveVelocity = new Vector3();
+    if (moveDirection.lengthSq() > 0 && currentSpeed > 0) {
+        moveVelocity.addScaledVector(forward, moveDirection.z)
+                    .addScaledVector(right, moveDirection.x)
+                    .normalize()
+                    .multiplyScalar(currentSpeed);
+    }
+
+    if (this.currentState === 'Idle' || this.currentState === 'Walking' || this.currentState === 'Running' || this.currentState === 'Falling' || this.currentState === 'Jumping') {
+         this.velocity.x = moveVelocity.x;
+         this.velocity.z = moveVelocity.z;
+    } else {
+        this.velocity.x = 0;
+        this.velocity.z = 0;
+    }
+
+    if (this.moveState.jump && this.canJump && this.stamina >= this.staminaJumpCost && (this.currentState === 'Idle' || this.currentState === 'Walking' || this.currentState === 'Running')) {
+        this.velocity.y = this.jumpForce;
+        this.stamina -= this.staminaJumpCost;
+        this.canJump = false;
+        this.isOnGround = false;
+        this.moveState.jump = false;
+
+        if (this.stamina <= 0 && !this.isExhausted) {
+           this.isExhausted = true;
+           if(this.currentState === 'Running') this.switchState('Walking');
+            if (this.game) this.game.logEvent(this, "exhausted", `${this.name} became exhausted from jumping!`, undefined, {}, this.mesh!.position);
+        }
+
+        this.switchState('Jumping');
+
+        if (this.game) this.game.logEvent(this, "jump", `${this.name} jumped.`, undefined, {}, this.mesh!.position);
     }
   }
 
   applyGravity(deltaTime: number): void {
     if (!this.isOnGround) {
-      this.velocity.y += this.gravity * deltaTime * 0.2;
+      this.velocity.y += this.gravity * deltaTime;
+      this.velocity.y = Math.max(this.velocity.y, -50);
     } else {
-      this.velocity.y = Math.max(this.gravity * deltaTime, -0.1);
+      this.velocity.y = Math.max(0, this.velocity.y);
     }
   }
 
-  checkGround(collidables: Object3D[]): void {
-    this.groundCheckOrigin
-      .copy(this.mesh!.position)
-      .add(new Vector3(0, 0.1, 0));
+  checkGround(collidables: Object3D[], camera?: Camera): void {
+    const previouslyOnGround = this.isOnGround;
+
+    this.groundCheckOrigin.copy(this.mesh!.position).add(new Vector3(0, 0.1, 0));
     const rayLength = 0.1 + this.groundCheckDistance;
     if (!this.rayCaster) return;
+
+    if (camera) {
+        this.rayCaster.camera = camera;
+    } else {
+        console.warn(`Character ${this.name}: Missing camera for ground check raycaster.`);
+    }
+
     this.rayCaster.set(this.groundCheckOrigin, this.groundCheckDirection);
     this.rayCaster.far = rayLength;
     this.rayCaster.near = 0;
 
     const checkAgainst = collidables.filter(
-      (obj) => obj !== this.mesh && obj?.userData?.isCollidable
+        (obj) => obj && obj !== this.mesh && obj.parent && obj.visible && obj.userData?.isCollidable
     );
+
     const intersects = this.rayCaster.intersectObjects(checkAgainst, true);
+
     let foundGround = false;
     let groundY = -Infinity;
+    let groundObject: Object3D | null = null;
+
     if (intersects.length > 0) {
-      for (const intersect of intersects) {
-        if (intersect.distance > 0.01) {
-          groundY = Math.max(groundY, intersect.point.y);
-          foundGround = true;
-        }
-      }
+        const firstHit = intersects[0];
+        groundY = firstHit.point.y;
+        groundObject = firstHit.object;
+        foundGround = true;
     }
-    const baseY = this.mesh!.position.y;
+
+    const currentY = this.mesh!.position.y;
     const snapThreshold = 0.05;
-    if (
-      foundGround &&
-      baseY <= groundY + this.groundCheckDistance + snapThreshold
-    ) {
-      if (!this.isOnGround && this.velocity.y <= 0) {
-        this.mesh!.position.y = groundY;
-        this.velocity.y = 0;
+
+    if (foundGround && currentY <= groundY + rayLength + snapThreshold) {
         this.isOnGround = true;
         this.canJump = true;
-        // if (this.jumpAction?.isRunning()) this.jumpAction.stop();
-      } else if (this.isOnGround) {
-        this.mesh!.position.y = Math.max(this.mesh!.position.y, groundY);
-      } else {
+
+        if (!previouslyOnGround || Math.abs(currentY - groundY) > 0.01) {
+             this.mesh!.position.y = groundY;
+             this.velocity.y = 0;
+        }
+        this.velocity.y = Math.max(0, this.velocity.y);
+
+        if (this.currentState === 'Falling' || this.currentState === 'Jumping') {
+            const isMovingInput = Math.abs(this.moveState.forward) > 0.1 || Math.abs(this.moveState.right) > 0.1;
+            this.switchState(isMovingInput ? (this.moveState.sprint && !this.isExhausted ? 'Running' : 'Walking') : 'Idle');
+        }
+    } else {
         this.isOnGround = false;
         this.canJump = false;
-      }
-    } else {
-      this.isOnGround = false;
-      this.canJump = false;
+
+        if (previouslyOnGround || (this.currentState === 'Jumping' && this.velocity.y <= 0)) {
+             if (this.currentState !== 'Falling') {
+                this.switchState('Falling');
+             }
+        }
     }
   }
 
   updateAnimations(deltaTime: number): void {
     this.mixer.update(deltaTime);
 
-    if (this.isGathering && this.attackAction) {
-      this.gatherAttackTimer += deltaTime;
-      if (this.gatherAttackTimer >= this.gatherAttackInterval) {
-        this.switchAction(this.attackAction);
-        this.gatherAttackTimer = 0;
-      } else if (!this.attackAction.isRunning()) {
-        this.switchAction(this.idleAction);
-      }
-    } else if (this.isPerformingAction && this.attackAction) {
-      // Let action play; transition handled in 'finished' listener
-    } else if (!this.isOnGround) {
-      if (this.jumpAction && this.jumpAction.isRunning()) {
-        // Let jumpAction continue
-      } else {
-        this.switchAction(this.idleAction); // Use idle as fallback in air
-      }
-    } else {
-      const isMoving =
-        Math.abs(this.moveState.forward) > 0.1 ||
-        Math.abs(this.moveState.right) > 0.1;
-      let targetAction: AnimationAction | undefined;
-      if (isMoving) {
-        targetAction =
-          this.isSprinting && this.runAction ? this.runAction : this.walkAction;
-      } else {
-        targetAction = this.idleAction;
-      }
-      this.switchAction(targetAction);
-    }
-  }
-
-  triggerAction(actionType: string): void {
-    // Use attackAction for attack, heal, gather visual feedback
-    if (this.attackAction && !this.isPerformingAction && !this.isGathering) {
-      this.actionType = actionType;
-      this.isPerformingAction = true; // Mark that an action animation is playing
-      this.attackAction.reset().play();
-      // Stop movement animations immediately when action starts
-      if (this.idleAction?.isRunning()) this.idleAction.stop();
-      if (this.walkAction?.isRunning()) this.walkAction.stop();
-      if (this.runAction?.isRunning()) this.runAction.stop();
-      if (this.jumpAction?.isRunning()) this.jumpAction.stop();
-    } else if (actionType === "gather" && this.attackAction) {
-      // Special case for gather, handled in updateAnimations
-      this.actionType = actionType; // Set type, but let update handle looping anim
+    if (this.currentState === 'Gathering' && this.attackAction) {
+        this.gatherAttackTimer += deltaTime;
+        if (this.gatherAttackTimer >= this.gatherAttackInterval) {
+            this.gatherAttackTimer = 0;
+            if (!this.attackAction.isRunning()) {
+                 this.attackAction.reset().setLoop(LoopOnce, 1).play();
+                 if(this.currentAction === this.idleAction) this.idleAction?.fadeOut(0.1);
+                 this.currentAction = this.attackAction;
+            }
+        }
+        else if (!this.attackAction.isRunning() && this.currentAction === this.attackAction) {
+             this.switchAnimation(this.idleAction);
+        }
     }
   }
 
   update(deltaTime: number, options: UpdateOptions = {}): void {
-    if (this.isDead) return;
-    const { moveState, collidables } = options;
+    if (this.currentState === 'Dead') return;
+
+    const { moveState, collidables, camera } = options;
     if (!moveState || !collidables) {
       console.warn(`Missing moveState or collidables for ${this.name} update`);
       return;
     }
     this.moveState = moveState;
+
     this.handleStamina(deltaTime);
-    if (!this.isPerformingAction && !this.isGathering) {
-      this.handleMovement(deltaTime);
-    } else {
-      this.velocity.x = 0;
-      this.velocity.z = 0;
-    }
     this.applyGravity(deltaTime);
+
+    if (this.currentState === 'Idle' || this.currentState === 'Walking' || this.currentState === 'Running') {
+        if (this.moveState.attack && !this.attackTriggered) {
+            this.attackTriggered = true;
+            this.switchState('Attacking');
+        }
+        else if (!this.attackTriggered) {
+            const isMovingInput = Math.abs(this.moveState.forward) > 0.1 || Math.abs(this.moveState.right) > 0.1;
+            const canRun = this.moveState.sprint && !this.isExhausted;
+            let desiredState: CharacterState = 'Idle';
+            if (isMovingInput) {
+                desiredState = canRun ? 'Running' : 'Walking';
+            }
+            if (this.currentState !== desiredState) {
+                this.switchState(desiredState);
+            }
+        }
+    }
+    if (!moveState.attack) {
+        this.attackTriggered = false;
+    }
+
+    this.handleMovement(deltaTime);
+
     this.mesh!.position.x += this.velocity.x * deltaTime;
     this.mesh!.position.z += this.velocity.z * deltaTime;
-    this.checkGround(collidables);
     this.mesh!.position.y += this.velocity.y * deltaTime;
 
-    if (moveState.attack && !this.attackTriggered) {
-      this.attackTriggered = true;
-      this.triggerAction("attack");
-    } else if (!moveState.attack) {
-      this.attackTriggered = false;
-    }
+    this.checkGround(collidables, camera);
 
-    this.lastVelocityY = this.velocity.y;
     this.updateAnimations(deltaTime);
+
     this.updateBoundingBox();
   }
 
   die(attacker: Entity | null = null): void {
-    if (this.isDead) return;
+    if (this.currentState === 'Dead') return;
+
+    const previousState = this.currentState;
+
     super.die(attacker);
-    if (this.aiController) this.aiController.aiState = "dead";
-    this.isGathering = false;
-    this.isPerformingAction = false;
-    this.actionType = "none";
+    this.switchState('Dead');
+
     if (this.game) {
       const message = `${this.name} has died!`;
       const details = attacker ? { killedBy: attacker.name } : {};
-      this.game.logEvent(
-        this,
-        "death",
-        message,
-        undefined,
-        details,
-        this.mesh!.position
-      );
+      this.game.logEvent(this, "death", message, undefined, details, this.mesh!.position);
       if (attacker instanceof Character) {
-        const defeatMessage = `${attacker.name} defeated ${this.name}.`;
-        this.game.logEvent(
-          attacker,
-          "defeat",
-          defeatMessage,
-          this.name,
-          {},
-          attacker.mesh!.position
-        );
+          const defeatMessage = `${attacker.name} defeated ${this.name}.`;
+          this.game.logEvent(attacker, "defeat", defeatMessage, this.name, {}, attacker.mesh!.position);
       }
     }
   }
 
   respawn(position: Vector3): void {
-    this.setPosition(position);
-    this.health = this.maxHealth * 0.75;
-    this.stamina = this.maxStamina;
-    this.velocity.set(0, 0, 0);
-    this.isDead = false;
-    this.isExhausted = false;
-    this.isOnGround = false;
-    this.canJump = false;
-    this.lastVelocityY = 0;
-    this.isGathering = false;
-    this.gatherAttackTimer = 0;
-    this.isPerformingAction = false;
-    this.actionType = "none";
-    this.attackTriggered = false;
-    this.userData.isCollidable = false;
-    this.userData.isInteractable = true;
-    if (this.aiController) {
-      this.aiController.aiState = "idle";
-      this.aiController.previousAiState = "idle";
-      this.aiController.destination = null;
-      this.aiController.targetResource = null;
-      this.aiController.target = null;
-      this.aiController.targetAction = null;
-      this.aiController.message = null;
-    }
+      this.setPosition(position);
+      this.health = this.maxHealth * 0.75;
+      this.stamina = this.maxStamina;
+      this.velocity.set(0, 0, 0);
+      this.isDead = false;
+      this.userData.isCollidable = true;
+      this.userData.isInteractable = true;
 
-    if (this.idleAction) this.idleAction.reset().play();
-    if (this.walkAction) this.walkAction.stop();
-    if (this.runAction) this.runAction.stop();
-    if (this.attackAction) this.attackAction.stop();
-    if (this.jumpAction) this.jumpAction.stop();
+      this.switchState('Idle', true);
+      this.isExhausted = false;
+      this.isOnGround = false;
+      this.canJump = false;
+      this.attackTriggered = false;
+      this.gatherAttackTimer = 0;
 
-    if (this.game)
-      this.game.logEvent(
-        this,
-        "respawn",
-        `${this.name} feels slightly disoriented but alive.`,
-        undefined,
-        {},
-        position
-      );
-    this.updateBoundingBox();
+      if (this.aiController) {
+        this.aiController.resetAIState();
+      }
+
+      if (this.game)
+        this.game.logEvent(
+          this,
+          "respawn",
+          `${this.name} feels slightly disoriented but alive.`,
+          undefined,
+          {},
+          position
+        );
+
+      this.updateBoundingBox();
+      this.game?.entityDisplayManager?.addEntity(this);
   }
 
   interact(player: Character): InteractionResult | null {
@@ -946,6 +814,6 @@ export class Character extends Entity {
         {},
         player.mesh!.position
       );
-    return { type: "chat" }; // Signal to InteractionSystem to open chat UI
+    return { type: "chat" };
   }
 }
