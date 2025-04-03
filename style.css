@@ -536,3 +536,116 @@ body:has(#chat-container:not(.hidden))::after {
   transition: opacity 0.5s ease-out, visibility 0s 0s;
   pointer-events: none;
 }
+
+/* Add to the bottom of style.css */
+
+/* Mobile Controls */
+#mobile-controls {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 40%;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+#left-controls,
+#right-controls {
+  width: 45%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+#movement-joystick,
+#camera-joystick {
+  width: 120px;
+  height: 120px;
+  background-color: rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  position: relative;
+  pointer-events: auto;
+}
+
+#action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+#interact-button,
+#attack-button,
+#inventory-button,
+#journal-button {
+  padding: 15px 25px;
+  background-color: #555;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  pointer-events: auto;
+  font-size: 16px;
+}
+
+/* Enhance Chat UI for Mobile */
+@media (max-width: 768px) {
+  #chat-container {
+    width: 90%;
+    bottom: 50%;
+    transform: translateX(-50%);
+  }
+
+  #chat-input {
+    width: 70%;
+    font-size: 16px;
+    padding: 10px;
+  }
+
+  #chat-send {
+    padding: 10px 20px;
+    font-size: 16px;
+  }
+}
+
+/* Enhance Inventory and Journal for Mobile */
+@media (max-width: 768px) {
+  #inventory-display {
+    width: 95%;
+    max-height: 50vh;
+  }
+
+  #inventory-slots {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 10px;
+  }
+
+  .inventory-slot {
+    width: 80px;
+    height: 80px;
+  }
+
+  .item-icon {
+    width: 50px;
+    height: 50px;
+  }
+
+  .item-count {
+    font-size: 16px;
+  }
+
+  #journal-display {
+    width: 95%;
+    max-height: 70vh;
+  }
+
+  #quest-log,
+  #event-log {
+    font-size: 14px;
+    padding: 8px;
+  }
+}

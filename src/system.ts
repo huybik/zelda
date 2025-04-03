@@ -593,7 +593,7 @@ Respond to the player in brief 1-2 sentences.
             console.log("NPC response:", npcMessage);
           }
 
-          this.chatTarget.updateIntentDisplay(npcMessage);
+          this.chatTarget.showTemporaryMessage(npcMessage);
           this.chatTarget.game?.logEvent(
             this.chatTarget,
             "chat",
@@ -607,7 +607,7 @@ Respond to the player in brief 1-2 sentences.
           this.game.checkQuestCompletion(this.chatTarget, npcMessage);
         } catch (error) {
           console.error("Error during chat API call:", error);
-          this.chatTarget.updateIntentDisplay("I... don't know what to say.");
+          this.chatTarget.showTemporaryMessage("I... don't know what to say.");
           this.game.logEvent(
             this.chatTarget,
             "chat_error",
