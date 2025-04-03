@@ -339,7 +339,6 @@ export class InteractionSystem {
       case "chat": // Handle the new chat type
         if (targetInstance instanceof Character) {
           this.openChatInterface(targetInstance);
-          this.game.setPauseState(true);
           promptDuration = null; // Don't show prompt, open UI instead
         } else {
           promptText = "Cannot chat with this.";
@@ -552,10 +551,9 @@ Respond to the player in brief 1-2 sentences.
 
   async openChatInterface(target: Character): Promise<void> {
     if (!this.chatContainer || !this.chatInput || this.isChatOpen) return;
-
+    this.game.setPauseState(true);
     this.isChatOpen = true;
     this.chatTarget = target;
-    this.game.setPauseState(true); // Pause game while chatting
     this.chatContainer.classList.remove("hidden");
     this.chatInput.value = "";
     this.chatInput.focus();
