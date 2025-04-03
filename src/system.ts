@@ -893,15 +893,6 @@ export class ThirdPersonCamera {
   }
 }
 
-interface TouchState {
-  identifier: number;
-  startX: number;
-  startY: number;
-  currentX: number;
-  currentY: number;
-  targetElementId?: string; // Store ID if touch started on a button
-}
-
 export class Controls {
   player: Character | null;
   cameraController: ThirdPersonCamera | null;
@@ -911,8 +902,6 @@ export class Controls {
   mouse: MouseState = { x: 0, y: 0, dx: 0, dy: 0, buttons: {} };
   isPointerLocked: boolean = false;
   playerRotationSensitivity: number = 0.0025;
-  touchRotationSensitivity: number = 0.003; // Separate sensitivity for touch
-  touchMoveSensitivity: number = 0.015; // Sensitivity for joystick movement
   moveState: MoveState = {
     forward: 0,
     right: 0,
@@ -924,14 +913,6 @@ export class Controls {
   keyDownListeners: Record<string, Array<() => void>> = {};
   mouseClickListeners: Record<number, Array<(event: MouseEvent) => void>> = {};
 
-  // Touch state
-  private activeTouches: Map<number, TouchState> = new Map();
-  private leftTouchId: number | null = null;
-  private rightTouchId: number | null = null;
-  private joystickThumb: HTMLElement | null;
-  private joystickBase: HTMLElement | null;
-  private maxJoystickDist: number = 50; // Max distance thumb can move from center
-
   boundOnKeyDown: (event: KeyboardEvent) => void;
   boundOnKeyUp: (event: KeyboardEvent) => void;
   boundOnMouseDown: (event: MouseEvent) => void;
@@ -940,10 +921,6 @@ export class Controls {
   boundOnClick: (event: MouseEvent) => void;
   boundOnPointerLockChange: () => void;
   boundOnPointerLockError: () => void;
-  boundOnTouchStart: (event: TouchEvent) => void;
-  boundOnTouchMove: (event: TouchEvent) => void;
-  boundOnTouchEnd: (event: TouchEvent) => void;
-  boundOnTouchCancel: (event: TouchEvent) => void;
 
   constructor(
     player: Character | null,
@@ -956,12 +933,6 @@ export class Controls {
     this.domElement = domElement ?? document.body;
     this.game = game; // Store game instance
 
-    this.joystickThumb = document.getElementById("touch-joystick-thumb");
-    this.joystickBase = document.getElementById("touch-controls-left");
-    if (this.joystickBase) {
-      this.maxJoystickDist = this.joystickBase.offsetWidth / 2 - 10; // Calculate max distance based on base size
-    }
-
     // Bind methods
     this.boundOnKeyDown = this.onKeyDown.bind(this);
     this.boundOnKeyUp = this.onKeyUp.bind(this);
@@ -971,10 +942,6 @@ export class Controls {
     this.boundOnClick = this.onClick.bind(this);
     this.boundOnPointerLockChange = this.onPointerLockChange.bind(this);
     this.boundOnPointerLockError = this.onPointerLockError.bind(this);
-    this.boundOnTouchStart = this.onTouchStart.bind(this);
-    this.boundOnTouchMove = this.onTouchMove.bind(this);
-    this.boundOnTouchEnd = this.onTouchEnd.bind(this);
-    this.boundOnTouchCancel = this.onTouchEnd.bind(this); // Treat cancel like end
 
     this.initListeners();
   }
@@ -988,7 +955,7 @@ export class Controls {
     document.addEventListener("mousemove", this.boundOnMouseMove, false);
     this.domElement.addEventListener("click", this.boundOnClick, false);
 
-    // Pointer Lock (Optional for non-touch)
+    // Pointer Lock
     document.addEventListener(
       "pointerlockchange",
       this.boundOnPointerLockChange,
@@ -997,20 +964,6 @@ export class Controls {
     document.addEventListener(
       "pointerlockerror",
       this.boundOnPointerLockError,
-      false
-    );
-
-    // Touch
-    this.domElement.addEventListener("touchstart", this.boundOnTouchStart, {
-      passive: false,
-    });
-    this.domElement.addEventListener("touchmove", this.boundOnTouchMove, {
-      passive: false,
-    });
-    this.domElement.addEventListener("touchend", this.boundOnTouchEnd, false);
-    this.domElement.addEventListener(
-      "touchcancel",
-      this.boundOnTouchCancel,
       false
     );
   }
@@ -1031,11 +984,9 @@ export class Controls {
 
   // --- Pointer Lock (Desktop) ---
   lockPointer(): void {
-    // Only attempt lock if not primarily a touch device (basic check)
     if (
       "requestPointerLock" in this.domElement &&
-      document.pointerLockElement !== this.domElement &&
-      !window.matchMedia("(hover: none) and (pointer: coarse)").matches
+      document.pointerLockElement !== this.domElement
     ) {
       this.domElement.requestPointerLock();
     }
@@ -1097,13 +1048,10 @@ export class Controls {
     this.keys[keyCode] = true;
     this.keyDownListeners[keyCode]?.forEach((cb) => cb());
 
-    // Handle specific key actions (only if not handled by touch buttons)
-    if (keyCode === "Space" && !this.isButtonPressed("touch-button-jump"))
-      this.moveState.jump = true;
-    if (keyCode === "KeyE" && !this.isButtonPressed("touch-button-interact"))
-      this.moveState.interact = true;
-    if (keyCode === "KeyF" && !this.isButtonPressed("touch-button-attack"))
-      this.moveState.attack = true;
+    // Handle specific key actions
+    if (keyCode === "Space") this.moveState.jump = true;
+    if (keyCode === "KeyE") this.moveState.interact = true;
+    if (keyCode === "KeyF") this.moveState.attack = true;
 
     this.updateContinuousMoveState();
   }
@@ -1112,9 +1060,8 @@ export class Controls {
     const keyCode = event.code;
     this.keys[keyCode] = false;
 
-    // Reset specific key actions (only if not handled by touch buttons)
-    if (keyCode === "KeyF" && !this.isButtonPressed("touch-button-attack"))
-      this.moveState.attack = false;
+    // Reset specific key actions
+    if (keyCode === "KeyF") this.moveState.attack = false;
     // Jump and Interact are consumed, not held continuously based on keyup
 
     this.updateContinuousMoveState();
@@ -1147,7 +1094,7 @@ export class Controls {
       targetElement === this.domElement ||
       (this.domElement.contains(targetElement) &&
         targetElement.closest(
-          "#inventory-display, #journal-display, #chat-container, .touch-button, #minimap-canvas, #welcome-banner" // Add banner to exceptions
+          "#inventory-display, #journal-display, #chat-container, #minimap-canvas, #welcome-banner" // Add banner to exceptions
         ) === null);
 
     const inventoryIsOpen = this.game?.inventoryDisplay?.isOpen ?? false;
@@ -1160,210 +1107,6 @@ export class Controls {
     }
   }
 
-  // --- Touch Input ---
-  onTouchStart(event: TouchEvent): void {
-    event.preventDefault(); // Prevent default touch actions like scrolling
-    if (this.game?.isPaused && !this.game?.interactionSystem?.isChatOpen)
-      return; // Ignore touches if paused (unless chat is open)
-
-    const touches = event.changedTouches;
-    for (let i = 0; i < touches.length; i++) {
-      const touch = touches[i];
-      const touchId = touch.identifier;
-
-      // Check if touch is on a button first
-      const targetElement = touch.target as HTMLElement;
-      const buttonId = targetElement.closest(".touch-button")?.id;
-
-      if (buttonId) {
-        console.log(`Touch started on button: ${buttonId}`); // Debug log
-        this.activeTouches.set(touchId, {
-          identifier: touchId,
-          startX: touch.clientX,
-          startY: touch.clientY,
-          currentX: touch.clientX,
-          currentY: touch.clientY,
-          targetElementId: buttonId,
-        });
-        this.handleButtonPress(buttonId, true);
-        continue; // Don't process as movement/look if it's a button
-      }
-
-      // Check if touch is within joystick base for movement
-      const joystickRect = this.joystickBase?.getBoundingClientRect();
-      if (
-        joystickRect &&
-        this.leftTouchId === null &&
-        touch.clientX >= joystickRect.left &&
-        touch.clientX <= joystickRect.right &&
-        touch.clientY >= joystickRect.top &&
-        touch.clientY <= joystickRect.bottom
-      ) {
-        console.log("Starting joystick touch at", touch.clientX, touch.clientY); // Debug log
-        this.leftTouchId = touchId;
-        this.activeTouches.set(touchId, {
-          identifier: touchId,
-          startX: touch.clientX,
-          startY: touch.clientY,
-          currentX: touch.clientX,
-          currentY: touch.clientY,
-        });
-        if (this.joystickThumb && this.joystickBase) {
-          this.joystickThumb.style.opacity = "0.8";
-          this.updateJoystickThumb(touch.clientX, touch.clientY);
-        }
-      }
-      // Check if touch is on right side for look (keeping original logic)
-      else if (
-        touch.clientX > window.innerWidth / 2 &&
-        this.rightTouchId === null
-      ) {
-        this.rightTouchId = touchId;
-        this.activeTouches.set(touchId, {
-          identifier: touchId,
-          startX: touch.clientX,
-          startY: touch.clientY,
-          currentX: touch.clientX,
-          currentY: touch.clientY,
-        });
-        this.mouse.dx = 0;
-        this.mouse.dy = 0;
-      }
-    }
-  }
-
-  onTouchMove(event: TouchEvent): void {
-    event.preventDefault();
-    if (this.game?.isPaused && !this.game?.interactionSystem?.isChatOpen)
-      return;
-
-    const touches = event.changedTouches;
-    for (let i = 0; i < touches.length; i++) {
-      const touch = touches[i];
-      const touchId = touch.identifier;
-      const touchState = this.activeTouches.get(touchId);
-
-      if (!touchState) continue; // Ignore touches not tracked
-
-      const prevX = touchState.currentX;
-      const prevY = touchState.currentY;
-      touchState.currentX = touch.clientX;
-      touchState.currentY = touch.clientY;
-
-      if (touchId === this.leftTouchId) {
-        // Update movement
-        const deltaX = touchState.currentX - touchState.startX;
-        const deltaY = touchState.currentY - touchState.startY;
-        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-        const angle = Math.atan2(deltaY, deltaX);
-
-        const normalizedDist = Math.min(distance / this.maxJoystickDist, 1.0);
-
-        // Invert Y for forward/backward
-        this.moveState.forward = -Math.sin(angle) * normalizedDist;
-        this.moveState.right = -Math.cos(angle) * normalizedDist; // Invert X for A/D convention
-
-        // Clamp values
-        this.moveState.forward = MathUtils.clamp(this.moveState.forward, -1, 1);
-        this.moveState.right = MathUtils.clamp(this.moveState.right, -1, 1);
-
-        // Optional: Sprint if joystick is pushed far
-        this.moveState.sprint = normalizedDist > 0.8;
-
-        if (this.joystickThumb) {
-          this.updateJoystickThumb(touch.clientX, touch.clientY);
-        }
-      } else if (touchId === this.rightTouchId) {
-        // Update look rotation
-        const dx = touchState.currentX - prevX;
-        const dy = touchState.currentY - prevY;
-        this.mouse.dx += dx;
-        this.mouse.dy += dy;
-      }
-      // No movement update needed for button touches
-    }
-  }
-
-  onTouchEnd(event: TouchEvent): void {
-    // Don't prevent default here, allows clicks on UI elements behind controls
-    // Allow touch end even if paused to release buttons/joystick
-
-    const touches = event.changedTouches;
-    for (let i = 0; i < touches.length; i++) {
-      const touch = touches[i];
-      const touchId = touch.identifier;
-      const touchState = this.activeTouches.get(touchId);
-
-      if (!touchState) continue;
-
-      if (touchState.targetElementId) {
-        // Handle button release
-        this.handleButtonPress(touchState.targetElementId, false);
-      } else if (touchId === this.leftTouchId) {
-        // End movement touch
-        this.leftTouchId = null;
-        this.moveState.forward = 0;
-        this.moveState.right = 0;
-        this.moveState.sprint = false;
-        if (this.joystickThumb) {
-          this.joystickThumb.style.opacity = "0.6";
-          this.joystickThumb.style.transform = `translate(0px, 0px)`; // Reset position
-        }
-      } else if (touchId === this.rightTouchId) {
-        // End look touch
-        this.rightTouchId = null;
-        // dx/dy will stop updating naturally
-      }
-
-      this.activeTouches.delete(touchId);
-    }
-  }
-
-  // --- Touch Helpers ---
-  private handleButtonPress(buttonId: string, isPressed: boolean): void {
-    switch (buttonId) {
-      case "touch-button-jump":
-        if (isPressed) this.moveState.jump = true; // Jump is consumed on press
-        break;
-      case "touch-button-interact":
-        if (isPressed) this.moveState.interact = true; // Interact is consumed
-        break;
-      case "touch-button-attack":
-        this.moveState.attack = isPressed;
-        break;
-      // Add sprint button handling if implemented separately
-    }
-  }
-
-  private isButtonPressed(buttonId: string): boolean {
-    for (const touchState of this.activeTouches.values()) {
-      if (touchState.targetElementId === buttonId) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private updateJoystickThumb(touchX: number, touchY: number): void {
-    if (!this.joystickThumb || !this.joystickBase) return;
-
-    const baseRect = this.joystickBase.getBoundingClientRect();
-    const baseX = baseRect.left + baseRect.width / 2;
-    const baseY = baseRect.top + baseRect.height / 2;
-
-    let deltaX = touchX - baseX;
-    let deltaY = touchY - baseY;
-
-    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-
-    if (distance > this.maxJoystickDist) {
-      deltaX = (deltaX / distance) * this.maxJoystickDist;
-      deltaY = (deltaY / distance) * this.maxJoystickDist;
-    }
-
-    this.joystickThumb.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-  }
-
   // --- Update Logic ---
   updateContinuousMoveState(): void {
     // This now primarily handles keyboard state
@@ -1373,25 +1116,15 @@ export class Controls {
     const A = this.keys["KeyA"] || this.keys["ArrowLeft"];
     const Sprint = this.keys["ShiftLeft"] || this.keys["ShiftRight"];
 
-    // Only update from keyboard if joystick is not active
-    if (this.leftTouchId === null) {
-      this.moveState.forward = (W ? 1 : 0) - (S ? 1 : 0);
-      this.moveState.right = (A ? 1 : 0) - (D ? 1 : 0); // Swapped A/D
-      this.moveState.sprint = Sprint ?? false;
-    }
+    this.moveState.forward = (W ? 1 : 0) - (S ? 1 : 0);
+    this.moveState.right = (A ? 1 : 0) - (D ? 1 : 0); // Swapped A/D
+    this.moveState.sprint = Sprint ?? false;
   }
 
   update(deltaTime: number): void {
-    // --- Rotation Update (Mouse or Touch) ---
-    if (
-      (this.isPointerLocked || this.rightTouchId !== null) &&
-      this.player &&
-      this.player.mesh
-    ) {
-      const sensitivity =
-        this.rightTouchId !== null
-          ? this.touchRotationSensitivity
-          : this.playerRotationSensitivity;
+    // --- Rotation Update (Mouse) ---
+    if (this.isPointerLocked && this.player && this.player.mesh) {
+      const sensitivity = this.playerRotationSensitivity;
 
       if (Math.abs(this.mouse.dx) > 0) {
         const yawDelta = -this.mouse.dx * sensitivity;
@@ -1407,7 +1140,7 @@ export class Controls {
     this.mouse.dy = 0;
 
     // --- Keyboard Movement Update ---
-    // This ensures keyboard input is reflected if joystick isn't used
+    // This ensures keyboard input is reflected
     this.updateContinuousMoveState();
   }
 
@@ -1433,9 +1166,5 @@ export class Controls {
       "pointerlockerror",
       this.boundOnPointerLockError
     );
-    this.domElement.removeEventListener("touchstart", this.boundOnTouchStart);
-    this.domElement.removeEventListener("touchmove", this.boundOnTouchMove);
-    this.domElement.removeEventListener("touchend", this.boundOnTouchEnd);
-    this.domElement.removeEventListener("touchcancel", this.boundOnTouchCancel);
   }
 }

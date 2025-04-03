@@ -8,13 +8,11 @@ body {
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   color: #333;
   background-color: #87ceeb; /* Fallback sky */
-  /* Prevent text selection on UI elements during touch */
+  /* Prevent text selection on UI elements */
   user-select: none;
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
-  /* Improve touch responsiveness */
-  touch-action: manipulation;
 }
 
 #game-container {
@@ -51,9 +49,7 @@ canvas {
 /* Allow pointer events on specific UI elements */
 
 .ui-panel,
-#chat-container,
-.touch-controls-container, /* Allow touch on controls container */
-.touch-button {
+#chat-container {
   pointer-events: auto;
 }
 
@@ -446,113 +442,6 @@ li.quest-active strong {
 #chat-send:disabled {
   background-color: #444;
   cursor: not-allowed;
-}
-
-/* --- Touch Controls --- */
-.touch-controls-container {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 35%; /* Adjust height as needed */
-  pointer-events: none; /* Container doesn't block, children do */
-  z-index: 12; /* Above game, below panels */
-  display: none; /* Hidden by default, shown via JS/media query */
-}
-
-/* Show touch controls only on touch devices (simple check) */
-@media (hover: none) and (pointer: coarse) {
-  .touch-controls-container {
-    display: block;
-  }
-  /* Hide crosshair on touch devices */
-  body::after {
-    display: none;
-  }
-}
-
-#touch-controls-left {
-  position: absolute;
-  bottom: 20px;
-  left: 20px;
-  width: 120px; /* Joystick area size */
-  height: 120px;
-  background-color: rgba(128, 128, 128, 0.3); /* Semi-transparent grey */
-  border-radius: 50%;
-  pointer-events: auto; /* Enable touch for this area */
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1;
-}
-
-#touch-joystick-thumb {
-  width: 50px;
-  height: 50px;
-  background-color: rgba(200, 200, 200, 0.6);
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  position: absolute; /* Positioned by JS */
-  pointer-events: auto;
-  z-index: 2;
-}
-
-#touch-controls-right {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 50%; /* Right half of the container */
-  height: 100%;
-  pointer-events: auto; /* Enable touch for look area */
-  /* background-color: rgba(0, 0, 255, 0.1); */ /* Optional: Visualize area */
-}
-
-#touch-buttons {
-  position: absolute;
-  bottom: 25px;
-  right: 25px;
-  display: grid;
-  grid-template-columns: repeat(2, 65px); /* Adjust button size */
-  grid-template-rows: repeat(2, 65px);
-  gap: 15px; /* Spacing between buttons */
-  pointer-events: auto;
-}
-
-.touch-button {
-  width: 65px;
-  height: 65px;
-  background-color: rgba(80, 80, 80, 0.7);
-  border: 1px solid rgba(200, 200, 200, 0.5);
-  border-radius: 50%; /* Circular buttons */
-  color: white;
-  font-size: 14px;
-  font-weight: bold;
-  text-align: center;
-  line-height: 65px; /* Vertically center text */
-  cursor: pointer;
-  transition: background-color 0.1s ease;
-  display: flex; /* Use flex for centering */
-  justify-content: center;
-  align-items: center;
-  padding: 0; /* Remove default padding */
-}
-
-.touch-button:active {
-  background-color: rgba(120, 120, 120, 0.8);
-}
-
-/* Position individual buttons if needed */
-#touch-button-jump {
-  grid-column: 2;
-  grid-row: 1;
-}
-#touch-button-attack {
-  grid-column: 1;
-  grid-row: 1;
-}
-#touch-button-interact {
-  grid-column: 2;
-  grid-row: 2;
 }
 
 /* --- Utility --- */
