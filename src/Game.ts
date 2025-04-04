@@ -243,6 +243,7 @@ export class Game {
     );
     this.activeCharacter.userData.isPlayer = true; // Mark as player
     this.activeCharacter.userData.isNPC = false;
+    this.activeCharacter.userData.isInteractable = false;
     this.activeCharacter.aiController = null; // Player doesn't use AIController
     this.activeCharacter.game = this; // Link back to game
 

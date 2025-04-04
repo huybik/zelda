@@ -1,3 +1,4 @@
+// File: /src/core/Character.ts
 // src/core/Character.ts
 import {
   Vector3,
@@ -80,7 +81,7 @@ export class Character extends Entity {
     super(scene, position, name); // Call Entity constructor
 
     // Override/set Character-specific userData defaults
-    this.userData.isCollidable = true;
+    // this.userData.isCollidable = true; // Collision removed
     this.userData.isInteractable = true; // Characters are usually interactable
     this.userData.interactionType = "talk"; // Default interaction
     this.userData.isNPC = true; // Default to NPC, override for player
@@ -144,6 +145,11 @@ export class Character extends Entity {
 
     // Final bounding box update after model setup
     this.updateBoundingBox();
+    // Ensure initial position is on terrain
+    if (this.mesh) {
+      this.mesh.position.y = this.getTerrainHeightAtPosition();
+      this.updateBoundingBox();
+    }
   }
 
   // Sets up animation actions from loaded clips.
@@ -273,7 +279,7 @@ export class Character extends Entity {
       const isMoving =
         Math.abs(this.moveState.forward) > 0.1 ||
         Math.abs(this.moveState.right) > 0.1;
-      const nextState = true
+      const nextState = true // Assume always on ground since no physics
         ? isMoving
           ? this.isSprinting
             ? "run"
@@ -486,9 +492,11 @@ export class Character extends Entity {
       moveVelocity.normalize().multiplyScalar(currentSpeed); // Ensure consistent speed regardless of diagonal movement
     }
 
-    // Apply calculated horizontal velocity
-    this.velocity.x = moveVelocity.x;
-    this.velocity.z = moveVelocity.z;
+    // Apply calculated horizontal velocity directly to position
+    this.mesh.position.addScaledVector(moveVelocity, deltaTime);
+
+    // Snap to terrain height after horizontal movement
+    this.mesh.position.y = this.getTerrainHeightAtPosition();
   }
 
   // Updates the character's animations based on state.
@@ -588,12 +596,12 @@ export class Character extends Entity {
   override update(deltaTime: number, options: UpdateOptions = {}): void {
     if (this.isDead || !this.mesh) return;
 
-    const { moveState, collidables } = options;
+    const { moveState } = options;
 
     // Use provided moveState (from Controls or AI) or internal state if none provided
     this.moveState = moveState ?? this.moveState;
-    const effectiveCollidables =
-      collidables ?? this.game?.collidableObjects ?? [];
+    // const effectiveCollidables =
+    //   collidables ?? this.game?.collidableObjects ?? []; // Collision removed
 
     // Update AI Controller if this is an NPC
     if (this.aiController && !this.userData.isPlayer) {
@@ -603,17 +611,16 @@ export class Character extends Entity {
     // --- State Updates ---
     this.handleStamina(deltaTime);
 
-    // --- Movement Calculation ---
+    // --- Movement Calculation & Application ---
     if (!this.isPerformingAction) {
-      this.handleMovement(deltaTime);
+      this.handleMovement(deltaTime); // Now applies movement directly and snaps to terrain
     } else {
-      this.velocity.x = 0;
-      this.velocity.z = 0;
+      // Optionally snap to terrain even if performing action?
+      this.mesh.position.y = this.getTerrainHeightAtPosition();
     }
 
     // --- Physics & Collision ---
-    //   this.applyGravity(deltaTime);
-    // Note: Position update and snapping now handled by Physics system
+    // Removed - Physics system is gone, movement handled above
 
     // --- Action Triggers ---
     if (
@@ -630,7 +637,7 @@ export class Character extends Entity {
 
     // --- Animation & Bounding Box ---
     this.updateAnimations(deltaTime);
-    this.updateBoundingBox();
+    this.updateBoundingBox(); // Still useful for interaction, minimap, etc.
 
     // Update AI intent display
     if (this.aiController && this.intentSprite) {
@@ -686,10 +693,10 @@ export class Character extends Entity {
   respawn(position: Vector3): void {
     if (!this.isDead) return; // Can only respawn if dead
 
-    this.setPosition(position); // Set new position
+    this.setPosition(position); // Set new position (includes terrain snap)
     this.health = this.maxHealth * RESPAWN_HEALTH_FACTOR; // Respawn with partial health
     this.stamina = this.maxStamina;
-    this.velocity.set(0, 0, 0);
+    this.velocity.set(0, 0, 0); // Reset velocity (though not used for movement directly now)
     this.isDead = false;
     this.isExhausted = false;
     this.isGathering = false;
@@ -697,7 +704,7 @@ export class Character extends Entity {
     this.isPerformingAction = false;
     this.actionType = "none";
     this.attackTriggered = false;
-    this.userData.isCollidable = true; // Restore flags
+    // this.userData.isCollidable = true; // Collision removed
     this.userData.isInteractable = true;
 
     // Reset AI state if applicable
