@@ -14,6 +14,8 @@ import {
   MeshBasicMaterial,
   Mesh,
   SphereGeometry,
+  Points,
+  Box3,
 } from "three";
 import WebGL from "three/examples/jsm/capabilities/WebGL.js";
 
@@ -203,9 +205,7 @@ export class Game {
     // Define model paths relative to the public directory or assets folder
     const modelPaths = {
       player: "assets/player/scene.gltf",
-      tavernMan: "assets/player/scene.gltf", // Placeholder
-      oldMan: "assets/player/scene.gltf", // Placeholder
-      woman: "assets/player/scene.gltf", // Placeholder
+
       // Add other models here: e.g., enemy: "assets/enemy/scene.gltf"
     };
     return loadModels(modelPaths);
@@ -949,9 +949,13 @@ export class Game {
     });
 
     // Optionally log important events to the main console
-    // if (action === 'death' || action === 'quest_complete' || action === 'error') {
-    //     console.log(`[EVENT] ${message}`);
-    // }
+    if (
+      action === "death" ||
+      action === "quest_complete" ||
+      action === "error"
+    ) {
+      console.log(`[EVENT] ${message}`);
+    }
   }
 
   // --- Portal Logic ---

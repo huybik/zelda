@@ -415,24 +415,24 @@ export function populateEnvironment(
   };
 
   // Example NPC placements
-  addCharacter(
-    villageCenter.clone().add(new Vector3(-12, 0, 2)),
-    "Farmer Giles",
-    "tavernMan", // Using placeholder model key
-    "Hardworking farmer, values community, knowledgeable about crops, a bit stubborn."
-  );
+  //   addCharacter(
+  //     villageCenter.clone().add(new Vector3(-12, 0, 2)),
+  //     "Farmer Giles",
+  //     "tavernMan", // Using placeholder model key
+  //     "Hardworking farmer, values community, knowledgeable about crops, a bit stubborn."
+  //   );
   addCharacter(
     villageCenter.clone().add(new Vector3(10, 0, -3)),
     "Blacksmith Brynn",
-    "woman", // Using placeholder model key
+    "player", // Using placeholder model key
     "Skilled artisan, proud, strong-willed, independent, focused on craft, gruff but kind."
   );
-  addCharacter(
-    new Vector3(halfSize * 0.4, 0, -halfSize * 0.3), // Hunter further out
-    "Hunter Rex",
-    "oldMan", // Using placeholder model key
-    "Experienced tracker, quiet, observant, prefers wilderness, resourceful, not very social."
-  );
+  //   addCharacter(
+  //     new Vector3(halfSize * 0.4, 0, -halfSize * 0.3), // Hunter further out
+  //     "Hunter Rex",
+  //     "oldMan", // Using placeholder model key
+  //     "Experienced tracker, quiet, observant, prefers wilderness, resourceful, not very social."
+  //   );
 
   // --- Add Objects ---
   const addObject = (

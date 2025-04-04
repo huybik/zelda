@@ -191,7 +191,9 @@ export class AIController {
 
     // Minimal logging for state changes if needed for debugging
     if (this.aiState !== this.previousAiState) {
-      // console.log(`${this.character.name} state: ${this.previousAiState} -> ${this.aiState} (Intent: ${this.currentIntent})`);
+      console.log(
+        `${this.character.name} state: ${this.previousAiState} -> ${this.aiState} (Intent: ${this.currentIntent})`
+      );
       this.previousAiState = this.aiState;
     }
 
@@ -601,15 +603,15 @@ Choose the most logical action NOW. Ensure IDs exist in the nearby lists if spec
   // Calls the Gemini API to decide the next action and updates the AI state.
   async decideNextAction(): Promise<void> {
     const prompt = this.generatePrompt();
-    // console.log(`--- AI Prompt (${this.character.name}) ---`);
-    // console.log(prompt);
-    // console.log(`------------------------------------------`);
+    console.log(`--- AI Prompt (${this.character.name}) ---`);
+    console.log(prompt);
+    console.log(`------------------------------------------`);
 
     try {
       const response = await sendToGemini(prompt);
-      // console.log(`--- AI Response (${this.character.name}) ---`);
-      // console.log(response);
-      // console.log(`-------------------------------------------`);
+      console.log(`--- AI Response (${this.character.name}) ---`);
+      console.log(response);
+      console.log(`-------------------------------------------`);
 
       if (response) {
         try {

@@ -25,9 +25,7 @@ export class HUD {
       !this.staminaBarElement ||
       !this.fpsDisplayElement
     ) {
-      console.warn(
-        "HUD elements not found in DOM. HUD will not function correctly."
-      );
+      console.error("HUD UI elements not found in DOM.");
     }
 
     this.update(); // Initial update to set values
