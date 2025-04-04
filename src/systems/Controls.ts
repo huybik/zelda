@@ -70,7 +70,7 @@ export class ThirdPersonCamera {
   handleMouseInput(deltaX: number, deltaY: number): void {
     // Yaw (deltaX) rotation is typically handled by rotating the player character directly.
     // Update pitch based on deltaY
-    this.pitchAngle -= deltaY * this.pitchSensitivity;
+    this.pitchAngle += deltaY * this.pitchSensitivity;
     // Clamp pitch angle within limits
     this.pitchAngle = MathUtils.clamp(
       this.pitchAngle,
@@ -179,7 +179,6 @@ export class ThirdPersonCamera {
       this.target = newTarget;
       // Optionally reset pitch or smoothly transition lookat point
       // this.pitchAngle = 0.15; // Reset pitch?
-      // Immediately update lookat to avoid jump?
       this.target.getWorldPosition(this.idealLookat);
       this.idealLookat.y +=
         (this.target.userData?.height ?? CHARACTER_HEIGHT) * 0.6;
@@ -206,7 +205,6 @@ export class Controls {
   moveState: MoveState = {
     forward: 0,
     right: 0,
-    jump: false,
     sprint: false,
     interact: false,
     attack: false,
@@ -391,7 +389,6 @@ export class Controls {
     this.keyDownListeners[event.code]?.forEach((cb) => cb());
 
     // Update single-press actions (consumed later)
-    if (event.code === "Space") this.moveState.jump = true;
     if (event.code === "KeyE") this.moveState.interact = true;
     if (event.code === "KeyF") this.moveState.attack = true; // Attack starts on press
 
@@ -406,8 +403,6 @@ export class Controls {
 
     // Reset continuous actions tied to key release
     if (event.code === "KeyF") this.moveState.attack = false; // Attack stops on release
-
-    // Jump and Interact are typically consumed on press, not reset on keyup
 
     // Update continuous movement state
     this.updateContinuousMoveState();
@@ -501,7 +496,7 @@ export class Controls {
       const Sprint = this.keys["ShiftLeft"] || this.keys["ShiftRight"];
 
       this.moveState.forward = (W ? 1 : 0) - (S ? 1 : 0); // 1 for W, -1 for S
-      this.moveState.right = (D ? 1 : 0) - (A ? 1 : 0); // 1 for D, -1 for A (strafe)
+      this.moveState.right = (A ? 1 : 0) - (D ? 1 : 0); // 1 for D]!, -1 for D(strafe)
       this.moveState.sprint = Sprint ?? false;
     }
     // If mobile controls are active, they will directly modify moveState.forward/right/sprint

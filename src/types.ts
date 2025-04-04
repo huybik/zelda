@@ -92,7 +92,6 @@ export interface MouseState {
 export interface MoveState {
   forward: number;
   right: number;
-  jump: boolean;
   sprint: boolean;
   interact: boolean;
   attack: boolean;

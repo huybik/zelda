@@ -30,7 +30,6 @@ export class MobileControls {
   private buttonStates: Record<string, boolean> = {
     interact: false,
     attack: false,
-    jump: false, // Added jump button state
     // Add other buttons as needed (e.g., sprint)
   };
 
@@ -285,7 +284,7 @@ export class MobileControls {
 
   // Sets up listeners for the on-screen action buttons.
   private setupButtons(): void {
-    const buttonIds = ["interact", "attack", "jump", "inventory", "journal"]; // Added jump
+    const buttonIds = ["interact", "attack", "inventory", "journal"];
     buttonIds.forEach((id) => {
       this.buttons[id] = document.getElementById(`button-${id}`);
       if (!this.buttons[id]) {
@@ -333,8 +332,8 @@ export class MobileControls {
         { passive: false }
       );
     }
-    // Use touchstart/touchend for hold actions (interact, attack, jump)
-    else if (id === "interact" || id === "attack" || id === "jump") {
+    // Use touchstart/touchend for hold actions (interact, attack)
+    else if (id === "interact" || id === "attack") {
       buttonElement.addEventListener(
         "touchstart",
         (e) => {
@@ -391,8 +390,6 @@ export class MobileControls {
     this.controls.moveState.sprint = false; // Default to no sprint for now
 
     // --- Update Action States from Buttons ---
-    // Jump state (held down)
-    this.controls.moveState.jump = this.buttonStates.jump ?? false;
     // Attack state (held down)
     this.controls.moveState.attack = this.buttonStates.attack ?? false;
     // Interact state (consumed on press)

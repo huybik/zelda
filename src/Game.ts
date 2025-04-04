@@ -49,7 +49,7 @@ import { Minimap } from "./ui/Minimap";
 // Config & Types
 import { Colors, WORLD_SIZE, PARTICLE_EFFECT_DURATION } from "./config";
 import type { EventEntry, Quest, LoadedModel } from "./types";
-import { loadModels } from "./utils"; // Import model loader
+import { getTerrainHeight, loadModels } from "./utils"; // Import model loader
 
 export class Game {
   // Core Three.js components
@@ -225,14 +225,12 @@ export class Game {
   }
 
   private initPlayer(models: Record<string, LoadedModel>): void {
-    let spawnPos = new Vector3(0, 0, 5); // Default spawn near origin
-    if (this.hasEnteredFromPortal) {
-      spawnPos = new Vector3(0, 0, 15); // Spawn further away if coming from portal
-    }
+    let spawnPos = new Vector3(0, 0, 15); // Default spawn near origin
     // Ensure spawn position is on the terrain (handled by Character constructor placement)
 
     const playerModelData = models.player;
     if (!playerModelData) throw new Error("Player model failed to load.");
+    spawnPos.y = getTerrainHeight(this.scene, spawnPos.x, spawnPos.z); // Set Y position from model
 
     const playerInventory = new Inventory(); // Default size
     this.activeCharacter = new Character(

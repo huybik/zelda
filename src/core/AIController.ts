@@ -52,7 +52,6 @@ export class AIController {
     const moveState: MoveState = {
       forward: 0,
       right: 0,
-      jump: false,
       sprint: false,
       interact: false, // AI doesn't use interact button directly
       attack: false, // Attack triggered by state/action, not direct input
@@ -395,7 +394,7 @@ export class AIController {
     }
     if (this.character.isPerformingAction) {
       this.character.isPerformingAction = false;
-      // May need to stop attack/heal/jump animation
+      // May need to stop attack/heal animation
     }
     // Ensure character goes back to idle animation if needed
     if (

@@ -26,6 +26,7 @@ import {
   RESPAWN_HEALTH_FACTOR,
 } from "../config";
 import type { Game } from "../Game"; // Use type import
+import { getTerrainHeight } from "../utils"; // Import utility function
 
 export class Character extends Entity {
   // Stats & Movement
@@ -33,18 +34,12 @@ export class Character extends Entity {
   stamina: number;
   walkSpeed: number;
   runSpeed: number;
-  jumpForce: number;
   staminaDrainRate: number; // Per second
   staminaRegenRate: number; // Per second
-  staminaJumpCost: number;
-  canJump: boolean;
   isSprinting: boolean;
   isExhausted: boolean;
   exhaustionThreshold: number; // Stamina level below which exhaustion occurs/recovers
   moveState: MoveState;
-  gravity: number;
-  isOnGround: boolean;
-  groundCheckDistance: number;
 
   // Inventory & Logging
   inventory: Inventory | null;
@@ -59,8 +54,8 @@ export class Character extends Entity {
   isGathering: boolean = false;
   gatherAttackTimer: number = 0; // Timer for attack animation during gathering
   gatherAttackInterval: number = 1.0; // How often to play attack anim while gathering
-  isPerformingAction: boolean = false; // Is playing a non-looping action anim (attack/heal/jump)
-  actionType: string = "none"; // 'attack', 'heal', 'gather', 'jump'
+  isPerformingAction: boolean = false; // Is playing a non-looping action anim (attack/heal)
+  actionType: string = "none"; // 'attack', 'heal', 'gather'
 
   // AI & Interaction
   searchRadius: number = 30; // For AI observation
@@ -99,25 +94,18 @@ export class Character extends Entity {
     this.stamina = this.maxStamina;
     this.walkSpeed = 4.0;
     this.runSpeed = 8.0;
-    this.jumpForce = 8.0;
     this.staminaDrainRate = 15;
     this.staminaRegenRate = 10;
-    this.staminaJumpCost = 10;
-    this.canJump = false;
     this.isSprinting = false;
     this.isExhausted = false;
     this.exhaustionThreshold = 20;
     this.moveState = {
       forward: 0,
       right: 0,
-      jump: false,
       sprint: false,
       interact: false,
       attack: false,
     };
-    this.gravity = -25; // Adjusted gravity
-    this.isOnGround = false;
-    this.groundCheckDistance = 0.15; // How far below feet to check for ground
 
     // Assign Inventory & Event Log
     this.inventory = inventory;
@@ -141,7 +129,7 @@ export class Character extends Entity {
     this.setupAnimations(animations);
     this.switchAction("idle"); // Start with idle animation
 
-    // Listen for animation finish events (e.g., for attack/jump)
+    // Listen for animation finish events (e.g., for attack)
     this.mixer.addEventListener(
       "finished",
       (
@@ -165,7 +153,6 @@ export class Character extends Entity {
       idle: ["idle", "idle_anim", "characteridle"],
       walk: ["walk", "walking", "walk_forward", "characterwalk"],
       run: ["run", "running", "run_forward", "characterrun"],
-      jump: ["jump", "jump_up", "characterjump"],
       attack: ["attack", "swing", "characterattack", "attack_1h"], // Add variations
       gather: ["gather", "mining", "pickup"], // Use specific or fallback to attack
       heal: ["heal", "cast_heal"], // Use specific or fallback to attack/idle
@@ -184,9 +171,7 @@ export class Character extends Entity {
       if (foundClip) {
         const action = this.mixer.clipAction(foundClip);
         // Configure non-looping animations
-        if (
-          ["jump", "attack", "heal", "gather", "death"].includes(actionName)
-        ) {
+        if (["attack", "heal", "gather", "death"].includes(actionName)) {
           action.setLoop(LoopOnce, 1);
           action.clampWhenFinished = true; // Stay on the last frame
         }
@@ -264,7 +249,7 @@ export class Character extends Entity {
 
     if (
       finishedActionName &&
-      ["attack", "jump", "heal", "gather"].includes(finishedActionName)
+      ["attack", "heal", "gather"].includes(finishedActionName)
     ) {
       this.isPerformingAction = false; // Allow new actions
 
@@ -288,7 +273,7 @@ export class Character extends Entity {
       const isMoving =
         Math.abs(this.moveState.forward) > 0.1 ||
         Math.abs(this.moveState.right) > 0.1;
-      const nextState = this.isOnGround
+      const nextState = true
         ? isMoving
           ? this.isSprinting
             ? "run"
@@ -504,124 +489,13 @@ export class Character extends Entity {
     // Apply calculated horizontal velocity
     this.velocity.x = moveVelocity.x;
     this.velocity.z = moveVelocity.z;
-
-    // Handle Jump action
-    if (
-      this.moveState.jump &&
-      this.canJump && // Must be allowed to jump (usually means on ground)
-      this.stamina >= this.staminaJumpCost && // Must have enough stamina
-      !this.isPerformingAction // Cannot jump during another action
-    ) {
-      this.velocity.y = this.jumpForce; // Apply upward force
-      this.stamina -= this.staminaJumpCost; // Consume stamina
-      this.canJump = false; // Cannot jump again until landed
-      this.isOnGround = false; // No longer on the ground
-
-      // Check for exhaustion after jump cost
-      if (this.stamina <= 0 && !this.isExhausted) {
-        this.isExhausted = true;
-        if (this.game && this.mesh) {
-          this.game.logEvent(
-            this,
-            "exhausted",
-            `${this.name} became exhausted from jumping!`,
-            undefined,
-            {},
-            this.mesh.position
-          );
-        }
-      }
-
-      this.moveState.jump = false; // Consume the jump input
-      this.triggerAction("jump"); // Play jump animation
-      if (this.game && this.mesh) {
-        this.game.logEvent(
-          this,
-          "jump",
-          `${this.name} jumped.`,
-          undefined,
-          {},
-          this.mesh.position
-        );
-      }
-    }
-  }
-
-  // Applies gravity to the character's vertical velocity.
-  applyGravity(deltaTime: number): void {
-    if (!this.isOnGround) {
-      this.velocity.y += this.gravity * deltaTime;
-    } else {
-      // Apply slight downward force even when grounded to ensure ground contact
-      // Or ensure velocity doesn't become positive if gravity is applied while grounded
-      this.velocity.y = Math.min(0, this.velocity.y + this.gravity * deltaTime);
-    }
-  }
-
-  // Checks if the character is on the ground using raycasting.
-  checkGround(collidables: Object3D[]): void {
-    if (!this.mesh || !this.game) return;
-
-    // Raycast origin slightly above the character's feet
-    this.groundCheckOrigin.copy(this.mesh.position).add(new Vector3(0, 0.1, 0));
-    const rayLength = this.groundCheckDistance + 0.1; // Check slightly below feet
-
-    this.rayCaster.set(this.groundCheckOrigin, this.groundCheckDirection);
-    this.rayCaster.far = rayLength;
-    this.rayCaster.near = 0;
-
-    // Filter collidables to check against (exclude self, non-collidables)
-    const checkAgainst = collidables.filter(
-      (obj) => obj !== this.mesh && obj?.userData?.isCollidable && obj.parent // Ensure object is in scene
-    );
-    // Required for raycaster if camera isn't explicitly set elsewhere per frame
-    this.rayCaster.camera = this.game.camera;
-
-    const intersects = this.rayCaster.intersectObjects(checkAgainst, true); // Check recursively
-
-    let foundGround = false;
-    let groundY = -Infinity;
-
-    if (intersects.length > 0) {
-      // Find the highest intersection point that's below or very close to the character's feet
-      for (const intersect of intersects) {
-        // Allow landing on surfaces slightly above the origin due to ray starting point
-        if (intersect.point.y <= this.groundCheckOrigin.y) {
-          groundY = Math.max(groundY, intersect.point.y);
-          foundGround = true;
-        }
-      }
-    }
-
-    // Update ground state based on findings
-    if (foundGround && this.velocity.y <= 0.1) {
-      // Allow grounding even with slight positive velocity (e.g., walking up slopes)
-      if (!this.isOnGround) {
-        // Just landed
-        this.mesh.position.y = groundY; // Snap to ground
-        this.velocity.y = 0; // Stop vertical velocity
-        this.isOnGround = true;
-        this.canJump = true; // Can jump again
-      } else {
-        // Already on ground, ensure we stay snapped
-        this.mesh.position.y = Math.max(this.mesh.position.y, groundY);
-        this.velocity.y = Math.max(0, this.velocity.y); // Prevent accumulating downward velocity while grounded
-      }
-    } else {
-      // In air
-      if (this.isOnGround) {
-        // Just left the ground (e.g., walked off ledge)
-      }
-      this.isOnGround = false;
-      this.canJump = false;
-    }
   }
 
   // Updates the character's animations based on state.
   updateAnimations(deltaTime: number): void {
     this.mixer.update(deltaTime);
 
-    // Don't change animation if performing a blocking action (attack/heal/jump)
+    // Don't change animation if performing a blocking action (attack/heal)
     // or if the death animation is playing
     if (this.isPerformingAction || this.animations.death?.isRunning()) {
       return;
@@ -645,19 +519,14 @@ export class Character extends Entity {
 
     // Determine animation based on movement state
     let targetAnimation: string;
-    if (!this.isOnGround) {
-      // In air - use jump animation if playing, otherwise idle (or a 'fall' anim if available)
-      targetAnimation = this.animations.jump?.isRunning() ? "jump" : "idle";
+    // On ground
+    const isMoving =
+      Math.abs(this.moveState.forward) > 0.1 ||
+      Math.abs(this.moveState.right) > 0.1;
+    if (isMoving) {
+      targetAnimation = this.isSprinting ? "run" : "walk";
     } else {
-      // On ground
-      const isMoving =
-        Math.abs(this.moveState.forward) > 0.1 ||
-        Math.abs(this.moveState.right) > 0.1;
-      if (isMoving) {
-        targetAnimation = this.isSprinting ? "run" : "walk";
-      } else {
-        targetAnimation = "idle";
-      }
+      targetAnimation = "idle";
     }
 
     // Switch to the target animation if not already playing
@@ -666,10 +535,8 @@ export class Character extends Entity {
     }
   }
 
-  // Triggers a specific action animation (attack, heal, gather, jump).
-  triggerAction(
-    actionType: "attack" | "heal" | "gather" | "jump" | string
-  ): void {
+  // Triggers a specific action animation (attack, heal, gather).
+  triggerAction(actionType: "attack" | "heal" | "gather" | string): void {
     // Find the appropriate animation, potentially using fallbacks
     let actionAnim = this.animations[actionType];
     if (!actionAnim && (actionType === "heal" || actionType === "gather")) {
@@ -684,11 +551,7 @@ export class Character extends Entity {
     }
 
     // Handle different action types
-    if (
-      actionType === "attack" ||
-      actionType === "heal" ||
-      actionType === "jump"
-    ) {
+    if (actionType === "attack" || actionType === "heal") {
       // One-shot actions
       if (!this.isPerformingAction && !this.isGathering) {
         this.actionType = actionType;
@@ -697,7 +560,6 @@ export class Character extends Entity {
 
         // Attack logic (damage dealing) happens after animation finishes (in onAnimationFinished)
         // Heal logic is applied immediately in selfHeal before calling triggerAction
-        // Jump logic (velocity change) happens immediately in handleMovement
       }
     } else if (actionType === "gather") {
       // Start gathering state (looping animation handled in updateAnimations)
@@ -711,7 +573,18 @@ export class Character extends Entity {
     }
   }
 
-  // Overrides the base Entity update method.
+  // Add this method to get terrain height at the player's position
+  // Add this method to get terrain height at the player's position
+  getTerrainHeightAtPosition(): number {
+    if (!this.game) return 0;
+    return getTerrainHeight(
+      this.game.scene,
+      this.mesh?.position.x!,
+      this.mesh?.position.z!
+    );
+  }
+
+  // Modify the update method to determine ground state before movement
   override update(deltaTime: number, options: UpdateOptions = {}): void {
     if (this.isDead || !this.mesh) return;
 
@@ -725,52 +598,42 @@ export class Character extends Entity {
     // Update AI Controller if this is an NPC
     if (this.aiController && !this.userData.isPlayer) {
       this.moveState = this.aiController.computeAIMoveState(deltaTime);
-      // AI observation update might happen here or in the Game loop after all movements
-      // this.aiController.updateObservation(this.game?.entities ?? []);
     }
 
     // --- State Updates ---
     this.handleStamina(deltaTime);
 
     // --- Movement Calculation ---
-    // Only allow movement input if not performing a blocking action
     if (!this.isPerformingAction) {
       this.handleMovement(deltaTime);
     } else {
-      // Stop horizontal movement during attack/heal animation
       this.velocity.x = 0;
       this.velocity.z = 0;
     }
 
     // --- Physics & Collision ---
-    this.applyGravity(deltaTime);
-    // Note: Actual position update and collision resolution is handled by the Physics system in the Game loop.
-    // This update method calculates intended velocity.
-
-    // Check ground state *before* physics system potentially adjusts position
-    this.checkGround(effectiveCollidables);
+    //   this.applyGravity(deltaTime);
+    // Note: Position update and snapping now handled by Physics system
 
     // --- Action Triggers ---
-    // Handle attack input (only if not already attacking/gathering)
     if (
       this.moveState.attack &&
       !this.attackTriggered &&
       !this.isPerformingAction &&
       !this.isGathering
     ) {
-      this.attackTriggered = true; // Mark as triggered to prevent spam
+      this.attackTriggered = true;
       this.triggerAction("attack");
     } else if (!this.moveState.attack) {
-      this.attackTriggered = false; // Reset trigger when key/button is released
+      this.attackTriggered = false;
     }
 
     // --- Animation & Bounding Box ---
     this.updateAnimations(deltaTime);
-    this.updateBoundingBox(); // Update BB based on current state/position (before physics push)
+    this.updateBoundingBox();
 
     // Update AI intent display
     if (this.aiController && this.intentSprite) {
-      // Ensure the persistent intent is set for the display logic
       this.setPersistentIntent(this.aiController.currentIntent);
     }
   }
@@ -829,8 +692,6 @@ export class Character extends Entity {
     this.velocity.set(0, 0, 0);
     this.isDead = false;
     this.isExhausted = false;
-    this.isOnGround = false; // Recalculate ground state on next update
-    this.canJump = false;
     this.isGathering = false;
     this.gatherAttackTimer = 0;
     this.isPerformingAction = false;
