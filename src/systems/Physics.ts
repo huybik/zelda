@@ -4,7 +4,7 @@ import { Character } from "../core/Character";
 import { PHYSICS_COLLISION_CHECK_RADIUS_SQ } from "../config";
 
 export class Physics {
-  player: Character; // The character currently controlled by the player
+  chars: Character[]; // The character currently controlled by the chars
   collidableObjects: Object3D[]; // List of all objects that can be collided with
 
   // Optimization: Only check collisions with objects within this squared radius
@@ -21,81 +21,76 @@ export class Physics {
   private pushVector = new Vector3(); // Accumulated push vector from collisions this frame
   private intendedPosition = new Vector3(); // Player's position after applying velocity but before collision resolution
 
-  constructor(player: Character, collidableObjects: Object3D[]) {
-    this.player = player;
+  constructor(chars: Character[], collidableObjects: Object3D[]) {
+    this.chars = chars;
     this.collidableObjects = collidableObjects;
-  }
-
-  // Update the player reference (e.g., when control switches)
-  setActivePlayer(newPlayer: Character): void {
-    this.player = newPlayer;
   }
 
   // Main physics update loop, called each frame by the Game.
   update(deltaTime: number): void {
-    if (this.player.isDead || !this.player.mesh) return;
+    for (const char of this.chars) {
+      if (char.isDead || !char.mesh) return;
 
-    // 1. Calculate Intended Position
-    this.intendedPosition.copy(this.player.mesh.position);
-    this.intendedPosition.addScaledVector(this.player.velocity, deltaTime);
+      // 1. Calculate Intended Position
+      this.intendedPosition.copy(char.mesh.position);
+      this.intendedPosition.addScaledVector(char.velocity, deltaTime);
 
-    // 2. Update Player Bounding Box for Collision Check
-    this.player.updateBoundingBox();
-    this.playerBox.copy(this.player.boundingBox);
-    const translation = this.intendedPosition
-      .clone()
-      .sub(this.player.mesh.position);
-    this.playerBox.translate(translation);
+      // 2. Update Player Bounding Box for Collision Check
+      char.updateBoundingBox();
+      this.playerBox.copy(char.boundingBox);
+      const translation = this.intendedPosition.clone().sub(char.mesh.position);
+      this.playerBox.translate(translation);
 
-    // Reset the push vector for this frame
-    this.pushVector.set(0, 0, 0);
+      // Reset the push vector for this frame
+      this.pushVector.set(0, 0, 0);
 
-    // 3. Collision Detection and Resolution Loop
-    const playerWorldPos = this.intendedPosition;
+      // 3. Collision Detection and Resolution Loop
+      const playerWorldPos = this.intendedPosition;
 
-    this.collidableObjects.forEach((object) => {
-      if (
-        !object?.parent ||
-        object === this.player.mesh ||
-        !object.userData?.isCollidable
-      ) {
-        return;
-      }
-      const entityRef = object.userData?.entityReference;
-      if (entityRef instanceof Character && entityRef.isDead) {
-        return;
-      }
+      this.collidableObjects.forEach((object) => {
+        if (
+          !object?.parent ||
+          object === char.mesh ||
+          !object.userData?.isCollidable
+        ) {
+          return;
+        }
+        const entityRef = object.userData?.entityReference;
+        if (entityRef instanceof Character && entityRef.isDead) {
+          return;
+        }
 
-      const objectPosition = object.getWorldPosition(this.centerObject);
-      if (
-        playerWorldPos.distanceToSquared(objectPosition) >
-        this.collisionCheckRadiusSq
-      ) {
-        return;
-      }
+        const objectPosition = object.getWorldPosition(this.centerObject);
+        if (
+          playerWorldPos.distanceToSquared(objectPosition) >
+          this.collisionCheckRadiusSq
+        ) {
+          return;
+        }
 
-      let currentObjectBox = object.userData.boundingBox as Box3 | undefined;
-      if (!currentObjectBox || currentObjectBox.isEmpty()) {
-        this.objectBox.setFromObject(object, true);
-        currentObjectBox = this.objectBox;
-        if (currentObjectBox.isEmpty()) return;
-      }
+        let currentObjectBox = object.userData.boundingBox as Box3 | undefined;
+        if (!currentObjectBox || currentObjectBox.isEmpty()) {
+          this.objectBox.setFromObject(object, true);
+          currentObjectBox = this.objectBox;
+          if (currentObjectBox.isEmpty()) return;
+        }
 
-      if (this.playerBox.intersectsBox(currentObjectBox)) {
-        this.resolveCollision(this.playerBox, currentObjectBox);
-        this.playerBox.translate(this.pushVector);
-      }
-    });
+        if (this.playerBox.intersectsBox(currentObjectBox)) {
+          this.resolveCollision(this.playerBox, currentObjectBox);
+          this.playerBox.translate(this.pushVector);
+        }
+      });
 
-    // 4. Apply Final Position
-    this.intendedPosition.add(this.pushVector);
-    this.player.mesh.position.copy(this.intendedPosition);
+      // 4. Apply Final Position
+      this.intendedPosition.add(this.pushVector);
+      char.mesh.position.copy(this.intendedPosition);
 
-    // 5. Snap to Terrain Height
-    this.player.mesh!.position.y = this.player.getTerrainHeightAtPosition();
+      // 5. snap terrain
+      char.snapTerrain();
 
-    // 6. Final Bounding Box Update
-    this.player.updateBoundingBox();
+      // 6. Final Bounding Box Update
+      char.updateBoundingBox();
+    }
   }
 
   // Resolves a single AABB collision by calculating the Minimum Translation Vector (MTV).
@@ -146,49 +141,45 @@ export class Physics {
     // Calculate the push vector based on the minimum overlap axis
     const pushMagnitude = minOverlap + 0.001; // Add a small epsilon to ensure separation
     this.pushVector.set(0, 0, 0); // Reset push vector for this specific collision
-
-    switch (pushAxis) {
-      case 0: // X-axis collision
-        this.pushVector.x =
-          this.centerPlayer.x > this.centerObject.x
-            ? pushMagnitude
-            : -pushMagnitude;
-        // Stop velocity component pushing into the object
-        if (
-          Math.sign(this.player.velocity.x) === Math.sign(this.pushVector.x)
-        ) {
-          this.player.velocity.x = 0;
-        }
-        break;
-      case 1: // Y-axis collision
-        this.pushVector.y =
-          this.centerPlayer.y > this.centerObject.y
-            ? pushMagnitude
-            : -pushMagnitude;
-        // Handle vertical collision response (landing, hitting ceiling)
-        if (this.pushVector.y > 0 && this.player.velocity.y < 0) {
-          // Pushed up (landed on something)
-          this.player.velocity.y = 0;
-          // Ground check will handle isOnGround flags later
-        } else if (this.pushVector.y < 0 && this.player.velocity.y > 0) {
-          // Pushed down (hit ceiling)
-          this.player.velocity.y = 0;
-        }
-        break;
-      case 2: // Z-axis collision
-        this.pushVector.z =
-          this.centerPlayer.z > this.centerObject.z
-            ? pushMagnitude
-            : -pushMagnitude;
-        // Stop velocity component pushing into the object
-        if (
-          Math.sign(this.player.velocity.z) === Math.sign(this.pushVector.z)
-        ) {
-          this.player.velocity.z = 0;
-        }
-        break;
+    for (const char of this.chars) {
+      switch (pushAxis) {
+        case 0: // X-axis collision
+          this.pushVector.x =
+            this.centerPlayer.x > this.centerObject.x
+              ? pushMagnitude
+              : -pushMagnitude;
+          // Stop velocity component pushing into the object
+          if (Math.sign(char.velocity.x) === Math.sign(this.pushVector.x)) {
+            char.velocity.x = 0;
+          }
+          break;
+        case 1: // Y-axis collision
+          this.pushVector.y =
+            this.centerPlayer.y > this.centerObject.y
+              ? pushMagnitude
+              : -pushMagnitude;
+          // Handle vertical collision response (landing, hitting ceiling)
+          if (this.pushVector.y > 0 && char.velocity.y < 0) {
+            // Pushed up (landed on something)
+            char.velocity.y = 0;
+            // Ground check will handle isOnGround flags later
+          } else if (this.pushVector.y < 0 && char.velocity.y > 0) {
+            // Pushed down (hit ceiling)
+            char.velocity.y = 0;
+          }
+          break;
+        case 2: // Z-axis collision
+          this.pushVector.z =
+            this.centerPlayer.z > this.centerObject.z
+              ? pushMagnitude
+              : -pushMagnitude;
+          // Stop velocity component pushing into the object
+          if (Math.sign(char.velocity.z) === Math.sign(this.pushVector.z)) {
+            char.velocity.z = 0;
+          }
+          break;
+      }
     }
-
     // The calculated pushVector is applied to the intendedPosition in the main update loop
     // and also used to update the playerBox for subsequent checks in the same frame.
   }

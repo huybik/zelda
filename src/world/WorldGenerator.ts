@@ -353,7 +353,7 @@ export function populateEnvironment(
   interactableObjects: Array<any>, // Can contain Characters or simple Object3Ds
   entities: Array<any>, // List containing Characters and simple objects for tracking
   models: Record<string, LoadedModel>,
-  gameInstance: Game // Pass Game instance for Character setup
+  game: Game // Pass Game instance for Character setup
 ): void {
   const halfSize = worldSize / 2;
   const villageCenter = new Vector3(5, 0, 10); // Define a central point for the village area
@@ -361,7 +361,7 @@ export function populateEnvironment(
 
   // --- Add Characters ---
   const addCharacter = (
-    pos: Vector3,
+    spawnPos: Vector3,
     name: string,
     modelKey: string,
     persona: string
@@ -374,7 +374,7 @@ export function populateEnvironment(
       return null;
     }
     // Need Character class imported
-    const CharacterClass = gameInstance.characterClassRef; // Assuming Game stores a ref
+    const CharacterClass = game.characterClassRef; // Assuming Game stores a ref
     if (!CharacterClass) {
       console.error(
         "Character class reference not available in Game instance."
@@ -383,20 +383,20 @@ export function populateEnvironment(
     }
 
     const charInventory = new Inventory(9); // NPCs get a small inventory
+    spawnPos.y = getTerrainHeight(scene, spawnPos.x, spawnPos.z); // Set Y position from model
     const character = new CharacterClass(
       scene,
-      pos,
+      spawnPos,
       name,
       modelData.scene.clone(), // Clone the scene graph
       modelData.animations, // Share animations
-      charInventory
+      charInventory,
+      game
     );
-    character.game = gameInstance; // Link character to game instance
     character.persona = persona;
     if (character.aiController) character.aiController.persona = persona; // Sync persona to AI
 
     // Place character on terrain
-    character.mesh!.position.y = getTerrainHeight(scene, pos.x, pos.z);
     character.updateBoundingBox(); // Update BB after placement
 
     // Add to tracking lists
@@ -409,30 +409,30 @@ export function populateEnvironment(
     character.initIntentDisplay();
 
     console.log(
-      `Added character: ${name} at (${pos.x.toFixed(1)}, ${character.mesh!.position.y.toFixed(1)}, ${pos.z.toFixed(1)})`
+      `Added character: ${name} at (${spawnPos.x.toFixed(1)}, ${character.mesh!.position.y.toFixed(1)}, ${spawnPos.z.toFixed(1)})`
     );
     return character;
   };
 
-  // Example NPC placements
-  //   addCharacter(
-  //     villageCenter.clone().add(new Vector3(-12, 0, 2)),
-  //     "Farmer Giles",
-  //     "tavernMan", // Using placeholder model key
-  //     "Hardworking farmer, values community, knowledgeable about crops, a bit stubborn."
-  //   );
+  //   Example NPC placements
+  addCharacter(
+    villageCenter.clone().add(new Vector3(-12, 0, 2)),
+    "Farmer Giles",
+    "player", // Using placeholder model key
+    "Hardworking farmer, values community, knowledgeable about crops, a bit stubborn."
+  );
   addCharacter(
     villageCenter.clone().add(new Vector3(10, 0, -3)),
     "Blacksmith Brynn",
     "player", // Using placeholder model key
     "Skilled artisan, proud, strong-willed, independent, focused on craft, gruff but kind."
   );
-  //   addCharacter(
-  //     new Vector3(halfSize * 0.4, 0, -halfSize * 0.3), // Hunter further out
-  //     "Hunter Rex",
-  //     "oldMan", // Using placeholder model key
-  //     "Experienced tracker, quiet, observant, prefers wilderness, resourceful, not very social."
-  //   );
+  addCharacter(
+    new Vector3(halfSize * 0.4, 0, -halfSize * 0.3), // Hunter further out
+    "Hunter Rex",
+    "player", // Using placeholder model key
+    "Experienced tracker, quiet, observant, prefers wilderness, resourceful, not very social."
+  );
 
   // --- Add Objects ---
   const addObject = (

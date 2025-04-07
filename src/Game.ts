@@ -205,6 +205,9 @@ export class Game {
     // Define model paths relative to the public directory or assets folder
     const modelPaths = {
       player: "assets/player/scene.gltf",
+      oldMan: "assets/player/scene.gltf",
+      woman: "assets/player/scene.gltf",
+      tavernMan: "assets/player/scene.gltf",
 
       // Add other models here: e.g., enemy: "assets/enemy/scene.gltf"
     };
@@ -239,7 +242,8 @@ export class Game {
       "Player",
       playerModelData.scene,
       playerModelData.animations,
-      playerInventory
+      playerInventory,
+      this
     );
     this.activeCharacter.userData.isPlayer = true; // Mark as player
     this.activeCharacter.userData.isNPC = false;
@@ -287,7 +291,10 @@ export class Game {
   private initPhysics(): void {
     if (!this.activeCharacter)
       throw new Error("Player must be initialized before physics.");
-    this.physics = new Physics(this.activeCharacter, this.collidableObjects);
+    const chars = this.entities.filter(
+      (entity): entity is Character => entity instanceof Character
+    );
+    this.physics = new Physics(chars, this.collidableObjects);
   }
 
   private initEnvironment(models: Record<string, LoadedModel>): void {
@@ -778,7 +785,6 @@ export class Game {
     this.activeCharacter = newPlayer;
     this.controls!.player = newPlayer; // Update controls target
     this.thirdPersonCamera!.setTarget(newPlayer.mesh!); // Update camera target
-    this.physics!.setActivePlayer(newPlayer); // Update physics target
     this.interactionSystem!.setActivePlayer(newPlayer); // Update interaction system target
     this.hud!.setActivePlayer(newPlayer); // Update HUD target
     this.minimap?.setActivePlayer(newPlayer); // Update minimap target

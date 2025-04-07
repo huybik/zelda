@@ -27,7 +27,6 @@ import {
   RESPAWN_HEALTH_FACTOR,
 } from "../config";
 import type { Game } from "../Game"; // Use type import
-import { getTerrainHeight } from "../utils"; // Import utility function
 
 export class Character extends Entity {
   // Stats & Movement
@@ -41,6 +40,7 @@ export class Character extends Entity {
   isExhausted: boolean;
   exhaustionThreshold: number; // Stamina level below which exhaustion occurs/recovers
   moveState: MoveState;
+  game: Game; // Reference to the game instance
 
   // Inventory & Logging
   inventory: Inventory | null;
@@ -65,8 +65,6 @@ export class Character extends Entity {
   aiController: AIController | null = null;
 
   // Internal helpers
-  private groundCheckOrigin = new Vector3();
-  private groundCheckDirection = new Vector3(0, -1, 0);
   private attackTriggered: boolean = false; // Prevent holding attack key spamming triggers
   private rayCaster: Raycaster; // Used for ground check and attack raycast
 
@@ -76,12 +74,13 @@ export class Character extends Entity {
     name: string,
     model: Group, // The visual model (GLTF scene)
     animations: AnimationClip[],
-    inventory: Inventory | null // Can be null if character doesn't have one
+    inventory: Inventory | null, // Can be null if character doesn't have one
+    game: Game
   ) {
     super(scene, position, name); // Call Entity constructor
 
     // Override/set Character-specific userData defaults
-    // this.userData.isCollidable = true; // Collision removed
+    this.game = game;
     this.userData.isInteractable = true; // Characters are usually interactable
     this.userData.interactionType = "talk"; // Default interaction
     this.userData.isNPC = true; // Default to NPC, override for player
@@ -145,11 +144,9 @@ export class Character extends Entity {
 
     // Final bounding box update after model setup
     this.updateBoundingBox();
+
     // Ensure initial position is on terrain
-    if (this.mesh) {
-      this.mesh.position.y = this.getTerrainHeightAtPosition();
-      this.updateBoundingBox();
-    }
+    this.snapTerrain();
   }
 
   // Sets up animation actions from loaded clips.
@@ -293,7 +290,7 @@ export class Character extends Entity {
 
   // Performs an attack action, raycasting for targets.
   performAttack(): void {
-    if (!this.mesh || !this.scene || !this.game) return;
+    if (!this.mesh || !this.game || !this.game.scene) return;
 
     const damage = this.userData.isPlayer
       ? PLAYER_ATTACK_DAMAGE
@@ -494,9 +491,6 @@ export class Character extends Entity {
 
     // Apply calculated horizontal velocity directly to position
     this.mesh.position.addScaledVector(moveVelocity, deltaTime);
-
-    // Snap to terrain height after horizontal movement
-    this.mesh.position.y = this.getTerrainHeightAtPosition();
   }
 
   // Updates the character's animations based on state.
@@ -581,17 +575,6 @@ export class Character extends Entity {
     }
   }
 
-  // Add this method to get terrain height at the player's position
-  // Add this method to get terrain height at the player's position
-  getTerrainHeightAtPosition(): number {
-    if (!this.game) return 0;
-    return getTerrainHeight(
-      this.game.scene,
-      this.mesh?.position.x!,
-      this.mesh?.position.z!
-    );
-  }
-
   // Modify the update method to determine ground state before movement
   override update(deltaTime: number, options: UpdateOptions = {}): void {
     if (this.isDead || !this.mesh) return;
@@ -612,15 +595,8 @@ export class Character extends Entity {
     this.handleStamina(deltaTime);
 
     // --- Movement Calculation & Application ---
-    if (!this.isPerformingAction) {
-      this.handleMovement(deltaTime); // Now applies movement directly and snaps to terrain
-    } else {
-      // Optionally snap to terrain even if performing action?
-      this.mesh.position.y = this.getTerrainHeightAtPosition();
-    }
 
-    // --- Physics & Collision ---
-    // Removed - Physics system is gone, movement handled above
+    this.handleMovement(deltaTime); // Now applies movement directly
 
     // --- Action Triggers ---
     if (
@@ -637,7 +613,8 @@ export class Character extends Entity {
 
     // --- Animation & Bounding Box ---
     this.updateAnimations(deltaTime);
-    this.updateBoundingBox(); // Still useful for interaction, minimap, etc.
+    // this.updateBoundingBox(); // Still useful for interaction, minimap, etc.
+    // this.snapTerrain(); // Snap to terrain after movement
 
     // Update AI intent display
     if (this.aiController && this.intentSprite) {

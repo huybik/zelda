@@ -12,7 +12,7 @@ import {
   Scene,
 } from "three";
 import type { EntityUserData, UpdateOptions } from "../types";
-import { getNextEntityId } from "../utils";
+import { getNextEntityId, getTerrainHeight } from "../utils";
 import { CHARACTER_HEIGHT, CHARACTER_RADIUS } from "../config";
 import type { Game } from "../Game"; // Use type import to avoid circular dependency issues at runtime
 
@@ -105,6 +105,18 @@ export class Entity {
     if (!this.mesh) return;
     this.mesh.position.copy(position);
     this.updateBoundingBox(); // Update BB after position change
+    this.snapTerrain();
+  }
+
+  // snap to terrain
+  snapTerrain(): void {
+    if (!this.mesh) return;
+    const terrainHeight = getTerrainHeight(
+      this.game?.scene!,
+      this.mesh.position.x,
+      this.mesh.position.z
+    );
+    this.mesh.position.y = terrainHeight + CHARACTER_HEIGHT / 2;
   }
 
   // Makes the entity look at a target position horizontally.
