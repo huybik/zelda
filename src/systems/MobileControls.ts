@@ -33,11 +33,6 @@ export class MobileControls {
     // Add other buttons as needed (e.g., sprint)
   };
 
-  // Bound event handlers for touch camera
-  private boundHandleCameraTouchStart: (event: TouchEvent) => void;
-  private boundHandleCameraTouchMove: (event: TouchEvent) => void;
-  private boundHandleCameraTouchEnd: (event: TouchEvent) => void;
-
   private isMobileDevice: boolean; // Flag indicating if mobile controls should be active
 
   constructor(game: Game, controls: Controls) {
@@ -49,11 +44,6 @@ export class MobileControls {
       "ontouchstart" in window ||
       navigator.maxTouchPoints > 0 ||
       window.innerWidth < 768;
-
-    // Bind touch handlers
-    this.boundHandleCameraTouchStart = this.handleCameraTouchStart.bind(this);
-    this.boundHandleCameraTouchMove = this.handleCameraTouchMove.bind(this);
-    this.boundHandleCameraTouchEnd = this.handleCameraTouchEnd.bind(this);
 
     // Only initialize mobile controls if detected as mobile
     if (this.isMobileDevice) {
@@ -87,7 +77,6 @@ export class MobileControls {
     this.setupMoveJoystick();
     this.setupLookJoystick(); // Setup the look joystick
     this.setupButtons();
-    // this.setupTouchCameraControls(); // Keep touch drag as alternative/fallback? Or disable if using look stick? Choose one primary method. Let's keep it for now.
     document
       .getElementById("mobile-controls-layer")
       ?.classList.remove("hidden"); // Show controls
@@ -108,7 +97,7 @@ export class MobileControls {
     this.moveManager = nipplejs.create(options);
 
     // Update moveVector on joystick movement
-    this.moveManager.on("move", (evt, nipple) => {
+    this.moveManager.on("move", (_evt, nipple) => {
       if (nipple.angle && nipple.force) {
         // Map force and angle to a Vector2 (invert Y for forward/backward)
         this.moveVector.set(
@@ -141,7 +130,7 @@ export class MobileControls {
     this.lookManager = nipplejs.create(options);
 
     // Update lookVector on joystick movement
-    this.lookManager.on("move", (evt, nipple) => {
+    this.lookManager.on("move", (_evt, nipple) => {
       if (nipple.vector) {
         // nipple.vector gives { x, y } relative to center, range -1 to 1
         this.lookVector.set(nipple.vector.x, nipple.vector.y);
@@ -152,32 +141,6 @@ export class MobileControls {
     this.lookManager.on("end", () => {
       this.lookVector.set(0, 0);
     });
-  }
-
-  // Configures touch listeners on the game container for camera dragging.
-  private setupTouchCameraControls(): void {
-    if (!this.gameContainer) return;
-    // Use { passive: false } to allow preventDefault()
-    this.gameContainer.addEventListener(
-      "touchstart",
-      this.boundHandleCameraTouchStart,
-      { passive: false }
-    );
-    this.gameContainer.addEventListener(
-      "touchmove",
-      this.boundHandleCameraTouchMove,
-      { passive: false }
-    );
-    this.gameContainer.addEventListener(
-      "touchend",
-      this.boundHandleCameraTouchEnd,
-      { passive: false }
-    );
-    this.gameContainer.addEventListener(
-      "touchcancel",
-      this.boundHandleCameraTouchEnd,
-      { passive: false }
-    );
   }
 
   // Checks if a touch point is inside a given DOM rectangle.
@@ -366,7 +329,7 @@ export class MobileControls {
   }
 
   // Main update loop for mobile controls, called each frame by the Game loop.
-  update(deltaTime: number): void {
+  update(_deltaTime: number): void {
     if (!this.isActive()) return; // Do nothing if not on a mobile device
 
     // --- Update Move State from Joystick ---
@@ -446,26 +409,6 @@ export class MobileControls {
     this.lookManager?.destroy();
     this.moveManager = null;
     this.lookManager = null;
-
-    // Remove touch listeners if they were added
-    if (this.gameContainer) {
-      this.gameContainer.removeEventListener(
-        "touchstart",
-        this.boundHandleCameraTouchStart
-      );
-      this.gameContainer.removeEventListener(
-        "touchmove",
-        this.boundHandleCameraTouchMove
-      );
-      this.gameContainer.removeEventListener(
-        "touchend",
-        this.boundHandleCameraTouchEnd
-      );
-      this.gameContainer.removeEventListener(
-        "touchcancel",
-        this.boundHandleCameraTouchEnd
-      );
-    }
 
     // Basic button listener removal (more robust needed if dynamically adding/removing)
     // This requires storing the bound listeners for each button event type.

@@ -21,7 +21,6 @@ import {
 } from "three";
 import { getTerrainHeight } from "../utils";
 import {
-  Colors,
   PORTAL_RADIUS,
   PORTAL_TUBE,
   PORTAL_PARTICLE_COUNT,

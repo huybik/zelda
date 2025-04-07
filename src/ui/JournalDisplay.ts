@@ -1,6 +1,6 @@
 // src/ui/JournalDisplay.ts
 import { EventLog } from "../core/EventLog";
-import type { EventEntry, Quest } from "../types";
+import type { EventEntry } from "../types";
 import type { Game } from "../Game"; // Use type import
 
 export class JournalDisplay {
@@ -13,7 +13,6 @@ export class JournalDisplay {
 
   // Bound function references for listener removal
   private boundUpdateEvents: (entries: EventEntry[]) => void;
-  private boundUpdateQuests: () => void; // Quests updated manually on show
 
   constructor(eventLog: EventLog, game: Game) {
     this.eventLog = eventLog;
@@ -31,13 +30,11 @@ export class JournalDisplay {
       // Optionally disable if elements are missing
       this.eventLog = new EventLog(0); // Use dummy log
       this.boundUpdateEvents = () => {};
-      this.boundUpdateQuests = () => {};
       return;
     }
 
     // Bind methods
     this.boundUpdateEvents = this.updateEvents.bind(this);
-    this.boundUpdateQuests = this.updateQuests.bind(this); // Quests updated manually
 
     // Register listener for event log changes
     this.eventLog.onChange(this.boundUpdateEvents);

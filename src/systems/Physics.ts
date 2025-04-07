@@ -1,5 +1,5 @@
 // src/systems/Physics.ts
-import { Object3D, Box3, Vector3, Group, Object3DEventMap } from "three";
+import { Object3D, Box3, Vector3 } from "three";
 import { Character } from "../core/Character";
 import { PHYSICS_COLLISION_CHECK_RADIUS_SQ } from "../config";
 

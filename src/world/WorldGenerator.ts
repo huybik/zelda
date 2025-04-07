@@ -371,7 +371,7 @@ export function populateEnvironment(
     modelKey: string,
     persona: string
   ): Character | null => {
-    const modelData = models.player;
+    const modelData = models[modelKey];
     if (!modelData) {
       console.error(
         `Model data not found for key: ${modelKey}. Cannot create character ${name}.`

@@ -1,6 +1,5 @@
 // src/core/Entity.ts
 import {
-  Object3D,
   Vector3,
   Box3,
   Group,
@@ -76,7 +75,7 @@ export class Entity {
   }
 
   // Basic update method, intended to be overridden by subclasses like Character.
-  update(deltaTime: number, options: UpdateOptions = {}): void {
+  update(_deltaTime: number, _options: UpdateOptions = {}): void {
     // Base entity might not do anything on update unless specified
   }
 
@@ -165,7 +164,7 @@ export class Entity {
   }
 
   // Handles the entity's death.
-  die(attacker: Entity | null = null): void {
+  die(_attacker: Entity | null = null): void {
     if (this.isDead) return;
 
     this.isDead = true;

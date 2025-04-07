@@ -1,12 +1,10 @@
 // src/utils.ts
 import {
   Vector3,
-  MathUtils,
   Scene,
   Raycaster,
   Mesh,
   Group,
-  AnimationClip,
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import {

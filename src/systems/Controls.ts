@@ -67,7 +67,7 @@ export class ThirdPersonCamera {
   }
 
   // Updates the camera's pitch based on vertical mouse movement.
-  handleMouseInput(deltaX: number, deltaY: number): void {
+  handleMouseInput(_deltaX: number, deltaY: number): void {
     // Yaw (deltaX) rotation is typically handled by rotating the player character directly.
     // Update pitch based on deltaY
     this.pitchAngle += deltaY * this.pitchSensitivity;
@@ -505,7 +505,7 @@ export class Controls {
   }
 
   // Main update loop for controls, called each frame by the Game loop.
-  update(deltaTime: number): void {
+  update(_deltaTime: number): void {
     // --- Player Rotation (Mouse Input - Desktop Only) ---
     if (
       !this.mobileControls?.isActive() &&

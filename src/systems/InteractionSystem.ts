@@ -15,7 +15,6 @@ import type {
   TargetInfo,
   ActiveGather,
   InteractionResult,
-  AIActionData,
 } from "../types";
 import {
   INTERACTION_DISTANCE,
@@ -512,7 +511,7 @@ export class InteractionSystem {
     return false;
   }
 
-  updateGatherAction(deltaTime: number): void {
+  updateGatherAction(_deltaTime: number): void {
     if (!this.activeGather) return;
 
     const elapsedTime = performance.now() - this.activeGather.startTime;
