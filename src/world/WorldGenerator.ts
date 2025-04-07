@@ -22,7 +22,12 @@ import {
   Box3,
 } from "three";
 import { SimplexNoise } from "three/examples/jsm/math/SimplexNoise.js";
-import { Colors, WORLD_SIZE, TERRAIN_SEGMENTS } from "../config";
+import {
+  Colors,
+  WORLD_SIZE,
+  TERRAIN_SEGMENTS,
+  CHARACTER_HEIGHT,
+} from "../config";
 import {
   smoothstep,
   randomFloat,
@@ -30,7 +35,7 @@ import {
   getNextEntityId,
 } from "../utils";
 import type { EntityUserData, LoadedModel } from "../types";
-import type { Character } from "../core/Character"; // Use type import
+import { Character } from "../core/Character"; // Use type import
 import { Inventory } from "../core/Inventory"; // Use direct import
 import type { Game } from "../Game"; // Use type import
 
@@ -366,7 +371,7 @@ export function populateEnvironment(
     modelKey: string,
     persona: string
   ): Character | null => {
-    const modelData = models[modelKey];
+    const modelData = models.player;
     if (!modelData) {
       console.error(
         `Model data not found for key: ${modelKey}. Cannot create character ${name}.`
@@ -374,17 +379,17 @@ export function populateEnvironment(
       return null;
     }
     // Need Character class imported
-    const CharacterClass = game.characterClassRef; // Assuming Game stores a ref
-    if (!CharacterClass) {
-      console.error(
-        "Character class reference not available in Game instance."
-      );
-      return null;
-    }
-
+    // const CharacterClass = game.characterClassRef; // Assuming Game stores a ref
+    // if (!CharacterClass) {
+    //   console.error(
+    //     "Character class reference not available in Game instance."
+    //   );
+    //   return null;
+    // }
     const charInventory = new Inventory(9); // NPCs get a small inventory
-    spawnPos.y = getTerrainHeight(scene, spawnPos.x, spawnPos.z); // Set Y position from model
-    const character = new CharacterClass(
+    spawnPos.y =
+      getTerrainHeight(scene, spawnPos.x, spawnPos.z) + CHARACTER_HEIGHT / 2; // Set Y position from model
+    const character = new Character(
       scene,
       spawnPos,
       name,
@@ -418,19 +423,19 @@ export function populateEnvironment(
   addCharacter(
     villageCenter.clone().add(new Vector3(-12, 0, 2)),
     "Farmer Giles",
-    "player", // Using placeholder model key
+    "oldMan", // Using placeholder model key
     "Hardworking farmer, values community, knowledgeable about crops, a bit stubborn."
   );
   addCharacter(
     villageCenter.clone().add(new Vector3(10, 0, -3)),
     "Blacksmith Brynn",
-    "player", // Using placeholder model key
+    "tavernMan", // Using placeholder model key
     "Skilled artisan, proud, strong-willed, independent, focused on craft, gruff but kind."
   );
   addCharacter(
     new Vector3(halfSize * 0.4, 0, -halfSize * 0.3), // Hunter further out
     "Hunter Rex",
-    "player", // Using placeholder model key
+    "woman", // Using placeholder model key
     "Experienced tracker, quiet, observant, prefers wilderness, resourceful, not very social."
   );
 

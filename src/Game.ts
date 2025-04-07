@@ -47,7 +47,12 @@ import { JournalDisplay } from "./ui/JournalDisplay";
 import { Minimap } from "./ui/Minimap";
 
 // Config & Types
-import { Colors, WORLD_SIZE, PARTICLE_EFFECT_DURATION } from "./config";
+import {
+  Colors,
+  WORLD_SIZE,
+  PARTICLE_EFFECT_DURATION,
+  CHARACTER_HEIGHT,
+} from "./config";
 import type { EventEntry, Quest, LoadedModel } from "./types";
 import { getTerrainHeight, loadModels } from "./utils"; // Import model loader
 
@@ -233,9 +238,11 @@ export class Game {
 
     const playerModelData = models.player;
     if (!playerModelData) throw new Error("Player model failed to load.");
-    spawnPos.y = getTerrainHeight(this.scene, spawnPos.x, spawnPos.z); // Set Y position from model
+    spawnPos.y =
+      getTerrainHeight(this.scene, spawnPos.x, spawnPos.z) +
+      CHARACTER_HEIGHT / 2; // Set Y position from model
 
-    const playerInventory = new Inventory(); // Default size
+    const playerInventory = new Inventory(9); // Default size
     this.activeCharacter = new Character(
       this.scene,
       spawnPos, // Initial position hint (actual placement done in constructor)

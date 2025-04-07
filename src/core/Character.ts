@@ -9,7 +9,6 @@ import {
   LoopOnce,
   Box3,
   Raycaster,
-  Object3D,
   Scene,
 } from "three";
 import { Entity } from "./Entity";
@@ -143,7 +142,7 @@ export class Character extends Entity {
     }
 
     // Final bounding box update after model setup
-    this.updateBoundingBox();
+    // this.updateBoundingBox();
 
     // Ensure initial position is on terrain
     this.snapTerrain();
@@ -583,8 +582,6 @@ export class Character extends Entity {
 
     // Use provided moveState (from Controls or AI) or internal state if none provided
     this.moveState = moveState ?? this.moveState;
-    // const effectiveCollidables =
-    //   collidables ?? this.game?.collidableObjects ?? []; // Collision removed
 
     // Update AI Controller if this is an NPC
     if (this.aiController && !this.userData.isPlayer) {
@@ -595,7 +592,6 @@ export class Character extends Entity {
     this.handleStamina(deltaTime);
 
     // --- Movement Calculation & Application ---
-
     this.handleMovement(deltaTime); // Now applies movement directly
 
     // --- Action Triggers ---
@@ -613,8 +609,6 @@ export class Character extends Entity {
 
     // --- Animation & Bounding Box ---
     this.updateAnimations(deltaTime);
-    // this.updateBoundingBox(); // Still useful for interaction, minimap, etc.
-    // this.snapTerrain(); // Snap to terrain after movement
 
     // Update AI intent display
     if (this.aiController && this.intentSprite) {
@@ -705,7 +699,7 @@ export class Character extends Entity {
         position
       );
     }
-    this.updateBoundingBox(); // Update BB at new location
+    // this.updateBoundingBox(); // Update BB at new location
   }
 
   // Handles interaction when the player interacts with this character.
