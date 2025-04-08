@@ -107,8 +107,7 @@ export class MobileControls {
       }
     };
 
-    this.moveManager.on("start", handleMove);
-    this.moveManager.on("move", handleMove);
+    this.moveManager.on(["start", "move"], handleMove);
     this.moveManager.on("end", () => {
       this.moveVector.set(0, 0);
     });
