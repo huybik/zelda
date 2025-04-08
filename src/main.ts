@@ -641,11 +641,7 @@ export class Game {
       this.journalDisplay!.toggle();
       this.setPauseState(this.journalDisplay!.isOpen);
     });
-    this.controls!.addKeyDownListener("KeyH", () => {
-      if (!this.isPaused && !this.interactionSystem?.isChatOpen) {
-        this.activeCharacter?.selfHeal();
-      }
-    });
+    // Removed KeyH listener for heal
     this.controls!.addKeyDownListener("KeyC", () => {
       if (
         this.interactionSystem!.currentTarget instanceof Character &&
@@ -723,7 +719,7 @@ export class Game {
     if (banner) {
       const welcomeText = this.mobileControls?.isActive()
         ? "Welcome! Use joysticks to move/look, buttons to act."
-        : "Welcome! [WASD] Move, Mouse Look, [I] Inv, [J] Journal, [E] Interact, [F] Attack, [H] Heal, [C] Switch, [Esc] Unlock/Close";
+        : "Welcome! [WASD] Move, Mouse Look, [I] Inv, [J] Journal, [E] Interact, [F] Attack, [C] Switch, [Esc] Unlock/Close"; // Removed [H] Heal
       banner.textContent = welcomeText;
       banner.classList.remove("hidden");
       setTimeout(() => {
@@ -734,7 +730,7 @@ export class Game {
       this.activeCharacter!.eventLog.addEntry(
         this.mobileControls?.isActive()
           ? "Welcome! Use joysticks to move/look, buttons to act."
-          : "Welcome! Click window to lock controls. [WASD] Move, Mouse Look, [I] Inventory, [J] Journal, [E] Interact, [F] Attack, [H] Heal, [C] Switch Control, [Esc] Unlock/Close UI"
+          : "Welcome! Click window to lock controls. [WASD] Move, Mouse Look, [I] Inventory, [J] Journal, [E] Interact, [F] Attack, [C] Switch Control, [Esc] Unlock/Close UI" // Removed [H] Heal
       );
     }
 

@@ -318,13 +318,6 @@ export class Entity {
     if (this.health <= 0) this.die(attacker);
   }
 
-  heal(amount: number): void {
-    if (this.isDead || amount <= 0 || this.health >= this.maxHealth) return;
-    const actualHeal = Math.min(amount, this.maxHealth - this.health);
-    this.health += actualHeal;
-    // Logging for heal is handled by the healer (e.g., AIController, selfHeal, or an external ability)
-  }
-
   die(attacker: Entity | null = null): void {
     if (this.isDead) return;
     this.isDead = true;
@@ -377,7 +370,7 @@ export class Character extends Entity {
   walkAction?: AnimationAction;
   runAction?: AnimationAction;
   jumpAction?: AnimationAction;
-  attackAction?: AnimationAction; // Can be used for heal animation too
+  attackAction?: AnimationAction; // Can be used for gather animation too
   isGathering: boolean = false;
   gatherAttackTimer: number = 0;
   gatherAttackInterval: number = 1.0;
@@ -390,7 +383,7 @@ export class Character extends Entity {
   aiController: AIController | null = null;
   currentAction?: AnimationAction;
 
-  actionType: string = "none"; // 'attack', 'heal', 'gather' etc.
+  actionType: string = "none"; // 'attack', 'gather' etc.
   isPerformingAction: boolean = false;
 
   private groundCheckOrigin = new Vector3();
@@ -484,9 +477,8 @@ export class Character extends Entity {
       if (e.action === this.attackAction) {
         if (this.actionType === "attack") {
           this.performAttack();
-        } else if (this.actionType === "heal") {
-          // Heal logic already applied in selfHeal
         }
+        // Removed heal check
         this.isPerformingAction = false;
         this.actionType = "none";
         const isMoving =
@@ -565,55 +557,6 @@ export class Character extends Entity {
           break;
         }
       }
-    }
-  }
-
-  selfHeal(): void {
-    if (
-      this.isDead ||
-      this.isPerformingAction ||
-      this.health >= this.maxHealth
-    ) {
-      if (this.health >= this.maxHealth) {
-        this.game?.logEvent(
-          this,
-          "heal_fail",
-          `${this.name} is already at full health.`,
-          undefined,
-          {},
-          this.mesh!.position
-        );
-      }
-      return;
-    }
-
-    const healAmount = 25; // Amount to heal
-    const actualHeal = Math.min(healAmount, this.maxHealth - this.health);
-
-    if (actualHeal > 0) {
-      this.heal(actualHeal); // Apply the heal immediately
-
-      // Log the event
-      if (this.game) {
-        this.game.logEvent(
-          this,
-          "self_heal",
-          `${this.name} healed for ${actualHeal} health.`,
-          undefined,
-          { amount: actualHeal },
-          this.mesh!.position
-        );
-        // Spawn heal particles at character's feet/center
-        this.game.spawnParticleEffect(
-          this.mesh!.position.clone().add(
-            new Vector3(0, CHARACTER_HEIGHT / 2, 0)
-          ),
-          "green"
-        );
-      }
-
-      // Trigger the heal animation (using attackAction slot for now)
-      this.triggerAction("heal");
     }
   }
 
@@ -807,7 +750,7 @@ export class Character extends Entity {
   }
 
   triggerAction(actionType: string): void {
-    // Use attackAction for attack, heal, gather visual feedback
+    // Use attackAction for attack, gather visual feedback
     if (this.attackAction && !this.isPerformingAction && !this.isGathering) {
       this.actionType = actionType;
       this.isPerformingAction = true; // Mark that an action animation is playing

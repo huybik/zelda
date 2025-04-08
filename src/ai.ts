@@ -1,3 +1,4 @@
+
 ///// src/ai.ts
 import { Vector3, Object3D } from "three";
 import { Character, Entity } from "./entities";
@@ -135,7 +136,7 @@ export class AIController {
   currentIntent: string = "";
 
   // New properties for actions
-  targetAction: string | null = null; // 'chat', 'attack', 'heal'
+  targetAction: string | null = null; // 'chat', 'attack'
   message: string | null = null; // For chat action
 
   // New properties for optimization
@@ -342,17 +343,6 @@ export class AIController {
               this.character.triggerAction("attack"); // Trigger animation, actual attack happens on finish
               // Stay in this state until animation finishes? No, let animation handler reset state.
               // For now, assume action is triggered and go idle. Re-evaluation will happen.
-              this.aiState = "idle";
-              this.target = null;
-              this.targetAction = null;
-            } else if (this.targetAction === "heal") {
-              if (
-                this.target instanceof Character &&
-                this.target.health < this.target.maxHealth
-              ) {
-                this.character.triggerAction("heal"); // Trigger animation, heal happens on finish
-              }
-              // Go idle after triggering heal attempt
               this.aiState = "idle";
               this.target = null;
               this.targetAction = null;
@@ -612,11 +602,11 @@ ${nearbyObjects}
 Here are the recent events you are aware of:
 ${eventLog}
 
-Based on this information, decide your next action. You may want to gather resources, chat with others, attack enemies, or heal allies if necessary. Imediately proceed to gather resource if player request. Respond ONLY with a valid JSON object in the following format:
+Based on this information, decide your next action. You may want to gather resources, chat with others, or attack enemies. Imediately proceed to gather resource if player request. Respond ONLY with a valid JSON object in the following format:
 {
-  "action": "idle" | "roam" | "gather" | "moveTo" | "attack" | "heal" | "chat",
+  "action": "idle" | "roam" | "gather" | "moveTo" | "attack" | "chat",
   "object_id": "object_id_here", // only if action is "gather", choose from nearby objects
-  "target_id": "character_id_here", // only if action is "moveTo", "attack", "heal", or "chat", choose from nearby characters or "home"
+  "target_id": "character_id_here", // only if action is "moveTo", "attack", or "chat", choose from nearby characters or "home"
   "message": "message_here", // only if action is "chat"
   "intent": "less than 5 words reason here"
 }
@@ -764,10 +754,7 @@ Choose an appropriate action based on your persona and the current situation. En
         this.aiState = "idle";
       }
     } else if (
-      (action === "moveTo" ||
-        action === "attack" ||
-        action === "heal" ||
-        action === "chat") &&
+      (action === "moveTo" || action === "attack" || action === "chat") &&
       target_id
     ) {
       let targetPos: Vector3 | null = null;
@@ -846,8 +833,6 @@ Choose an appropriate action based on your persona and the current situation. En
         actionMessage = `move to ${target_id}`;
       else if (action === "attack" && target_id)
         actionMessage = `attack ${target_id}`;
-      else if (action === "heal" && target_id)
-        actionMessage = `heal ${target_id}`;
       else if (action === "chat" && target_id)
         actionMessage = `chat with ${target_id}`;
       else actionMessage = action; // Fallback
