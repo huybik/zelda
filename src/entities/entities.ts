@@ -1,14 +1,11 @@
-// File: /src/entities.ts
 import {
   Scene,
   Vector3,
   Box3,
-  Quaternion,
   Group,
   Mesh,
   Material,
   Object3D,
-  Matrix4,
   AnimationMixer,
   AnimationClip,
   AnimationAction,
@@ -27,14 +24,12 @@ import {
   MoveState,
   getTerrainHeight,
   EventEntry,
-  GameEvent,
   InteractionResult,
-} from "./helper";
+} from "../core/helper";
 import { Raycaster } from "three";
-import type { Game } from "./main";
+import { Game } from "../main";
 import { AIController } from "./ai";
-import { CHARACTER_HEIGHT, CHARACTER_RADIUS } from "./constants";
-import { not } from "three/src/nodes/TSL.js";
+import { CHARACTER_HEIGHT, CHARACTER_RADIUS } from "../core/constants";
 
 export class Entity {
   id: string;
@@ -91,39 +86,34 @@ export class Entity {
 
   initNameDisplay(): void {
     if (this.userData.isPlayer) return;
-
     if (!this.nameCanvas) {
       this.nameCanvas = document.createElement("canvas");
       this.nameCanvas.width = 200;
-      this.nameCanvas.height = 30; // Smaller height for name
+      this.nameCanvas.height = 30;
       this.nameContext = this.nameCanvas.getContext("2d")!;
       this.nameTexture = new CanvasTexture(this.nameCanvas);
     }
-
     if (!this.nameSprite) {
       const material = new SpriteMaterial({ map: this.nameTexture });
       this.nameSprite = new Sprite(material);
       const aspectRatio = this.nameCanvas.width / this.nameCanvas.height;
-      this.nameSprite.scale.set(aspectRatio * 0.3, 0.3, 1); // Smaller scale than intent
-      this.nameSprite.position.set(0, CHARACTER_HEIGHT + 0.15, 0); // Below intent display
+      this.nameSprite.scale.set(aspectRatio * 0.3, 0.3, 1);
+      this.nameSprite.position.set(0, CHARACTER_HEIGHT + 0.15, 0);
       this.mesh!.add(this.nameSprite);
     }
-
     this.updateNameDisplay(this.name);
   }
+
   updateNameDisplay(name: string): void {
     if (!this.nameContext || !this.nameCanvas || !this.nameTexture) return;
-
     const ctx = this.nameContext;
     const canvas = this.nameCanvas;
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.font = "16px Arial";
     ctx.fillStyle = "blue";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(name, canvas.width / 2, canvas.height / 2);
-
     this.nameTexture.needsUpdate = true;
   }
 
@@ -132,7 +122,6 @@ export class Entity {
     if (this.game?.camera) {
       this.rayCaster.camera = this.game.camera;
     }
-
     if (!this.intentCanvas) {
       this.intentCanvas = document.createElement("canvas");
       this.intentCanvas.width = 200;
@@ -140,7 +129,6 @@ export class Entity {
       this.intentContext = this.intentCanvas.getContext("2d")!;
       this.intentTexture = new CanvasTexture(this.intentCanvas);
     }
-
     if (!this.intentSprite) {
       const material = new SpriteMaterial({ map: this.intentTexture });
       this.intentSprite = new Sprite(material);
@@ -149,9 +137,9 @@ export class Entity {
       this.intentSprite.position.set(0, CHARACTER_HEIGHT + 0.6, 0);
       this.mesh!.add(this.intentSprite);
     }
-
     this.updateIntentDisplay("");
   }
+
   removeDisplays(): void {
     if (this.intentSprite && this.mesh) {
       this.mesh.remove(this.intentSprite);
@@ -166,47 +154,33 @@ export class Entity {
   updateIntentDisplay(text: string): void {
     if (!this.intentContext || !this.intentCanvas || !this.intentTexture)
       return;
-
     if (!text || text.trim() === "") {
-      if (this.intentSprite) {
-        this.intentSprite.visible = false;
-      }
+      if (this.intentSprite) this.intentSprite.visible = false;
       return;
     } else {
-      if (this.intentSprite) {
-        this.intentSprite.visible = true;
-      }
+      if (this.intentSprite) this.intentSprite.visible = true;
     }
-
     const ctx = this.intentContext;
     const canvas = this.intentCanvas;
-    const maxWidth = canvas.width - 10; // Padding
-    const lineHeight = 20; // Slightly more than font size
+    const maxWidth = canvas.width - 10;
+    const lineHeight = 20;
     const x = canvas.width / 2;
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)"; // Slightly darker background
-
-    const borderRadius = 10; // Adjust this value to change the corner radius
+    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
     ctx.beginPath();
-    ctx.roundRect(0, 0, canvas.width, canvas.height, borderRadius);
+    ctx.roundRect(0, 0, canvas.width, canvas.height, 10);
     ctx.fill();
-
-    ctx.font = "13px Arial"; // Reduced font size
+    ctx.font = "13px Arial";
     ctx.fillStyle = "white";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-
-    // Basic Text Wrapping Logic
     const words = text.split(" ");
     let lines = [];
     let currentLine = "";
-
     for (let i = 0; i < words.length; i++) {
       const testLine = currentLine + words[i] + " ";
       const metrics = ctx.measureText(testLine);
-      const testWidth = metrics.width;
-      if (testWidth > maxWidth && i > 0) {
+      if (metrics.width > maxWidth && i > 0) {
         lines.push(currentLine.trim());
         currentLine = words[i] + " ";
       } else {
@@ -214,21 +188,12 @@ export class Entity {
       }
     }
     lines.push(currentLine.trim());
-
-    // Calculate starting Y position for vertical centering
     const totalTextHeight = lines.length * lineHeight;
     let startY = (canvas.height - totalTextHeight) / 2 + lineHeight / 2;
-
-    // Draw lines
     for (let i = 0; i < lines.length; i++) {
-      // Prevent drawing too many lines if text is excessively long
       if (startY + i * lineHeight > canvas.height - lineHeight / 2) {
-        // Optional: Indicate truncation if needed
         if (i > 0) {
-          // Check if we drew at least one line
           const lastLineIndex = i - 1;
-          const lastLineText = lines[lastLineIndex];
-          // Remove last drawn line and replace with ellipsis
           ctx.clearRect(
             0,
             startY + lastLineIndex * lineHeight - lineHeight / 2,
@@ -244,7 +209,8 @@ export class Entity {
           );
           ctx.fillStyle = "white";
           ctx.fillText(
-            lastLineText.substring(0, lastLineText.length - 1) + "...",
+            lines[lastLineIndex].substring(0, lines[lastLineIndex].length - 1) +
+              "...",
             x,
             startY + lastLineIndex * lineHeight
           );
@@ -253,7 +219,6 @@ export class Entity {
       }
       ctx.fillText(lines[i], x, startY + i * lineHeight);
     }
-
     this.intentTexture.needsUpdate = true;
   }
 
@@ -264,11 +229,10 @@ export class Entity {
       : "";
     this.updateIntentDisplay(message);
     setTimeout(() => {
-      // Check if the AI controller still exists and has an intent before resetting
       const currentIntentText = this.aiController
         ? `${this.name}: ${this.aiController.currentIntent}`
         : "";
-      this.updateIntentDisplay(currentIntentText || originalText); // Fallback to original if no current intent
+      this.updateIntentDisplay(currentIntentText || originalText);
     }, duration);
   }
 
@@ -302,7 +266,6 @@ export class Entity {
     if (this.isDead || amount <= 0) return;
     this.health = Math.max(0, this.health - amount);
     if (this.game) {
-      // Log damage taken
       const message = `${this.name} took ${amount} damage${
         attacker ? ` from ${attacker.name}` : ""
       }.`;
@@ -370,7 +333,7 @@ export class Character extends Entity {
   walkAction?: AnimationAction;
   runAction?: AnimationAction;
   jumpAction?: AnimationAction;
-  attackAction?: AnimationAction; // Can be used for gather animation too
+  attackAction?: AnimationAction;
   isGathering: boolean = false;
   gatherAttackTimer: number = 0;
   gatherAttackInterval: number = 1.0;
@@ -382,8 +345,7 @@ export class Character extends Entity {
   persona: string = "";
   aiController: AIController | null = null;
   currentAction?: AnimationAction;
-
-  actionType: string = "none"; // 'attack', 'gather' etc.
+  actionType: string = "none";
   isPerformingAction: boolean = false;
 
   private groundCheckOrigin = new Vector3();
@@ -437,8 +399,8 @@ export class Character extends Entity {
     model.position.y = -box.min.y * scale;
     this.mesh!.add(model);
     this.mixer = new AnimationMixer(model);
-    const idleAnim = animations.find(
-      (anim) => anim.name.toLowerCase().includes("idled") // idled not idle
+    const idleAnim = animations.find((anim) =>
+      anim.name.toLowerCase().includes("idled")
     );
     if (idleAnim) this.idleAction = this.mixer.clipAction(idleAnim);
     const walkAnim = animations.find((anim) =>
@@ -465,20 +427,14 @@ export class Character extends Entity {
       this.attackAction.setLoop(LoopOnce, 1);
       this.attackAction.clampWhenFinished = true;
     }
-    if (this.idleAction) {
-      this.switchAction(this.idleAction); // Set initial action with fading
-    }
+    if (this.idleAction) this.switchAction(this.idleAction);
     this.userData.height = CHARACTER_HEIGHT;
     this.userData.radius = CHARACTER_RADIUS;
     this.updateBoundingBox();
 
-    // Updated mixer listener
     this.mixer.addEventListener("finished", (e) => {
       if (e.action === this.attackAction) {
-        if (this.actionType === "attack") {
-          this.performAttack();
-        }
-        // Removed heal check
+        if (this.actionType === "attack") this.performAttack();
         this.isPerformingAction = false;
         this.actionType = "none";
         const isMoving =
@@ -494,26 +450,19 @@ export class Character extends Entity {
           targetAction = this.idleAction;
         }
         this.switchAction(targetAction);
-      } else if (e.action === this.jumpAction) {
-        // Handled in updateAnimations
       }
     });
 
-    if (this.userData.isNPC) {
-      this.aiController = new AIController(this);
-    }
+    if (this.userData.isNPC) this.aiController = new AIController(this);
   }
+
   switchAction(newAction: AnimationAction | undefined): void {
     if (newAction === this.currentAction) {
       if (newAction && !newAction.isRunning()) newAction.play();
       return;
     }
-    if (this.currentAction) {
-      this.currentAction.fadeOut(0.2); // Fade out current animation over 0.2 seconds
-    }
-    if (newAction) {
-      newAction.reset().fadeIn(0.1).play(); // Fade in new animation
-    }
+    if (this.currentAction) this.currentAction.fadeOut(0.2);
+    if (newAction) newAction.reset().fadeIn(0.1).play();
     this.currentAction = newAction;
   }
 
@@ -521,14 +470,12 @@ export class Character extends Entity {
     const range = 2.0;
     const damage = this.name === "Player" ? 10 : 5;
     if (!this.rayCaster || !this.mesh || !this.scene || !this.game) return;
-
     const rayOrigin = this.mesh.position
       .clone()
       .add(new Vector3(0, CHARACTER_HEIGHT / 2, 0));
     const rayDirection = this.mesh.getWorldDirection(new Vector3());
     this.rayCaster.set(rayOrigin, rayDirection);
     this.rayCaster.far = range;
-
     const potentialTargets = this.game.entities.filter(
       (entity): entity is Character =>
         entity instanceof Character &&
@@ -538,7 +485,6 @@ export class Character extends Entity {
     );
     const targetMeshes = potentialTargets.map((char) => char.mesh!);
     const intersects = this.rayCaster.intersectObjects(targetMeshes, true);
-
     if (intersects.length > 0) {
       for (const hit of intersects) {
         let hitObject = hit.object;
@@ -646,7 +592,7 @@ export class Character extends Entity {
           );
       }
       this.moveState.jump = false;
-      this.switchAction(this.jumpAction); // Smooth transition to jump
+      this.switchAction(this.jumpAction);
       if (this.game)
         this.game.logEvent(
           this,
@@ -676,7 +622,6 @@ export class Character extends Entity {
     this.rayCaster.set(this.groundCheckOrigin, this.groundCheckDirection);
     this.rayCaster.far = rayLength;
     this.rayCaster.near = 0;
-
     const checkAgainst = collidables.filter(
       (obj) => obj !== this.mesh && obj?.userData?.isCollidable
     );
@@ -702,7 +647,6 @@ export class Character extends Entity {
         this.velocity.y = 0;
         this.isOnGround = true;
         this.canJump = true;
-        // if (this.jumpAction?.isRunning()) this.jumpAction.stop();
       } else if (this.isOnGround) {
         this.mesh!.position.y = Math.max(this.mesh!.position.y, groundY);
       } else {
@@ -717,7 +661,6 @@ export class Character extends Entity {
 
   updateAnimations(deltaTime: number): void {
     this.mixer.update(deltaTime);
-
     if (this.isGathering && this.attackAction) {
       this.gatherAttackTimer += deltaTime;
       if (this.gatherAttackTimer >= this.gatherAttackInterval) {
@@ -727,12 +670,10 @@ export class Character extends Entity {
         this.switchAction(this.idleAction);
       }
     } else if (this.isPerformingAction && this.attackAction) {
-      // Let action play; transition handled in 'finished' listener
     } else if (!this.isOnGround) {
       if (this.jumpAction && this.jumpAction.isRunning()) {
-        // Let jumpAction continue
       } else {
-        this.switchAction(this.idleAction); // Use idle as fallback in air
+        this.switchAction(this.idleAction);
       }
     } else {
       const isMoving =
@@ -750,29 +691,23 @@ export class Character extends Entity {
   }
 
   triggerAction(actionType: string): void {
-    // Use attackAction for attack, gather visual feedback
     if (this.attackAction && !this.isPerformingAction && !this.isGathering) {
       this.actionType = actionType;
-      this.isPerformingAction = true; // Mark that an action animation is playing
+      this.isPerformingAction = true;
       this.attackAction.reset().play();
-      // Stop movement animations immediately when action starts
       if (this.idleAction?.isRunning()) this.idleAction.stop();
       if (this.walkAction?.isRunning()) this.walkAction.stop();
       if (this.runAction?.isRunning()) this.runAction.stop();
       if (this.jumpAction?.isRunning()) this.jumpAction.stop();
     } else if (actionType === "gather" && this.attackAction) {
-      // Special case for gather, handled in updateAnimations
-      this.actionType = actionType; // Set type, but let update handle looping anim
+      this.actionType = actionType;
     }
   }
 
   update(deltaTime: number, options: UpdateOptions = {}): void {
     if (this.isDead) return;
     const { moveState, collidables } = options;
-    if (!moveState || !collidables) {
-      console.warn(`Missing moveState or collidables for ${this.name} update`);
-      return;
-    }
+    if (!moveState || !collidables) return;
     this.moveState = moveState;
     this.handleStamina(deltaTime);
     if (!this.isPerformingAction && !this.isGathering) {
@@ -786,14 +721,12 @@ export class Character extends Entity {
     this.mesh!.position.z += this.velocity.z * deltaTime;
     this.checkGround(collidables);
     this.mesh!.position.y += this.velocity.y * deltaTime;
-
     if (moveState.attack && !this.attackTriggered) {
       this.attackTriggered = true;
       this.triggerAction("attack");
     } else if (!moveState.attack) {
       this.attackTriggered = false;
     }
-
     this.lastVelocityY = this.velocity.y;
     this.updateAnimations(deltaTime);
     this.updateBoundingBox();
@@ -857,13 +790,11 @@ export class Character extends Entity {
       this.aiController.targetAction = null;
       this.aiController.message = null;
     }
-
     if (this.idleAction) this.idleAction.reset().play();
     if (this.walkAction) this.walkAction.stop();
     if (this.runAction) this.runAction.stop();
     if (this.attackAction) this.attackAction.stop();
     if (this.jumpAction) this.jumpAction.stop();
-
     if (this.game)
       this.game.logEvent(
         this,
@@ -887,6 +818,6 @@ export class Character extends Entity {
         {},
         player.mesh!.position
       );
-    return { type: "chat" }; // Signal to InteractionSystem to open chat UI
+    return { type: "chat" };
   }
 }

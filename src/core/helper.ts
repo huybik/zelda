@@ -1,4 +1,3 @@
-// File: /src/helper.ts
 import {
   Vector3,
   Quaternion,
@@ -8,7 +7,7 @@ import {
   Raycaster,
   Box3,
 } from "three";
-import { Character } from "./entities";
+import { Character } from "../entities/entities";
 
 export interface EntityUserData {
   entityReference: any | null;
@@ -34,12 +33,12 @@ export interface InteractionResult {
     | "item_retrieved"
     | "error"
     | "gather_start"
-    | "chat"; // Added 'chat' type
+    | "chat";
   item?: { name: string; amount: number };
   message?: string;
   text?: string;
   state?: string;
-  options?: string[]; // Added options for dialogue
+  options?: string[];
 }
 
 export interface TargetInfo {
@@ -62,16 +61,14 @@ export interface InventoryItem {
   icon?: string;
 }
 
-// Interface for structured event data
 export interface GameEvent {
-  actor: string; // ID or name of the character performing the action
-  action: string; // e.g., "attack", "gather", "move", etc.
-  target?: string; // ID or name of the target, if applicable
-  details: Record<string, any>; // Additional details like damage, resource type, etc.
-  location: Vector3; // Position where the event occurred
+  actor: string;
+  action: string;
+  target?: string;
+  details: Record<string, any>;
+  location: Vector3;
 }
 
-// src/ultils.ts
 export interface Quest {
   name: string;
   description: string;
@@ -85,11 +82,11 @@ export interface Quest {
 export interface EventEntry {
   timestamp: string;
   message: string;
-  actorId?: string; // Unique ID of the actor
-  actorName?: string; // Display name of the actor
+  actorId?: string;
+  actorName?: string;
   action?: string;
-  targetId?: string; // Unique ID of the target
-  targetName?: string; // Display name of the target
+  targetId?: string;
+  targetName?: string;
   details?: Record<string, any>;
   location?: Vector3;
 }
@@ -112,7 +109,7 @@ export interface MoveState {
   jump: boolean;
   sprint: boolean;
   interact: boolean;
-  attack: boolean; // Added attack property
+  attack: boolean;
 }
 
 export interface UpdateOptions {
@@ -135,8 +132,6 @@ export function smoothVectorLerp(
   alphaBase: number,
   deltaTime: number
 ): Vector3 {
-  if (alphaBase <= 0) return current.copy(target);
-  if (alphaBase >= 1) return current;
   const factor = 1 - Math.pow(alphaBase, deltaTime);
   return current.lerp(target, factor);
 }
@@ -147,8 +142,6 @@ export function smoothQuaternionSlerp(
   alphaBase: number,
   deltaTime: number
 ): Quaternion {
-  if (alphaBase <= 0) return current.copy(target);
-  if (alphaBase >= 1) return current;
   const factor = 1 - Math.pow(alphaBase, deltaTime);
   return current.slerp(target, factor);
 }
@@ -168,13 +161,6 @@ export function getTerrainHeight(scene: Scene, x: number, z: number): number {
   const intersects = raycaster.intersectObject(terrain);
   return intersects.length > 0 ? intersects[0].point.y : 0;
 }
-
-export const Colors = {
-  PASTEL_GREEN: 0x98fb98,
-  PASTEL_BROWN: 0xcd853f,
-  PASTEL_GRAY: 0xb0c4de,
-  FOREST_GREEN: 0x228b22,
-} as const;
 
 export let nextEntityId = 0;
 
@@ -293,7 +279,7 @@ export class Inventory {
 export class EventLog {
   entries: EventEntry[];
   maxEntries: number;
-  onChangeCallbacks: Array<(entries: EventEntry[]) => void>; // Changed to pass EventEntry[]
+  onChangeCallbacks: Array<(entries: EventEntry[]) => void>;
 
   constructor(maxEntries: number = 50) {
     this.entries = [];
@@ -301,9 +287,7 @@ export class EventLog {
     this.onChangeCallbacks = [];
   }
 
-  // Simplified addEntry to accept only EventEntry objects
   addEntry(entry: EventEntry): void {
-    // Ensure timestamp is present and in the correct format, otherwise generate one
     if (
       !entry.timestamp ||
       typeof entry.timestamp !== "string" ||
@@ -315,32 +299,25 @@ export class EventLog {
         second: "2-digit",
       });
     }
-
-    // Ensure message is present
     if (typeof entry.message !== "string") {
-      console.warn("EventLog entry is missing a message:", entry);
-      entry.message = "[No message provided]"; // Provide a default message
+      entry.message = "[No message provided]";
     }
-
     this.entries.push(entry);
     if (this.entries.length > this.maxEntries) this.entries.shift();
     this.notifyChange();
   }
 
   getFormattedEntries(): string[] {
-    // Return only the message part for simple display compatibility
     return [...this.entries]
       .reverse()
       .map((entry) => `[${entry.timestamp}] ${entry.message}`);
   }
 
   onChange(callback: (entries: EventEntry[]) => void): void {
-    // Changed parameter type
     if (typeof callback === "function") this.onChangeCallbacks.push(callback);
   }
 
   notifyChange(): void {
-    // Pass the raw entries array to callbacks
     const entriesCopy = [...this.entries];
     this.onChangeCallbacks.forEach((cb) => cb(entriesCopy));
   }

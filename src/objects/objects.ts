@@ -1,4 +1,3 @@
-// File: /src/objects.ts
 import {
   Vector3,
   Mesh,
@@ -11,15 +10,9 @@ import {
   Scene,
   Box3,
 } from "three";
-import { Character } from "./entities";
-import {
-  Inventory,
-  EventLog,
-  EntityUserData,
-  InteractionResult,
-  randomFloat,
-} from "./helper";
-import { Colors } from "./constants";
+import { Character } from "../entities/entities";
+import { Inventory, InteractionResult, randomFloat } from "../core/helper";
+import { Colors } from "../core/constants";
 
 const treeTrunkMat = new MeshLambertMaterial({ color: Colors.PASTEL_BROWN });
 const treeFoliageMat = new MeshLambertMaterial({ color: Colors.PASTEL_GREEN });
@@ -35,7 +28,7 @@ export class InteractableObject {
   prompt: string;
   mesh: Mesh | Group | null;
   isActive: boolean;
-  userData: EntityUserData;
+  userData: any;
 
   constructor(
     id: string,
@@ -69,24 +62,15 @@ export class InteractableObject {
     };
   }
 
-  // Updated interact method signature
   interact(player: Character): InteractionResult | null {
     if (!this.isActive) return { type: "error", message: "Already used." };
     let message = "";
     let action = "interact";
     let details: Record<string, any> = {};
-
-    // Use player's inventory and game instance for logging
     const inventory = player.inventory;
     const game = player.game;
-
-    if (!inventory || !game) {
-      console.error(
-        "Player inventory or game instance not found for interaction."
-      );
+    if (!inventory || !game)
       return { type: "error", message: "Internal error." };
-    }
-
     switch (this.interactionType) {
       case "retrieve":
         const itemName = this.data as string;
