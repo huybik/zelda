@@ -58,7 +58,7 @@ export class InteractableObject {
       isEntity: false,
       isPlayer: false,
       isNPC: false,
-      isCollidable: false,
+      isCollidable: true,
     };
   }
 

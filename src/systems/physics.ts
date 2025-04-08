@@ -63,25 +63,17 @@ export class Physics {
       this.sizePlayer.x / 2 +
       this.sizeObject.x / 2 -
       Math.abs(this.centerPlayer.x - this.centerObject.x);
-    this.overlap.y =
-      this.sizePlayer.y / 2 +
-      this.sizeObject.y / 2 -
-      Math.abs(this.centerPlayer.y - this.centerObject.y);
     this.overlap.z =
       this.sizePlayer.z / 2 +
       this.sizeObject.z / 2 -
       Math.abs(this.centerPlayer.z - this.centerObject.z);
     let minOverlap = Infinity;
     let pushAxis = -1;
-    if (this.overlap.x > 0 && this.overlap.x < minOverlap) {
+    if (this.overlap.x > 0.0001 && this.overlap.x < minOverlap) {
       minOverlap = this.overlap.x;
       pushAxis = 0;
     }
-    if (this.overlap.y > 0 && this.overlap.y < minOverlap) {
-      minOverlap = this.overlap.y;
-      pushAxis = 1;
-    }
-    if (this.overlap.z > 0 && this.overlap.z < minOverlap) {
+    if (this.overlap.z > 0.0001 && this.overlap.z < minOverlap) {
       minOverlap = this.overlap.z;
       pushAxis = 2;
     }
@@ -96,19 +88,6 @@ export class Physics {
             : -pushMagnitude;
         if (Math.sign(this.player.velocity.x) === Math.sign(this.pushVector.x))
           this.player.velocity.x = 0;
-        break;
-      case 1:
-        this.pushVector.y =
-          this.centerPlayer.y > this.centerObject.y
-            ? pushMagnitude
-            : -pushMagnitude;
-        if (this.pushVector.y > 0.01 && this.player.velocity.y <= 0) {
-          this.player.velocity.y = 0;
-          this.player.isOnGround = true;
-          this.player.canJump = true;
-        } else if (this.pushVector.y < -0.01 && this.player.velocity.y > 0) {
-          this.player.velocity.y = 0;
-        }
         break;
       case 2:
         this.pushVector.z =

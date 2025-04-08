@@ -71,7 +71,7 @@ export class Entity {
       isEntity: true,
       isPlayer: false,
       isNPC: false,
-      isCollidable: false,
+      isCollidable: true,
       isInteractable: false,
       id: this.id,
     };
@@ -314,25 +314,17 @@ export class Character extends Entity {
   stamina: number;
   walkSpeed: number;
   runSpeed: number;
-  jumpForce: number;
   staminaDrainRate: number;
   staminaRegenRate: number;
-  staminaJumpCost: number;
-  canJump: boolean;
   isSprinting: boolean;
   isExhausted: boolean;
   exhaustionThreshold: number;
   moveState: MoveState;
-  gravity: number;
-  isOnGround: boolean;
-  groundCheckDistance: number;
-  lastVelocityY: number;
   eventLog: EventLog;
   mixer: AnimationMixer;
   idleAction?: AnimationAction;
   walkAction?: AnimationAction;
   runAction?: AnimationAction;
-  jumpAction?: AnimationAction;
   attackAction?: AnimationAction;
   isGathering: boolean = false;
   gatherAttackTimer: number = 0;
@@ -348,9 +340,6 @@ export class Character extends Entity {
   actionType: string = "none";
   isPerformingAction: boolean = false;
 
-  private groundCheckOrigin = new Vector3();
-  private groundCheckDirection = new Vector3(0, -1, 0);
-
   constructor(
     scene: Scene,
     position: Vector3,
@@ -360,7 +349,7 @@ export class Character extends Entity {
     inventory: Inventory | null
   ) {
     super(scene, position, name);
-    this.userData.isCollidable = false;
+    this.userData.isCollidable = true;
     this.userData.isInteractable = true;
     this.userData.interactionType = "talk";
     this.userData.isNPC = true;
@@ -370,11 +359,8 @@ export class Character extends Entity {
     this.stamina = this.maxStamina;
     this.walkSpeed = 4.0;
     this.runSpeed = 8.0;
-    this.jumpForce = 8.0;
     this.staminaDrainRate = 15;
     this.staminaRegenRate = 10;
-    this.staminaJumpCost = 10;
-    this.canJump = false;
     this.isSprinting = false;
     this.isExhausted = false;
     this.exhaustionThreshold = 20;
@@ -386,10 +372,6 @@ export class Character extends Entity {
       interact: false,
       attack: false,
     };
-    this.gravity = -25;
-    this.isOnGround = false;
-    this.groundCheckDistance = 0.15;
-    this.lastVelocityY = 0;
     this.inventory = inventory;
     this.eventLog = new EventLog(50);
     const box = new Box3().setFromObject(model);
@@ -411,14 +393,6 @@ export class Character extends Entity {
       anim.name.toLowerCase().includes("run")
     );
     if (runAnim) this.runAction = this.mixer.clipAction(runAnim);
-    const jumpAnim = animations.find((anim) =>
-      anim.name.toLowerCase().includes("jump")
-    );
-    if (jumpAnim) {
-      this.jumpAction = this.mixer.clipAction(jumpAnim);
-      this.jumpAction.setLoop(LoopOnce, 1);
-      this.jumpAction.clampWhenFinished = true;
-    }
     const attackAnim = animations.find((anim) =>
       anim.name.toLowerCase().includes("attack")
     );
@@ -570,93 +544,6 @@ export class Character extends Entity {
     }
     this.velocity.x = moveVelocity.x;
     this.velocity.z = moveVelocity.z;
-    if (
-      this.moveState.jump &&
-      this.canJump &&
-      this.stamina >= this.staminaJumpCost
-    ) {
-      this.velocity.y = this.jumpForce;
-      this.stamina -= this.staminaJumpCost;
-      this.canJump = false;
-      this.isOnGround = false;
-      if (this.stamina <= 0 && !this.isExhausted) {
-        this.isExhausted = true;
-        if (this.game)
-          this.game.logEvent(
-            this,
-            "exhausted",
-            `${this.name} is exhausted!`,
-            undefined,
-            {},
-            this.mesh!.position
-          );
-      }
-      this.moveState.jump = false;
-      this.switchAction(this.jumpAction);
-      if (this.game)
-        this.game.logEvent(
-          this,
-          "jump",
-          `${this.name} jumped.`,
-          undefined,
-          {},
-          this.mesh!.position
-        );
-    }
-  }
-
-  applyGravity(deltaTime: number): void {
-    if (!this.isOnGround) {
-      this.velocity.y += this.gravity * deltaTime;
-    } else {
-      this.velocity.y = Math.max(this.gravity * deltaTime, -0.1);
-    }
-  }
-
-  checkGround(collidables: Object3D[]): void {
-    this.groundCheckOrigin
-      .copy(this.mesh!.position)
-      .add(new Vector3(0, 0.1, 0));
-    const rayLength = 0.1 + this.groundCheckDistance;
-    if (!this.rayCaster) return;
-    this.rayCaster.set(this.groundCheckOrigin, this.groundCheckDirection);
-    this.rayCaster.far = rayLength;
-    this.rayCaster.near = 0;
-    const checkAgainst = collidables.filter(
-      (obj) => obj !== this.mesh && obj?.userData?.isCollidable
-    );
-    const intersects = this.rayCaster.intersectObjects(checkAgainst, true);
-    let foundGround = false;
-    let groundY = -Infinity;
-    if (intersects.length > 0) {
-      for (const intersect of intersects) {
-        if (intersect.distance > 0.01) {
-          groundY = Math.max(groundY, intersect.point.y);
-          foundGround = true;
-        }
-      }
-    }
-    const baseY = this.mesh!.position.y;
-    const snapThreshold = 0.05;
-    if (
-      foundGround &&
-      baseY <= groundY + this.groundCheckDistance + snapThreshold
-    ) {
-      if (!this.isOnGround && this.velocity.y <= 0) {
-        this.mesh!.position.y = groundY;
-        this.velocity.y = 0;
-        this.isOnGround = true;
-        this.canJump = true;
-      } else if (this.isOnGround) {
-        this.mesh!.position.y = Math.max(this.mesh!.position.y, groundY);
-      } else {
-        this.isOnGround = false;
-        this.canJump = false;
-      }
-    } else {
-      this.isOnGround = false;
-      this.canJump = false;
-    }
   }
 
   updateAnimations(deltaTime: number): void {
@@ -670,11 +557,6 @@ export class Character extends Entity {
         this.switchAction(this.idleAction);
       }
     } else if (this.isPerformingAction && this.attackAction) {
-    } else if (!this.isOnGround) {
-      if (this.jumpAction && this.jumpAction.isRunning()) {
-      } else {
-        this.switchAction(this.idleAction);
-      }
     } else {
       const isMoving =
         Math.abs(this.moveState.forward) > 0.1 ||
@@ -698,7 +580,6 @@ export class Character extends Entity {
       if (this.idleAction?.isRunning()) this.idleAction.stop();
       if (this.walkAction?.isRunning()) this.walkAction.stop();
       if (this.runAction?.isRunning()) this.runAction.stop();
-      if (this.jumpAction?.isRunning()) this.jumpAction.stop();
     } else if (actionType === "gather" && this.attackAction) {
       this.actionType = actionType;
     }
@@ -716,18 +597,23 @@ export class Character extends Entity {
       this.velocity.x = 0;
       this.velocity.z = 0;
     }
-    this.applyGravity(deltaTime);
     this.mesh!.position.x += this.velocity.x * deltaTime;
     this.mesh!.position.z += this.velocity.z * deltaTime;
-    this.checkGround(collidables);
-    this.mesh!.position.y += this.velocity.y * deltaTime;
+    if (this.scene) {
+      const groundY = getTerrainHeight(
+        this.scene,
+        this.mesh!.position.x,
+        this.mesh!.position.z
+      );
+      this.mesh!.position.y = groundY;
+    }
+    this.velocity.y = 0;
     if (moveState.attack && !this.attackTriggered) {
       this.attackTriggered = true;
       this.triggerAction("attack");
     } else if (!moveState.attack) {
       this.attackTriggered = false;
     }
-    this.lastVelocityY = this.velocity.y;
     this.updateAnimations(deltaTime);
     this.updateBoundingBox();
   }
@@ -771,15 +657,12 @@ export class Character extends Entity {
     this.velocity.set(0, 0, 0);
     this.isDead = false;
     this.isExhausted = false;
-    this.isOnGround = false;
-    this.canJump = false;
-    this.lastVelocityY = 0;
     this.isGathering = false;
     this.gatherAttackTimer = 0;
     this.isPerformingAction = false;
     this.actionType = "none";
     this.attackTriggered = false;
-    this.userData.isCollidable = false;
+    this.userData.isCollidable = true;
     this.userData.isInteractable = true;
     if (this.aiController) {
       this.aiController.aiState = "idle";
@@ -794,7 +677,6 @@ export class Character extends Entity {
     if (this.walkAction) this.walkAction.stop();
     if (this.runAction) this.runAction.stop();
     if (this.attackAction) this.attackAction.stop();
-    if (this.jumpAction) this.jumpAction.stop();
     if (this.game)
       this.game.logEvent(
         this,

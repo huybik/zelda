@@ -155,7 +155,6 @@ export class Controls {
     if (this.keys[keyCode]) return;
     this.keys[keyCode] = true;
     this.keyDownListeners[keyCode]?.forEach((cb) => cb());
-    if (keyCode === "Space") this.moveState.jump = true;
     if (keyCode === "KeyE") this.moveState.interact = true;
     if (keyCode === "KeyF") this.moveState.attack = true;
     if (keyCode === "Escape") this.handleEscapeKey();
