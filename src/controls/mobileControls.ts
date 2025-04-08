@@ -82,7 +82,8 @@ export class MobileControls {
         this.moveVector.set(0, 0);
       }
     };
-    this.moveManager.on(["start", "move"], handleMove);
+
+    this.moveManager.on("move", handleMove);
     this.moveManager.on("end", () => this.moveVector.set(0, 0));
     this.moveJoystick = this.moveManager.get(this.moveManager.ids[0]);
   }
