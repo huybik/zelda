@@ -480,9 +480,13 @@ Based on this information, decide your next action. Respond ONLY with a valid JS
   async decideNextAction(): Promise<void> {
     const prompt = this.generatePrompt();
     try {
+      console.log(`Prompt for ${this.character.name}:\n${prompt}\n\n`);
       const response = await sendToGemini(prompt);
       if (response) {
         const actionData = JSON.parse(response);
+        console.log(
+          `Response from API for ${this.character.name}:\n${response}\n\n`
+        );
         this.setActionFromAPI(actionData);
       } else {
         this.fallbackToDefaultBehavior();

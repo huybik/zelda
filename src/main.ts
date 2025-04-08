@@ -10,9 +10,6 @@ import {
   Mesh,
   PlaneGeometry,
   MeshLambertMaterial,
-  AmbientLight,
-  DirectionalLight,
-  HemisphereLight,
   BoxGeometry,
   MeshBasicMaterial,
   DoubleSide,
@@ -22,22 +19,10 @@ import {
   Group,
   AnimationClip,
   Vector2,
-  SphereGeometry,
-  TorusGeometry,
-  CircleGeometry,
-  MeshPhongMaterial,
-  PointsMaterial,
-  BufferGeometry,
-  BufferAttribute,
-  CanvasTexture,
-  TextureLoader,
   Box3,
 } from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { SimplexNoise } from "three/examples/jsm/math/SimplexNoise.js";
 import WebGL from "three/examples/jsm/capabilities/WebGL.js";
 import { Character, Entity } from "./entities/entities";
-import { createTree, createRock, createHerb } from "./objects/objects";
 import { InteractionSystem } from "./systems/interaction";
 import { Physics } from "./systems/physics";
 import { ThirdPersonCamera } from "./systems/camera";
@@ -47,198 +32,18 @@ import { HUD } from "./ui/hud";
 import { InventoryDisplay } from "./ui/inventory";
 import { JournalDisplay } from "./ui/journal";
 import { Minimap } from "./ui/minimap";
-import { AIController } from "./entities/ai";
-import {
-  Inventory,
-  EventLog,
-  getTerrainHeight,
-  randomFloat,
-  smoothstep,
-  Quest,
-} from "./core/helper";
+import { Inventory, EventLog, getTerrainHeight, Quest } from "./core/helper";
 import { WORLD_SIZE, TERRAIN_SEGMENTS } from "./core/constants";
-
-async function loadModels(): Promise<
-  Record<string, { scene: Group; animations: AnimationClip[] }>
-> {
-  const loader = new GLTFLoader();
-  const modelPaths = {
-    player: "assets/player/scene.gltf",
-    tavernMan: "assets/player/scene.gltf",
-    oldMan: "assets/player/scene.gltf",
-    woman: "assets/player/scene.gltf",
-  };
-  const models: Record<string, { scene: Group; animations: AnimationClip[] }> =
-    {};
-  for (const [key, path] of Object.entries(modelPaths)) {
-    const gltf = await loader.loadAsync(path);
-    models[key] = { scene: gltf.scene, animations: gltf.animations };
-  }
-  return models;
-}
-
-function createTerrain(size: number, segments: number = 150): Mesh {
-  const simplexTerrain = new SimplexNoise();
-  const geometry = new PlaneGeometry(size, size, segments, segments);
-  const vertices = geometry.attributes.position.array as Float32Array;
-  const numVertices = geometry.attributes.position.count;
-  const noiseStrength = 16;
-  const noiseScale = 0.005;
-  const flattenRadius = 240;
-  const flattenStrength = 0.1;
-  for (let i = 0; i < numVertices; i++) {
-    const index = i * 3;
-    const x = vertices[index];
-    const y = vertices[index + 1];
-    let z =
-      simplexTerrain.noise(x * noiseScale, y * noiseScale) * noiseStrength;
-    const distanceToCenter = Math.sqrt(x * x + y * y);
-    if (distanceToCenter < flattenRadius) {
-      const flattenFactor =
-        1.0 - smoothstep(0, flattenRadius, distanceToCenter);
-      z = MathUtils.lerp(z, z * (1.0 - flattenStrength), flattenFactor);
-    }
-    vertices[index + 2] = z;
-  }
-  geometry.attributes.position.needsUpdate = true;
-  geometry.rotateX(-Math.PI / 2);
-  geometry.computeVertexNormals();
-  geometry.computeBoundingBox();
-  const material = new MeshLambertMaterial({ color: 0x88b04b });
-  const terrainMesh = new Mesh(geometry, material);
-  terrainMesh.receiveShadow = true;
-  terrainMesh.name = "Terrain";
-  terrainMesh.userData = {
-    isTerrain: true,
-    isCollidable: true,
-    worldSize: size,
-    segments,
-  };
-  return terrainMesh;
-}
-
-function setupLighting(scene: Scene): void {
-  const ambientLight = new AmbientLight(0xadc1d4, 0.6);
-  scene.add(ambientLight);
-  const directionalLight = new DirectionalLight(0xfff5e1, 0.9);
-  directionalLight.position.set(150, 200, 100);
-  directionalLight.castShadow = true;
-  directionalLight.target.position.set(0, 0, 0);
-  directionalLight.shadow.mapSize.width = 1024;
-  directionalLight.shadow.mapSize.height = 1024;
-  directionalLight.shadow.camera.near = 10;
-  directionalLight.shadow.camera.far = 500;
-  const shadowCamSize = 150;
-  directionalLight.shadow.camera.left = -shadowCamSize;
-  directionalLight.shadow.camera.right = shadowCamSize;
-  directionalLight.shadow.camera.top = shadowCamSize;
-  directionalLight.shadow.camera.bottom = -shadowCamSize;
-  directionalLight.shadow.bias = -0.001;
-  scene.add(directionalLight);
-  scene.add(directionalLight.target);
-  const hemisphereLight = new HemisphereLight(0x87ceeb, 0x98fb98, 0.3);
-  scene.add(hemisphereLight);
-}
-
-function populateEnvironment(
-  scene: Scene,
-  worldSize: number,
-  collidableObjects: Object3D[],
-  interactableObjects: Array<any>,
-  entities: Array<any>,
-  inventory: Inventory,
-  models: Record<string, { scene: Group; animations: AnimationClip[] }>,
-  gameInstance: Game
-): void {
-  const halfSize = worldSize / 2;
-  const villageCenter = new Vector3(5, 0, 10);
-  const addCharacter = (
-    pos: Vector3,
-    name: string,
-    modelKey: string,
-    isPlayer: boolean = false
-  ): Character => {
-    const model = models[modelKey];
-    const charInventory = new Inventory(9);
-    const character = new Character(
-      scene,
-      pos,
-      name,
-      model.scene,
-      model.animations,
-      charInventory
-    );
-    character.mesh!.position.y = getTerrainHeight(scene, pos.x, pos.z);
-    character.game = gameInstance;
-    if (isPlayer) {
-      character.name = "Player";
-      character.userData.isPlayer = true;
-      character.userData.isNPC = false;
-      if (character.aiController) character.aiController = null;
-    } else {
-      character.userData.isPlayer = false;
-      character.userData.isNPC = true;
-      if (!character.aiController)
-        console.warn(`NPC ${name} created without AIController!`);
-    }
-    entities.push(character);
-    collidableObjects.push(character.mesh!);
-    interactableObjects.push(character);
-    return character;
-  };
-  const farmerGiles = addCharacter(
-    villageCenter.clone().add(new Vector3(-12, 0, 2)),
-    "Farmer Giles",
-    "tavernMan"
-  );
-  farmerGiles.persona =
-    "A hardworking farmer who values community and is always willing to help others. He is knowledgeable about crops and livestock but can be a bit stubborn. He prefers to stay close to his farm but will venture out if necessary.";
-  if (farmerGiles.aiController)
-    farmerGiles.aiController.persona = farmerGiles.persona;
-  const blacksmithBrynn = addCharacter(
-    villageCenter.clone().add(new Vector3(10, 0, -3)),
-    "Blacksmith Brynn",
-    "woman"
-  );
-  blacksmithBrynn.persona =
-    "A skilled artisan who takes pride in her work. She is strong-willed and independent, often focused on her craft. She can be gruff but has a kind heart, especially towards those in need.";
-  if (blacksmithBrynn.aiController)
-    blacksmithBrynn.aiController.persona = blacksmithBrynn.persona;
-  const hunterRex = addCharacter(
-    new Vector3(halfSize * 0.4, 0, -halfSize * 0.3),
-    "Hunter Rex",
-    "oldMan"
-  );
-  hunterRex.persona =
-    "An experienced tracker and survivalist. He is quiet and observant, preferring the wilderness over the village. He is resourceful and can be relied upon in tough situations but is not very social.";
-  if (hunterRex.aiController)
-    hunterRex.aiController.persona = hunterRex.persona;
-  const addObject = (
-    creator: (pos: Vector3, ...args: any[]) => Group,
-    count: number,
-    minDistSq: number,
-    ...args: any[]
-  ) => {
-    for (let i = 0; i < count; i++) {
-      const x = randomFloat(-halfSize * 0.95, halfSize * 0.95);
-      const z = randomFloat(-halfSize * 0.95, halfSize * 0.95);
-      const distSq = (x - villageCenter.x) ** 2 + (z - villageCenter.z) ** 2;
-      if (distSq < minDistSq) continue;
-      const obj = creator(new Vector3(x, 0, z), ...args);
-      const height = getTerrainHeight(scene, x, z);
-      obj.position.y = height;
-      if (obj.name === "Herb Plant") obj.position.y = height + 0.1;
-      scene.add(obj);
-      if (obj.userData.isCollidable) collidableObjects.push(obj);
-      if (obj.userData.isInteractable) interactableObjects.push(obj);
-      entities.push(obj);
-      obj.userData.id = `${obj.name}_${obj.uuid.substring(0, 6)}`;
-    }
-  };
-  addObject(createTree, 100, 25 * 25);
-  addObject(createRock, 50, 20 * 20, randomFloat(1, 2.5));
-  addObject(createHerb, 30, 10 * 10);
-}
+import { loadModels } from "./core/assetLoader";
+import { createTerrain } from "./core/terrain";
+import { setupLighting } from "./core/lighting";
+import { populateEnvironment } from "./core/environment";
+import { createExitPortal, createStartPortal } from "./objects/portals";
+import {
+  spawnParticleEffect,
+  updateParticleEffects,
+} from "./systems/particles";
+import { AIController } from "./entities/ai.ts";
 
 function createWorldBoundary(
   scene: Scene,
@@ -363,9 +168,9 @@ export class Game {
     this.initQuests();
     this.initUI();
     this.setupUIControls();
-    this.createExitPortal();
+    createExitPortal(this.scene!, this);
     if (this.hasEnteredFromPortal && this.startPortalRefUrl) {
-      this.createStartPortal();
+      createStartPortal(this.scene!, this);
       if (this.activeCharacter?.mesh) {
         this.activeCharacter.mesh.lookAt(
           this.startPortalGroup!.position.clone().add(new Vector3(0, 0, 10))
@@ -740,223 +545,10 @@ export class Game {
       this.animatePortals();
       this.checkPortalCollisions();
     }
-    this.updateParticleEffects(elapsedTime);
+    updateParticleEffects(this, elapsedTime);
     this.hud!.update();
     this.minimap!.update();
     this.renderer.render(this.scene, this.camera);
-  }
-
-  createExitPortal(): void {
-    if (!this.scene) return;
-    this.exitPortalGroup = new THREE.Group();
-    this.exitPortalGroup.position.set(-30, 10, -40);
-    this.exitPortalGroup.rotation.x = 0;
-    this.exitPortalGroup.rotation.y = Math.PI / 4;
-    this.exitPortalGroup.position.y = getTerrainHeight(
-      this.scene,
-      this.exitPortalGroup.position.x,
-      this.exitPortalGroup.position.z
-    );
-    this.exitPortalGroup.position.y += 5;
-    const portalRadius = 5;
-    const portalTube = 1.5;
-    const exitPortalGeometry = new THREE.TorusGeometry(
-      portalRadius,
-      portalTube,
-      16,
-      100
-    );
-    const exitPortalMaterial = new THREE.MeshPhongMaterial({
-      color: 0x00ff00,
-      emissive: 0x00ff00,
-      transparent: true,
-      opacity: 0.8,
-    });
-    const exitPortal = new THREE.Mesh(exitPortalGeometry, exitPortalMaterial);
-    this.exitPortalGroup.add(exitPortal);
-    const exitPortalInnerGeometry = new THREE.CircleGeometry(
-      portalRadius - portalTube,
-      32
-    );
-    this.exitPortalInnerMaterial = new THREE.MeshBasicMaterial({
-      color: 0x00ff00,
-      transparent: true,
-      opacity: 0.5,
-      side: THREE.DoubleSide,
-    });
-    const exitPortalInner = new THREE.Mesh(
-      exitPortalInnerGeometry,
-      this.exitPortalInnerMaterial
-    );
-    this.exitPortalGroup.add(exitPortalInner);
-    const canvas = document.createElement("canvas");
-    const context = canvas.getContext("2d");
-    if (context) {
-      canvas.width = 512;
-      canvas.height = 64;
-      context.fillStyle = "#00ff00";
-      context.font = "bold 16px Arial";
-      context.textAlign = "center";
-      context.textBaseline = "middle";
-      context.fillText("VIBEVERSE PORTAL", canvas.width / 2, canvas.height / 2);
-      const texture = new THREE.CanvasTexture(canvas);
-      const labelGeometry = new THREE.PlaneGeometry(portalRadius * 2, 5);
-      const labelMaterial = new THREE.MeshBasicMaterial({
-        map: texture,
-        transparent: true,
-        side: THREE.DoubleSide,
-      });
-      const label = new THREE.Mesh(labelGeometry, labelMaterial);
-      label.position.y = portalRadius + 2;
-      this.exitPortalGroup.add(label);
-    }
-    const exitPortalParticleCount = 1000;
-    this.exitPortalParticles = new THREE.BufferGeometry();
-    const exitPortalPositions = new Float32Array(exitPortalParticleCount * 3);
-    const exitPortalColors = new Float32Array(exitPortalParticleCount * 3);
-    for (let i = 0; i < exitPortalParticleCount * 3; i += 3) {
-      const angle = Math.random() * Math.PI * 2;
-      const radius = portalRadius + (Math.random() - 0.5) * portalTube * 2;
-      exitPortalPositions[i] = Math.cos(angle) * radius;
-      exitPortalPositions[i + 1] = Math.sin(angle) * radius;
-      exitPortalPositions[i + 2] = (Math.random() - 0.5) * 4;
-      exitPortalColors[i] = 0;
-      exitPortalColors[i + 1] = 0.8 + Math.random() * 0.2;
-      exitPortalColors[i + 2] = 0;
-    }
-    this.exitPortalParticles.setAttribute(
-      "position",
-      new THREE.BufferAttribute(exitPortalPositions, 3)
-    );
-    this.exitPortalParticles.setAttribute(
-      "color",
-      new THREE.BufferAttribute(exitPortalColors, 3)
-    );
-    const exitPortalParticleMaterial = new THREE.PointsMaterial({
-      size: 0.2,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.6,
-    });
-    const exitPortalParticleSystem = new THREE.Points(
-      this.exitPortalParticles,
-      exitPortalParticleMaterial
-    );
-    this.exitPortalGroup.add(exitPortalParticleSystem);
-    this.scene.add(this.exitPortalGroup);
-    this.exitPortalBox = new THREE.Box3().setFromObject(this.exitPortalGroup);
-  }
-
-  createStartPortal(): void {
-    if (!this.scene || !this.activeCharacter?.mesh) return;
-    const spawnPoint = new Vector3(0, 0, 5);
-    spawnPoint.y = getTerrainHeight(this.scene, spawnPoint.x, spawnPoint.z);
-    this.startPortalGroup = new THREE.Group();
-    this.startPortalGroup.position.copy(spawnPoint);
-    this.startPortalGroup.position.y += 5;
-    this.startPortalGroup.rotation.x = 0;
-    this.startPortalGroup.rotation.y = -Math.PI / 2;
-    const portalRadius = 10;
-    const portalTube = 1.5;
-    const startPortalGeometry = new THREE.TorusGeometry(
-      portalRadius,
-      portalTube,
-      16,
-      100
-    );
-    const startPortalMaterial = new THREE.MeshPhongMaterial({
-      color: 0xff0000,
-      emissive: 0xff0000,
-      transparent: true,
-      opacity: 0.8,
-    });
-    const startPortal = new THREE.Mesh(
-      startPortalGeometry,
-      startPortalMaterial
-    );
-    this.startPortalGroup.add(startPortal);
-    const startPortalInnerGeometry = new THREE.CircleGeometry(
-      portalRadius - portalTube,
-      32
-    );
-    this.startPortalInnerMaterial = new THREE.MeshBasicMaterial({
-      color: 0xff0000,
-      transparent: true,
-      opacity: 0.5,
-      side: THREE.DoubleSide,
-    });
-    const startPortalInner = new THREE.Mesh(
-      startPortalInnerGeometry,
-      this.startPortalInnerMaterial
-    );
-    this.startPortalGroup.add(startPortalInner);
-    const canvas = document.createElement("canvas");
-    const context = canvas.getContext("2d");
-    if (context && this.startPortalRefUrl) {
-      canvas.width = 512;
-      canvas.height = 64;
-      context.fillStyle = "#ff0000";
-      context.font = "bold 28px Arial";
-      context.textAlign = "center";
-      context.textBaseline = "middle";
-      let displayUrl = this.startPortalRefUrl;
-      try {
-        const urlObj = new URL(
-          displayUrl.startsWith("http") ? displayUrl : "https://" + displayUrl
-        );
-        displayUrl = urlObj.hostname;
-      } catch (e) {}
-      context.fillText(
-        `Return to: ${displayUrl}`,
-        canvas.width / 2,
-        canvas.height / 2
-      );
-      const texture = new THREE.CanvasTexture(canvas);
-      const labelGeometry = new THREE.PlaneGeometry(portalRadius * 2, 5);
-      const labelMaterial = new THREE.MeshBasicMaterial({
-        map: texture,
-        transparent: true,
-        side: THREE.DoubleSide,
-      });
-      const label = new THREE.Mesh(labelGeometry, labelMaterial);
-      label.position.y = portalRadius + 2;
-      this.startPortalGroup.add(label);
-    }
-    const startPortalParticleCount = 1000;
-    this.startPortalParticles = new THREE.BufferGeometry();
-    const startPortalPositions = new Float32Array(startPortalParticleCount * 3);
-    const startPortalColors = new Float32Array(startPortalParticleCount * 3);
-    for (let i = 0; i < startPortalParticleCount * 3; i += 3) {
-      const angle = Math.random() * Math.PI * 2;
-      const radius = portalRadius + (Math.random() - 0.5) * portalTube * 2;
-      startPortalPositions[i] = Math.cos(angle) * radius;
-      startPortalPositions[i + 1] = Math.sin(angle) * radius;
-      startPortalPositions[i + 2] = (Math.random() - 0.5) * 4;
-      startPortalColors[i] = 0.8 + Math.random() * 0.2;
-      startPortalColors[i + 1] = 0;
-      startPortalColors[i + 2] = 0;
-    }
-    this.startPortalParticles.setAttribute(
-      "position",
-      new THREE.BufferAttribute(startPortalPositions, 3)
-    );
-    this.startPortalParticles.setAttribute(
-      "color",
-      new THREE.BufferAttribute(startPortalColors, 3)
-    );
-    const startPortalParticleMaterial = new THREE.PointsMaterial({
-      size: 0.2,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.6,
-    });
-    const startPortalParticleSystem = new THREE.Points(
-      this.startPortalParticles,
-      startPortalParticleMaterial
-    );
-    this.startPortalGroup.add(startPortalParticleSystem);
-    this.scene.add(this.startPortalGroup);
-    this.startPortalBox = new THREE.Box3().setFromObject(this.startPortalGroup);
   }
 
   animatePortals(): void {
@@ -980,10 +572,10 @@ export class Game {
 
   checkPortalCollisions(): void {
     if (!this.activeCharacter || !this.activeCharacter.mesh) return;
-    const playerBox = new THREE.Box3().setFromObject(this.activeCharacter.mesh);
-    const playerCenter = playerBox.getCenter(new THREE.Vector3());
+    const playerBox = new Box3().setFromObject(this.activeCharacter.mesh);
+    const playerCenter = playerBox.getCenter(new Vector3());
     if (this.exitPortalGroup && this.exitPortalBox) {
-      const portalCenter = this.exitPortalBox.getCenter(new THREE.Vector3());
+      const portalCenter = this.exitPortalBox.getCenter(new Vector3());
       const portalDistance = playerCenter.distanceTo(portalCenter);
       const interactionThreshold = 15;
       if (portalDistance < interactionThreshold) {
@@ -1011,7 +603,7 @@ export class Game {
       this.startPortalRefUrl &&
       this.startPortalOriginalParams
     ) {
-      const portalCenter = this.startPortalBox.getCenter(new THREE.Vector3());
+      const portalCenter = this.startPortalBox.getCenter(new Vector3());
       const portalDistance = playerCenter.distanceTo(portalCenter);
       const interactionThreshold = 15;
       if (
@@ -1032,103 +624,7 @@ export class Game {
   }
 
   spawnParticleEffect(position: Vector3, colorName: "red" | "green"): void {
-    if (!this.scene || !this.clock) return;
-    const particleCount = 10;
-    const particleSize = 0.07;
-    const effectDuration = 1;
-    const spreadRadius = 0.3;
-    const particleSpeed = 1.5;
-    const color = colorName === "red" ? 0xff0000 : 0x00ff00;
-    const effectGroup = new Group();
-    effectGroup.position.copy(position);
-    const geometry = new SphereGeometry(particleSize, 4, 2);
-    for (let i = 0; i < particleCount; i++) {
-      const material = new MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 1.0,
-      });
-      const particle = new Mesh(geometry, material);
-      const initialOffset = new Vector3(
-        (Math.random() - 0.5) * spreadRadius,
-        (Math.random() - 0.5) * spreadRadius,
-        (Math.random() - 0.5) * spreadRadius
-      );
-      particle.position.copy(initialOffset);
-      particle.userData.velocity = initialOffset
-        .clone()
-        .normalize()
-        .multiplyScalar(particleSpeed * (0.5 + Math.random() * 0.5));
-      effectGroup.add(particle);
-    }
-    effectGroup.userData.startTime = this.clock.elapsedTime;
-    effectGroup.userData.duration = effectDuration;
-    this.scene.add(effectGroup);
-    this.particleEffects.push(effectGroup);
-  }
-
-  updateParticleEffects(elapsedTime: number): void {
-    if (!this.scene || !this.clock) return;
-    const effectsToRemove: Group[] = [];
-    const particleDeltaTime = this.isPaused ? 0 : this.clock!.getDelta();
-    for (let i = this.particleEffects.length - 1; i >= 0; i--) {
-      const effect = this.particleEffects[i];
-      const effectElapsedTime = elapsedTime - effect.userData.startTime;
-      const progress = Math.min(
-        1.0,
-        effectElapsedTime / effect.userData.duration
-      );
-      if (progress >= 1.0) {
-        effectsToRemove.push(effect);
-        this.particleEffects.splice(i, 1);
-        continue;
-      }
-      if (!this.isPaused) {
-        effect.children.forEach((particle) => {
-          if (particle instanceof Mesh && particle.userData.velocity) {
-            particle.position.addScaledVector(
-              particle.userData.velocity,
-              particleDeltaTime
-            );
-          }
-        });
-      }
-      effect.children.forEach((particle) => {
-        if (particle instanceof Mesh) {
-          if (Array.isArray(particle.material)) {
-            particle.material.forEach((mat) => {
-              if (mat instanceof MeshBasicMaterial) {
-                mat.opacity = 1.0 - progress;
-                mat.needsUpdate = true;
-              }
-            });
-          } else if (particle.material instanceof MeshBasicMaterial) {
-            particle.material.opacity = 1.0 - progress;
-            particle.material.needsUpdate = true;
-          }
-        }
-      });
-    }
-    effectsToRemove.forEach((effect) => {
-      effect.traverse((child) => {
-        if (child instanceof Mesh) {
-          child.geometry?.dispose();
-          if (Array.isArray(child.material))
-            child.material.forEach((mat) => mat.dispose());
-          else child.material?.dispose();
-        }
-      });
-      this.scene!.remove(effect);
-    });
-  }
-
-  worldToScreenPosition(worldPos: Vector3): { x: number; y: number } | null {
-    if (!this.camera || !this.renderer) return null;
-    const vector = worldPos.clone().project(this.camera);
-    const x = (vector.x * 0.5 + 0.5) * this.renderer.domElement.width;
-    const y = (vector.y * -0.5 + 0.5) * this.renderer.domElement.height;
-    if (vector.z > 1.0 || vector.z < -1.0) return null;
-    return { x, y };
+    spawnParticleEffect(this, position, colorName);
   }
 
   respawnPlayer(): void {
@@ -1155,9 +651,9 @@ export class Game {
         this.activeCharacter!.mesh!.position
       );
     }
-    const respawnPos = new Vector3(0, 0, 10);
-    respawnPos.y = getTerrainHeight(this.scene!, respawnPos.x, respawnPos.z);
-    this.activeCharacter!.respawn(respawnPos);
+    const pressurize = new Vector3(0, 0, 10);
+    pressurize.y = getTerrainHeight(this.scene!, pressurize.x, pressurize.z);
+    this.activeCharacter!.respawn(pressurize);
     this.setPauseState(false);
     this.interactionSystem!.cancelGatherAction();
   }
