@@ -23,7 +23,7 @@ import {
   Group,
   AnimationClip,
   Vector2,
-  SphereGeometry, // Added for particles
+  SphereGeometry,
   TorusGeometry,
   CircleGeometry,
   MeshPhongMaterial,
@@ -37,7 +37,7 @@ import {
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { SimplexNoise } from "three/examples/jsm/math/SimplexNoise.js";
 import WebGL from "three/examples/jsm/capabilities/WebGL.js";
-import { Character, Entity } from "./entities"; // Removed Observation import
+import { Character, Entity } from "./entities";
 import { createTree, createRock, createHerb } from "./objects";
 import {
   InteractionSystem,
@@ -56,10 +56,8 @@ import {
   Quest,
 } from "./utils";
 import { AIController } from "./ai";
-import { MobileControls } from "./mobileControls"; // Import MobileControls
-
-const WORLD_SIZE = 100;
-const TERRAIN_SEGMENTS = 15;
+import { MobileControls } from "./mobileControls";
+import { WORLD_SIZE, TERRAIN_SEGMENTS } from "./constants";
 
 async function loadModels(): Promise<
   Record<string, { scene: Group; animations: AnimationClip[] }>

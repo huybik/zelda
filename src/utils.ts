@@ -1,4 +1,4 @@
-// File: /src/ultils.ts
+// File: /src/utils.ts
 import {
   Vector3,
   Quaternion,

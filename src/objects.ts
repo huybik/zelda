@@ -17,9 +17,9 @@ import {
   EventLog,
   EntityUserData,
   InteractionResult,
-  Colors,
   randomFloat,
 } from "./utils";
+import { Colors } from "./constants";
 
 const treeTrunkMat = new MeshLambertMaterial({ color: Colors.PASTEL_BROWN });
 const treeFoliageMat = new MeshLambertMaterial({ color: Colors.PASTEL_GREEN });

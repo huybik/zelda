@@ -10,7 +10,7 @@ import {
   Vector2,
   MathUtils,
 } from "three";
-import { Character, Entity } from "./entities"; // Added Entity import
+import { Character, Entity } from "./entities";
 import { InteractableObject } from "./objects";
 import {
   Inventory,
@@ -23,9 +23,10 @@ import {
   KeyState,
   MouseState,
 } from "./utils";
-import type { Game } from "./main"; // Import Game type
-import { sendToGemini } from "./ai"; // Import sendToGemini
-import { MobileControls } from "./mobileControls"; // Import MobileControls
+import type { Game } from "./main";
+import { sendToGemini } from "./ai";
+import { MobileControls } from "./mobileControls";
+import { INTERACTION_DISTANCE, AIM_TOLERANCE } from "./constants";
 
 export class InteractionSystem {
   player: Character;

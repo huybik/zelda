@@ -13,7 +13,7 @@ import {
   AnimationClip,
   AnimationAction,
   LoopOnce,
-  Sprite, // Added Sprite
+  Sprite,
   CanvasTexture,
   SpriteMaterial,
 } from "three";
@@ -29,10 +29,11 @@ import {
   EventEntry,
   GameEvent,
   InteractionResult,
-} from "./utils"; // Added InteractionResult
+} from "./utils";
 import { Raycaster } from "three";
 import type { Game } from "./main";
 import { AIController } from "./ai";
+import { CHARACTER_HEIGHT, CHARACTER_RADIUS } from "./constants";
 import { not } from "three/src/nodes/TSL.js";
 
 export class Entity {
@@ -351,9 +352,6 @@ export class Entity {
     this.userData.entityReference = null;
   }
 }
-
-const CHARACTER_HEIGHT = 1.8;
-const CHARACTER_RADIUS = 0.4;
 
 export class Character extends Entity {
   maxStamina: number;
