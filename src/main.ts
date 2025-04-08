@@ -725,13 +725,6 @@ export class Game {
       setTimeout(() => {
         banner.classList.add("hidden");
       }, 5000);
-    } else {
-      // Fallback log entry
-      this.activeCharacter!.eventLog.addEntry(
-        this.mobileControls?.isActive()
-          ? "Welcome! Use joysticks to move/look, buttons to act."
-          : "Welcome! Click window to lock controls. [WASD] Move, Mouse Look, [I] Inventory, [J] Journal, [E] Interact, [F] Attack, [C] Switch Control, [Esc] Unlock/Close UI" // Removed [H] Heal
-      );
     }
 
     this.renderer.setAnimationLoop(this.update.bind(this));

@@ -1,4 +1,4 @@
-// File: /src/utils.ts
+// File: /src/helper.ts
 import {
   Vector3,
   Quaternion,
@@ -301,82 +301,28 @@ export class EventLog {
     this.onChangeCallbacks = [];
   }
 
-  // Overload addEntry
-  addEntry(message: string): void;
-  addEntry(entry: EventEntry): void;
-  addEntry(
-    actor: string,
-    action: string,
-    message: string,
-    target?: string,
-    details?: Record<string, any>,
-    location?: Vector3
-  ): void;
-
-  addEntry(...args: any[]): void {
-    let entryToAdd: EventEntry;
-    const timestamp = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-
-    if (args.length === 1 && typeof args[0] === "string") {
-      // Simple message string
-      const message = args[0];
-      entryToAdd = {
-        timestamp,
-        message,
-        actorId: undefined, // Or set default like 'System'
-        actorName: undefined,
-        action: undefined,
-        targetId: undefined,
-        details: {},
-        location: undefined, // Or default Vector3
-      };
-    } else if (
-      args.length === 1 &&
-      typeof args[0] === "object" &&
-      args[0].message &&
-      args[0].timestamp
+  // Simplified addEntry to accept only EventEntry objects
+  addEntry(entry: EventEntry): void {
+    // Ensure timestamp is present and in the correct format, otherwise generate one
+    if (
+      !entry.timestamp ||
+      typeof entry.timestamp !== "string" ||
+      entry.timestamp.length !== 8
     ) {
-      // Pre-constructed EventEntry object (used by game.logEvent distribution)
-      entryToAdd = args[0];
-      // Ensure timestamp is current if not provided or different format
-      if (!entryToAdd.timestamp || entryToAdd.timestamp.length !== 8) {
-        entryToAdd.timestamp = timestamp;
-      }
-    } else if (
-      args.length >= 3 &&
-      typeof args[0] === "string" &&
-      typeof args[1] === "string" &&
-      typeof args[2] === "string"
-    ) {
-      // Structured event data
-      const [
-        actor,
-        action,
-        message,
-        target,
-        details = {},
-        location = new Vector3(),
-      ] = args;
-      entryToAdd = {
-        timestamp,
-        message,
-        actorId: undefined, // Or set default like 'System'
-        actorName: undefined,
-        action: undefined,
-        targetId: undefined,
-        details: {},
-        location: undefined, // Or default Vector3
-      };
-    } else {
-      console.warn("Invalid arguments passed to EventLog.addEntry:", args);
-      return; // Don't add invalid entries
+      entry.timestamp = new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
     }
 
-    this.entries.push(entryToAdd);
+    // Ensure message is present
+    if (typeof entry.message !== "string") {
+      console.warn("EventLog entry is missing a message:", entry);
+      entry.message = "[No message provided]"; // Provide a default message
+    }
+
+    this.entries.push(entry);
     if (this.entries.length > this.maxEntries) this.entries.shift();
     this.notifyChange();
   }
