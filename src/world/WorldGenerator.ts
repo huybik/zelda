@@ -361,81 +361,66 @@ export function populateEnvironment(
   game: Game // Pass Game instance for Character setup
 ): void {
   const halfSize = worldSize / 2;
-  const villageCenter = new Vector3(5, 0, 10); // Define a central point for the village area
-  const villageRadiusSq = 20 * 20; // Squared radius around the village center
+  const villageCenter = new Vector3(0, 0, 0); // Center of the world
+  const villageRadius = halfSize * 0.2; // Radius for village area
+  const villageRadiusSq = villageRadius * villageRadius;
+
+  console.log("Starting environment population...");
 
   // --- Add Characters ---
-  const addCharacter = (
+  // Example NPC placements using game.createCharacter
+  const tryAddNPC = (
     spawnPos: Vector3,
     name: string,
     modelKey: string,
     persona: string
-  ): Character | null => {
+  ) => {
     const modelData = models[modelKey];
     if (!modelData) {
       console.error(
-        `Model data not found for key: ${modelKey}. Cannot create character ${name}.`
+        `Model data not found for key: ${modelKey}. Cannot create NPC ${name}.`
       );
-      return null;
+      return;
     }
-    // Need Character class imported
-    // const CharacterClass = game.characterClassRef; // Assuming Game stores a ref
-    // if (!CharacterClass) {
-    //   console.error(
-    //     "Character class reference not available in Game instance."
-    //   );
-    //   return null;
-    // }
-    const charInventory = new Inventory(9); // NPCs get a small inventory
-    spawnPos.y =
-      getTerrainHeight(scene, spawnPos.x, spawnPos.z) + CHARACTER_HEIGHT / 2; // Set Y position from model
-    const character = new Character(
-      scene,
+    const npcInventorySize = 9; // Example size for NPCs
+    const npc = game.createCharacter(
       spawnPos,
       name,
-      modelData.scene.clone(), // Clone the scene graph
-      modelData.animations, // Share animations
-      charInventory,
-      game
+      modelData,
+      npcInventorySize,
+      false, // isPlayerCharacter = false for NPCs
+      persona
     );
-    character.persona = persona;
-    if (character.aiController) character.aiController.persona = persona; // Sync persona to AI
 
-    // Place character on terrain
-    character.updateBoundingBox(); // Update BB after placement
-
-    // Add to tracking lists
-    entities.push(character);
-    collidableObjects.push(character.mesh!);
-    interactableObjects.push(character); // Characters are interactable
-
-    // Initialize NPC displays
-    character.initNameDisplay();
-    character.initIntentDisplay();
-
-    console.log(
-      `Added character: ${name} at (${spawnPos.x.toFixed(1)}, ${character.mesh!.position.y.toFixed(1)}, ${spawnPos.z.toFixed(1)})`
-    );
-    return character;
+    if (npc) {
+        // Optionally add NPC-specific setup here if needed, 
+        // like initializing displays IF NOT handled by Character/createCharacter
+        // npc.initNameDisplay?.(); 
+        // npc.initIntentDisplay?.();
+        console.log(
+            `Added NPC: ${name} via game.createCharacter`
+        );
+    } else {
+        console.warn(`Failed to create NPC: ${name}`);
+    }
   };
 
-  //   Example NPC placements
-  addCharacter(
+  tryAddNPC(
     villageCenter.clone().add(new Vector3(-12, 0, 2)),
     "Farmer Giles",
-    "oldMan", // Using placeholder model key
+    "oldMan",
     "Hardworking farmer, values community, knowledgeable about crops, a bit stubborn."
   );
-  addCharacter(
+  tryAddNPC(
     villageCenter.clone().add(new Vector3(10, 0, -3)),
     "Blacksmith Brynn",
-    "tavernMan", // Using placeholder model key
+    "tavernMan",
     "Skilled artisan, proud, strong-willed, independent, focused on craft, gruff but kind."
   );
-  addCharacter(
+  tryAddNPC(
     new Vector3(halfSize * 0.4, 0, -halfSize * 0.3), // Hunter further out
     "Hunter Rex",
-    "woman", // Using placeholder model key
+    "woman",
     "Experienced tracker, quiet, observant, prefers wilderness, resourceful, not very social."
   );
 

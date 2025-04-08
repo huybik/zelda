@@ -233,37 +233,106 @@ export class Game {
   }
 
   private initPlayer(models: Record<string, LoadedModel>): void {
-    let spawnPos = new Vector3(0, 0, 15); // Default spawn near origin
-    // Ensure spawn position is on the terrain (handled by Character constructor placement)
-
     const playerModelData = models.player;
     if (!playerModelData) throw new Error("Player model failed to load.");
-    spawnPos.y =
-      getTerrainHeight(this.scene, spawnPos.x, spawnPos.z) +
-      CHARACTER_HEIGHT / 2; // Set Y position from model
 
-    const playerInventory = new Inventory(9); // Default size
-    this.activeCharacter = new Character(
-      this.scene,
-      spawnPos, // Initial position hint (actual placement done in constructor)
-      "Player",
-      playerModelData.scene,
-      playerModelData.animations,
-      playerInventory,
-      this
+    let spawnPos = new Vector3(0, 0, 15); // Default spawn near origin
+
+    // Player specific inventory size
+    const playerInventorySize = 9;
+
+    this.activeCharacter = this.createCharacter(
+        spawnPos,
+        "Player",
+        playerModelData,
+        playerInventorySize,
+        true // isPlayerCharacter
+        // No persona for player
     );
-    this.activeCharacter.userData.isPlayer = true; // Mark as player
-    this.activeCharacter.userData.isNPC = false;
-    this.activeCharacter.userData.isInteractable = false;
-    this.activeCharacter.aiController = null; // Player doesn't use AIController
-    this.activeCharacter.game = this; // Link back to game
 
-    // Add player to relevant lists
-    this.entities.push(this.activeCharacter);
-    this.collidableObjects.push(this.activeCharacter.mesh!);
-    this.interactableObjects.push(this.activeCharacter); // Player might be targetable later
+    if (!this.activeCharacter) {
+        throw new Error("Failed to create player character.");
+    }
 
     console.log(`Player initialized at ~(${spawnPos.x}, ${spawnPos.z})`);
+  }
+
+  /**
+   * Creates and initializes a character (Player or NPC).
+   * @param initialPos Hint for initial position. Actual Y is calculated.
+   * @param name Character's name.
+   * @param modelData Loaded model data (scene graph, animations).
+   * @param inventorySize Size of the character's inventory.
+   * @param isPlayerCharacter True if this is the player, false for NPC.
+   * @param persona Optional persona string for NPCs.
+   * @returns The created Character instance or null on failure.
+   */
+  public createCharacter(
+    initialPos: Vector3,
+    name: string,
+    modelData: LoadedModel,
+    inventorySize: number,
+    isPlayerCharacter: boolean,
+    persona?: string
+  ): Character | null {
+    // Calculate Y position based on terrain height
+    // Note: Character constructor might readjust this with snapTerrain
+    const spawnPos = initialPos.clone();
+    spawnPos.y =
+      getTerrainHeight(this.scene, spawnPos.x, spawnPos.z) +
+      CHARACTER_HEIGHT / 2; // Initial Y guess
+
+    const inventory = new Inventory(inventorySize);
+
+    const character = new Character(
+      this.scene,
+      spawnPos, // Pass calculated initial position hint
+      name,
+      modelData.scene.clone(), // Clone model scene for unique instance
+      modelData.animations, // Share animations
+      inventory,
+      this // Pass game reference
+    );
+
+    // Configure based on type (Player vs NPC)
+    character.userData.isPlayer = isPlayerCharacter;
+    character.userData.isNPC = !isPlayerCharacter;
+    character.userData.isInteractable = !isPlayerCharacter; // NPCs are interactable by default
+
+    if (isPlayerCharacter) {
+        // Player specific setup
+        character.aiController = null; // Player doesn't use AIController
+        // Active character assignment is handled by the caller (initPlayer)
+    } else {
+        // NPC specific setup
+        character.persona = persona || "";
+        if (character.aiController) character.aiController.persona = character.persona;
+        // Initialize NPC displays (if Character class doesn't do it already)
+        // Consider moving initNameDisplay/initIntentDisplay calls here if needed
+        // character.initNameDisplay?.(); // Optional chaining if method might not exist
+        // character.initIntentDisplay?.();
+    }
+
+    // Add to relevant lists
+    this.entities.push(character);
+    if (character.mesh) {
+        this.collidableObjects.push(character.mesh);
+    }
+    // Only add NPCs to interactable list initially? Or player too?
+    // If player needs to be targetable by NPCs, add them too.
+    if (!isPlayerCharacter) {
+        this.interactableObjects.push(character);
+    } else {
+         // Optionally add player too if they can be targeted/interacted with
+         // this.interactableObjects.push(character);
+    }
+
+
+    console.log(
+      `Created ${isPlayerCharacter ? "Player" : "NPC"}: ${name} at approx (${spawnPos.x.toFixed(1)}, ${spawnPos.z.toFixed(1)})`
+    );
+
+    return character;
   }
 
   private initControls(): void {
