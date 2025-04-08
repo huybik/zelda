@@ -54,7 +54,7 @@ import {
   smoothstep,
   EventEntry,
   Quest,
-} from "./utils";
+} from "./helper";
 import { AIController } from "./ai";
 import { MobileControls } from "./mobileControls";
 import { WORLD_SIZE, TERRAIN_SEGMENTS } from "./constants";

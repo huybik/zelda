@@ -22,7 +22,7 @@ import {
   smoothVectorLerp,
   KeyState,
   MouseState,
-} from "./utils";
+} from "./helper";
 import type { Game } from "./main";
 import { sendToGemini } from "./ai";
 import { MobileControls } from "./mobileControls";

@@ -29,7 +29,7 @@ import {
   EventEntry,
   GameEvent,
   InteractionResult,
-} from "./utils";
+} from "./helper";
 import { Raycaster } from "three";
 import type { Game } from "./main";
 import { AIController } from "./ai";

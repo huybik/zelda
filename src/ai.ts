@@ -1,7 +1,7 @@
 ///// src/ai.ts
 import { Vector3, Object3D } from "three";
 import { Character, Entity } from "./entities";
-import { MoveState, getTerrainHeight, EventEntry } from "./utils";
+import { MoveState, getTerrainHeight, EventEntry } from "./helper";
 import type { Game } from "./main";
 
 // Define both API keys

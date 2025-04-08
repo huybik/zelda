@@ -18,7 +18,7 @@ import {
   EntityUserData,
   InteractionResult,
   randomFloat,
-} from "./utils";
+} from "./helper";
 import { Colors } from "./constants";
 
 const treeTrunkMat = new MeshLambertMaterial({ color: Colors.PASTEL_BROWN });
