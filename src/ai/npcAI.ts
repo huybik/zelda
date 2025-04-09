@@ -1,4 +1,4 @@
-// File: /src/entities/ai.ts
+// File: /src/ai/npcAI.ts
 import { Vector3, Object3D } from "three";
 import { Entity } from "../entities/entitiy";
 import { Character } from "../entities/character";
@@ -112,6 +112,7 @@ export class AIController {
   private lastApiCallTime: number = 0;
   private apiCallCooldown: number = 20000;
   private lastObservation: Observation | null = null;
+  persistentAction: { type: string; targetType: string } | null = null;
 
   constructor(character: Character) {
     this.character = character;
@@ -137,7 +138,7 @@ export class AIController {
         const currentTime = Date.now();
         const timeSinceLastCall = currentTime - this.lastApiCallTime;
         const canCallApi = timeSinceLastCall >= this.apiCallCooldown;
-        if (canCallApi && this.isAffectedByEntities()) {
+        if (this.isAffectedByEntities()) {
           this.decideNextAction();
           this.lastApiCallTime = currentTime;
           this.actionTimer = 5 + Math.random() * 5;
@@ -236,7 +237,20 @@ export class AIController {
             }, respawnTime);
           }
           this.targetResource = null;
-          this.aiState = "idle";
+          if (this.persistentAction?.type === "gather") {
+            const nextResource = this.findNearestResource(
+              this.persistentAction.targetType
+            );
+            if (nextResource) {
+              this.targetResource = nextResource;
+              this.aiState = "movingToResource";
+            } else {
+              this.persistentAction = null;
+              this.aiState = "idle";
+            }
+          } else {
+            this.aiState = "idle";
+          }
           this.character.isGathering = false;
           this.currentIntent = "";
         }
@@ -261,7 +275,28 @@ export class AIController {
             moveState.forward = 1;
           } else {
             this.character.lookAt(this.target.mesh.position);
-            if (this.targetAction === "chat" && this.message) {
+            if (this.targetAction === "attack") {
+              this.character.triggerAction("attack");
+              if (this.target.isDead || distance > this.searchRadius) {
+                if (this.persistentAction?.type === "attack") {
+                  const nextTarget = this.findNearestAnimal(
+                    this.persistentAction.targetType
+                  );
+                  if (nextTarget) {
+                    this.target = nextTarget;
+                  } else {
+                    this.persistentAction = null;
+                    this.aiState = "idle";
+                    this.target = null;
+                    this.targetAction = null;
+                  }
+                } else {
+                  this.aiState = "idle";
+                  this.target = null;
+                  this.targetAction = null;
+                }
+              }
+            } else if (this.targetAction === "chat" && this.message) {
               this.character.showTemporaryMessage(this.message);
               if (this.character.game) {
                 this.character.game.logEvent(
@@ -273,16 +308,6 @@ export class AIController {
                   this.character.mesh!.position
                 );
               }
-              this.aiState = "idle";
-              this.target = null;
-              this.targetAction = null;
-              this.message = null;
-            } else if (this.targetAction === "attack") {
-              this.character.triggerAction("attack");
-              this.aiState = "idle";
-              this.target = null;
-              this.targetAction = null;
-            } else {
               this.aiState = "idle";
               this.target = null;
               this.targetAction = null;
@@ -352,19 +377,18 @@ export class AIController {
       )
         return true;
     }
-    // Check animals too
     const currentAnimals = this.observation.nearbyAnimals;
     const lastAnimals = this.lastObservation.nearbyAnimals;
     for (const currAnimal of currentAnimals) {
       const matchingLastAnimal = lastAnimals.find(
         (a) => a.id === currAnimal.id
       );
-      if (!matchingLastAnimal) return true; // New animal appeared
+      if (!matchingLastAnimal) return true;
       if (
         currAnimal.health < matchingLastAnimal.health ||
         currAnimal.isDead !== matchingLastAnimal.isDead
       )
-        return true; // Animal took damage or died
+        return true;
     }
     return false;
   }
@@ -591,7 +615,8 @@ Based on this information, decide your next action. Respond ONLY with a valid JS
     this.target = null;
     this.targetAction = null;
     this.message = null;
-    // 'idle' and 'roam' are no longer expected from the API
+    this.persistentAction = null;
+
     if (action === "gather" && object_id) {
       const targetObject = this.character.scene?.children.find(
         (child) =>
@@ -599,98 +624,128 @@ Based on this information, decide your next action. Respond ONLY with a valid JS
           child.userData.isInteractable &&
           child.visible
       );
-      if (
-        targetObject &&
-        this.observation?.nearbyObjects.some((o) => o.id === object_id)
-      ) {
-        this.targetResource = targetObject;
-        this.aiState = "movingToResource";
+      if (targetObject) {
+        const resourceType = targetObject.userData.resource;
+        if (resourceType) {
+          this.persistentAction = { type: "gather", targetType: resourceType };
+          const nearestResource = this.findNearestResource(resourceType);
+          if (nearestResource) {
+            this.targetResource = nearestResource;
+            this.aiState = "movingToResource";
+          } else {
+            this.aiState = "idle";
+          }
+        } else {
+          this.aiState = "idle";
+        }
       } else {
-        this.currentIntent += ` (couldn't find object ${object_id})`;
-        this.aiState = "idle"; // Fallback to local idle if API suggests invalid gather
+        this.aiState = "idle";
       }
-    } else if (
-      (action === "moveTo" || action === "attack" || action === "chat") &&
-      target_id
-    ) {
+    } else if (action === "attack" && target_id) {
+      const targetEntity = this.character.game?.entities.find(
+        (e) => e.id === target_id
+      );
+      if (targetEntity && targetEntity.mesh && !targetEntity.isDead) {
+        if (
+          targetEntity instanceof Animal &&
+          targetEntity.userData.animalType
+        ) {
+          const animalType = String(targetEntity.userData.animalType);
+          this.persistentAction = { type: "attack", targetType: animalType };
+          const nearestTarget = this.findNearestAnimal(animalType);
+          if (nearestTarget) {
+            this.target = nearestTarget;
+            this.targetAction = "attack";
+            this.aiState = "movingToTarget";
+          } else {
+            this.aiState = "idle";
+          }
+        } else {
+          this.target = targetEntity;
+          this.targetAction = "attack";
+          this.aiState = "movingToTarget";
+        }
+      } else {
+        this.aiState = "idle";
+      }
+    } else if (action === "chat" && target_id) {
+      const targetEntity = this.character.game?.entities.find(
+        (e) => e.id === target_id
+      );
+      if (targetEntity && targetEntity.mesh && !targetEntity.isDead) {
+        this.target = targetEntity;
+        this.targetAction = "chat";
+        this.message = message || "...";
+        this.aiState = "movingToTarget";
+      } else {
+        this.aiState = "idle";
+      }
+    } else if (action === "moveTo" && target_id) {
       let targetPos: Vector3 | null = null;
-      let targetEntity: Entity | null = null;
       if (target_id.toLowerCase() === "home") {
         targetPos = this.homePosition.clone();
-      } else {
-        targetEntity =
-          this.character.game?.entities.find((e) => e.id === target_id) || null;
-        if (
-          targetEntity &&
-          targetEntity.mesh &&
-          (this.observation?.nearbyCharacters.some((c) => c.id === target_id) ||
-            this.observation?.nearbyAnimals.some((a) => a.id === target_id)) &&
-          !targetEntity.isDead
-        ) {
-          targetPos = targetEntity.mesh.position.clone();
-        } else if (targetEntity && targetEntity.isDead) {
-          this.currentIntent += ` (target ${target_id} is dead)`;
-          targetEntity = null;
-        } else {
-          this.currentIntent += `(couldn't find valid target ${target_id})`;
-          targetEntity = null;
-        }
       }
       if (targetPos) {
         this.destination = targetPos;
-        if (this.character.scene && !targetEntity) {
+        if (this.character.scene) {
           this.destination.y = getTerrainHeight(
             this.character.scene,
             this.destination.x,
             this.destination.z
           );
         }
-        if (action === "moveTo") {
-          this.aiState = "roaming"; // Treat API 'moveTo' as local 'roaming'
-        } else if (targetEntity) {
-          this.aiState = "movingToTarget";
-          this.target = targetEntity;
-          this.targetAction = action;
-          if (action === "chat") this.message = message || "...";
-        } else {
-          this.aiState = "roaming"; // Fallback to local roam if target invalid for attack/chat
-        }
+        this.aiState = "roaming";
       } else {
-        this.currentIntent += ` (invalid target ${target_id})`;
-        this.aiState = "idle"; // Fallback to local idle if target is invalid
+        this.aiState = "idle";
       }
     } else {
-      // If API returns an unknown or invalid action, default to local idle
       this.aiState = "idle";
     }
-    if (this.character.game) {
-      let actionMessage = "";
-      if (this.aiState === "idle")
-        actionMessage = "idle (fallback or API error)";
-      else if (this.aiState === "roaming")
-        actionMessage = `roam (moving to ${target_id || "destination"})`;
-      else if (this.aiState === "movingToResource")
-        actionMessage = `move to gather ${object_id}`;
-      else if (
-        this.aiState === "movingToTarget" &&
-        this.targetAction === "attack"
-      )
-        actionMessage = `move to attack ${target_id}`;
-      else if (
-        this.aiState === "movingToTarget" &&
-        this.targetAction === "chat"
-      )
-        actionMessage = `move to chat with ${target_id}`;
-      else actionMessage = this.aiState; // Should cover 'gathering'
-      const messageLog = `${this.character.name} decided to ${actionMessage} because: ${intent}`;
-      this.character.game.logEvent(
-        this.character,
-        "decide_action",
-        messageLog,
-        this.target || undefined,
-        { action, object_id, target_id, message, intent },
-        this.character.mesh!.position
-      );
+  }
+
+  findNearestResource(resourceType: string): Object3D | null {
+    if (!this.character.scene) return null;
+    let nearest: Object3D | null = null;
+    let minDistanceSq = Infinity;
+    const selfPosition = this.character.mesh!.position;
+    const searchRadiusSq = this.searchRadius * this.searchRadius;
+    this.character.scene.traverse((child) => {
+      if (
+        child.userData.isInteractable &&
+        child.userData.resource === resourceType &&
+        child.visible
+      ) {
+        const distanceSq = selfPosition.distanceToSquared(child.position);
+        if (distanceSq < searchRadiusSq && distanceSq < minDistanceSq) {
+          minDistanceSq = distanceSq;
+          nearest = child;
+        }
+      }
+    });
+    return nearest;
+  }
+
+  findNearestAnimal(animalType: string): Animal | null {
+    if (!this.character.game) return null;
+    let nearest: Animal | null = null;
+    let minDistanceSq = Infinity;
+    const selfPosition = this.character.mesh!.position;
+    const searchRadiusSq = this.searchRadius * this.searchRadius;
+    for (const entity of this.character.game.entities) {
+      if (
+        entity instanceof Animal &&
+        entity.userData.animalType === animalType &&
+        !entity.isDead
+      ) {
+        const distanceSq = selfPosition.distanceToSquared(
+          entity.mesh!.position
+        );
+        if (distanceSq < searchRadiusSq && distanceSq < minDistanceSq) {
+          minDistanceSq = distanceSq;
+          nearest = entity;
+        }
+      }
     }
+    return nearest;
   }
 }

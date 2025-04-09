@@ -249,7 +249,7 @@ export class Entity {
     this.updateIntentDisplay(message);
     setTimeout(() => {
       if (this.aiController instanceof AIController) {
-        const currentIntentText = `${this.name}: ${this.aiController.currentIntent}`;
+        const currentIntentText = `${this.aiController.currentIntent}`;
         this.updateIntentDisplay(currentIntentText || originalText);
       } else if (!this.isDead) {
         this.updateIntentDisplay(originalText);
