@@ -166,7 +166,7 @@ export class Character extends Entity {
 
   performAttack(): void {
     const range = 2.0;
-    const damage = this.name === "Player" ? 10 : 5;
+    const damage = this.name === "Player" ? 40 : 10;
     if (!this.mesh || !this.scene || !this.game) return;
 
     const rayOrigin = this.mesh.position
