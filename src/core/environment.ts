@@ -201,12 +201,12 @@ export function populateEnvironment(
   };
 
   // Add Grass Patches (more numerous)
-  addDecoration(createGrassPatch, worldSize * 5, villageRadiusSq);
+  addDecoration(createGrassPatch, worldSize * 0.5, villageRadiusSq);
 
   // Add Flower Patches (less numerous)
   addDecoration(
     createFlowerPatch,
-    Math.floor(worldSize * 1.5),
+    Math.floor(worldSize * 0.15),
     villageRadiusSq
   );
 }

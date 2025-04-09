@@ -253,8 +253,8 @@ export function createHerb(position: Vector3): Group {
 export function createGrassPatch(position: Vector3): Group {
   const patchGroup = new Group();
   patchGroup.name = "Grass Patch";
-  const bladeCount = MathUtils.randInt(5, 15);
-  const patchRadius = 0.5;
+  const bladeCount = MathUtils.randInt(50, 150);
+  const patchRadius = 5;
 
   for (let i = 0; i < bladeCount; i++) {
     const bladeHeight = randomFloat(0.2, 1);
@@ -328,8 +328,8 @@ function createFlower(colorHex: number): Group {
 export function createFlowerPatch(position: Vector3): Group {
   const patchGroup = new Group();
   patchGroup.name = "Flower Patch";
-  const flowerCount = MathUtils.randInt(3, 7);
-  const patchRadius = 0.4;
+  const flowerCount = MathUtils.randInt(30, 70);
+  const patchRadius = 4;
 
   for (let i = 0; i < flowerCount; i++) {
     const randomColor =
