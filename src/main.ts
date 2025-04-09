@@ -1,4 +1,4 @@
-// File: main.ts
+// File: /src/main.ts
 import * as THREE from "three";
 import {
   Scene,
@@ -142,8 +142,12 @@ export class Game {
   startPortalOriginalParams: URLSearchParams | null = null;
   hasEnteredFromPortal: boolean = false;
   quests: Quest[] | undefined;
+  boundHandleVisibilityChange: () => void;
+  wasPausedBeforeVisibilityChange: boolean = false;
 
-  constructor() {}
+  constructor() {
+    this.boundHandleVisibilityChange = this.handleVisibilityChange.bind(this);
+  }
 
   async init(): Promise<void> {
     this.clock = new Clock();
@@ -182,18 +186,56 @@ export class Game {
         entity.initNameDisplay();
       }
     });
-    document.addEventListener("pointerlockchange", () => {
-      if (
-        document.pointerLockElement === this.renderer?.domElement &&
-        this.audioElement?.paused
-      ) {
-        this.audioElement
-          .play()
-          .catch((e) =>
-            console.warn("Background music play failed on interaction:", e)
-          );
+    document.addEventListener(
+      "pointerlockchange",
+      this.handlePointerLockChange.bind(this)
+    );
+    document.addEventListener(
+      "visibilitychange",
+      this.boundHandleVisibilityChange
+    );
+  }
+
+  handlePointerLockChange(): void {
+    if (
+      document.pointerLockElement === this.renderer?.domElement &&
+      this.audioElement?.paused
+    ) {
+      this.audioElement
+        .play()
+        .catch((e) =>
+          console.warn("Background music play failed on interaction:", e)
+        );
+    }
+  }
+
+  handleVisibilityChange(): void {
+    if (!this.mobileControls?.isActive()) {
+      return;
+    }
+    if (document.visibilityState === "hidden") {
+      this.wasPausedBeforeVisibilityChange = this.isPaused;
+      this.setPauseState(true);
+      console.log("Game paused (mobile) due to visibility change.");
+      if (this.audioElement && !this.audioElement.paused) {
+        this.audioElement.pause();
       }
-    });
+    } else if (document.visibilityState === "visible") {
+      if (!this.wasPausedBeforeVisibilityChange) {
+        this.setPauseState(false);
+        console.log("Game resumed (mobile) due to visibility change.");
+        if (this.audioElement && this.audioElement.paused && !this.isPaused) {
+          this.audioElement
+            .play()
+            .catch((e) => console.warn("Audio resume failed", e));
+        }
+      } else {
+        console.log(
+          "Game kept paused (mobile) on visibility change because it was already paused."
+        );
+      }
+      this.wasPausedBeforeVisibilityChange = false;
+    }
   }
 
   initQuests(): void {
@@ -759,6 +801,40 @@ export class Game {
         entity.eventLog.addEntry(eventEntry);
     });
   }
+
+  destroy(): void {
+    // Cleanup resources
+    document.removeEventListener(
+      "visibilitychange",
+      this.boundHandleVisibilityChange
+    );
+    this.renderer?.setAnimationLoop(null);
+    this.controls?.dispose();
+    this.mobileControls?.destroy();
+    // Add other cleanup logic here (removing listeners, disposing geometry/materials)
+    // For example:
+    this.entities.forEach((entity) => entity.destroy?.());
+    this.scene?.traverse((object) => {
+      if (object instanceof THREE.Mesh) {
+        object.geometry?.dispose();
+        if (Array.isArray(object.material)) {
+          object.material.forEach((material) => material.dispose());
+        } else if (object.material) {
+          object.material.dispose();
+        }
+      }
+    });
+    this.renderer?.dispose();
+    document
+      .getElementById("game-container")
+      ?.removeChild(this.renderer!.domElement);
+
+    // Nullify properties
+    this.scene = null;
+    this.renderer = null;
+    this.camera = null;
+    // ... nullify other properties ...
+  }
 }
 
 declare global {
@@ -775,9 +851,10 @@ if (WebGL.isWebGL2Available()) {
     gameInstance.start();
     const onResize = () => gameInstance.onWindowResize();
     window.addEventListener("resize", onResize, false);
-    window.addEventListener("beforeunload", () =>
-      window.removeEventListener("resize", onResize)
-    );
+    window.addEventListener("beforeunload", () => {
+      window.removeEventListener("resize", onResize);
+      gameInstance.destroy(); // Call destroy on unload
+    });
   }
   startGame();
 } else {
