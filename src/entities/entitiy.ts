@@ -44,6 +44,7 @@ export class Entity {
   nameSprite: Sprite | null = null;
   aiController: AIController | null = null;
   rayCaster: Raycaster | null = null;
+  deathTimestamp: number | null = null;
 
   constructor(scene: Scene, position: Vector3, name: string = "Entity") {
     this.id = `${name}_${getNextEntityId()}`;
@@ -291,6 +292,8 @@ export class Entity {
     this.health = 0;
     this.userData.isCollidable = false; // Make non-collidable
     this.userData.isInteractable = false; // Make non-interactable
+    this.deathTimestamp = performance.now(); // Record time of death
+
     // Specific death behavior (like animation) is handled in Character subclass
   }
 

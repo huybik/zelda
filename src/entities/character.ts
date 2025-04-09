@@ -66,6 +66,7 @@ export class Character extends Entity {
   actionType: string = "none";
   isPerformingAction: boolean = false;
   skeletonRoot: Object3D | null = null; // Store the root for animation generation
+  deathTimestamp: number | null = null;
 
   constructor(
     scene: Scene,
@@ -523,6 +524,7 @@ export class Character extends Entity {
 
     // Call super.die() first to set basic flags
     super.die(attacker); // Sets this.isDead = true, stops velocity, etc.
+    this.deathTimestamp = performance.now(); // Record time of death
 
     // AI specific state change
     if (this.aiController) this.aiController.aiState = "dead";
@@ -557,7 +559,7 @@ export class Character extends Entity {
         const defeatMessage = `${attacker.name} defeated ${this.name}.`;
         this.game.logEvent(
           attacker,
-          "defeat",
+          "kill",
           defeatMessage,
           this.name,
           {},
@@ -573,6 +575,7 @@ export class Character extends Entity {
     this.stamina = this.maxStamina;
     this.velocity.set(0, 0, 0);
     this.isDead = false; // Critical: Set isDead back to false
+    this.deathTimestamp = null; // Reset death timestamp
     this.isExhausted = false;
     this.isGathering = false;
     this.gatherAttackTimer = 0;

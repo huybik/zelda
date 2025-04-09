@@ -594,9 +594,68 @@ export class Game {
       this.checkPortalCollisions();
     }
     updateParticleEffects(this, elapsedTime);
+    this.checkDeadEntityRemoval(); // Check for dead entities to remove
     this.hud!.update();
     this.minimap!.update();
     this.renderer.render(this.scene, this.camera);
+  }
+
+  checkDeadEntityRemoval(): void {
+    const now = performance.now();
+    const entitiesToRemove: Entity[] = [];
+
+    for (const entity of this.entities) {
+      if (
+        entity.isDead &&
+        entity !== this.activeCharacter && // Don't remove the player
+        entity.deathTimestamp !== null
+      ) {
+        const timeSinceDeath = now - entity.deathTimestamp;
+        if (timeSinceDeath > 7000) {
+          // 7 seconds timeout
+          entitiesToRemove.push(entity);
+        }
+      }
+    }
+
+    if (entitiesToRemove.length > 0) {
+      for (const entityToRemove of entitiesToRemove) {
+        console.log(
+          `Removing dead entity: ${entityToRemove.name} after timeout.`
+        );
+
+        // Remove from collidables
+        const collidableIndex = this.collidableObjects.findIndex(
+          (obj) => obj === entityToRemove.mesh
+        );
+        if (collidableIndex > -1) {
+          this.collidableObjects.splice(collidableIndex, 1);
+        }
+
+        // Remove from interactables
+        const interactableIndex = this.interactableObjects.findIndex(
+          (obj) => obj === entityToRemove
+        );
+        if (interactableIndex > -1) {
+          this.interactableObjects.splice(interactableIndex, 1);
+        }
+
+        // Call destroy method
+        entityToRemove.destroy();
+
+        // Remove from main entities list
+        const entityIndex = this.entities.findIndex(
+          (e) => e === entityToRemove
+        );
+        if (entityIndex > -1) {
+          this.entities.splice(entityIndex, 1);
+        }
+      }
+      // Update minimap if it relies on the entities array directly
+      if (this.minimap) {
+        this.minimap.entities = this.entities; // Ensure minimap has the updated list
+      }
+    }
   }
 
   animatePortals(): void {
