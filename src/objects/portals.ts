@@ -100,6 +100,16 @@ export function createExitPortal(scene: THREE.Scene, game: Game): void {
     exitPortalParticleMaterial
   );
   exitPortalGroup.add(exitPortalParticleSystem);
+
+  // Add userData for Minimap
+  exitPortalGroup.userData = {
+    ...exitPortalGroup.userData,
+    isPortal: true,
+    name: "Exit Portal",
+    color: "#00ff00",
+    minimapLabel: "Portal",
+  };
+
   scene.add(exitPortalGroup);
   game.exitPortalGroup = exitPortalGroup;
   game.exitPortalBox = new THREE.Box3().setFromObject(exitPortalGroup);
@@ -212,6 +222,16 @@ export function createStartPortal(scene: THREE.Scene, game: Game): void {
     startPortalParticleMaterial
   );
   startPortalGroup.add(startPortalParticleSystem);
+
+  // Add userData for Minimap
+  startPortalGroup.userData = {
+    ...startPortalGroup.userData,
+    isPortal: true,
+    name: "Start Portal",
+    color: "#ff0000",
+    minimapLabel: "Portal",
+  };
+
   scene.add(startPortalGroup);
   game.startPortalGroup = startPortalGroup;
   game.startPortalBox = new THREE.Box3().setFromObject(startPortalGroup);

@@ -1,6 +1,6 @@
 // File: /src/ui/minimap.ts
 import { Character } from "../entities/character";
-import { Object3D, Vector3 } from "three";
+import { Object3D, Vector3, Group } from "three";
 
 export class Minimap {
   canvas: HTMLCanvasElement;
@@ -18,10 +18,13 @@ export class Minimap {
   dotSize: number = 3;
   playerDotSize: number = 4;
   playerTriangleSize: number;
+  exitPortal: Group | null = null;
+  startPortal: Group | null = null;
 
   private entityPosition = new Vector3();
   private playerPosition = new Vector3();
   private playerForward = new Vector3();
+  private portalPosition = new Vector3();
 
   constructor(
     canvasElement: HTMLCanvasElement | null,
@@ -46,6 +49,11 @@ export class Minimap {
     this.playerTriangleSize = this.playerDotSize * 1.5;
   }
 
+  setPortals(exitPortal: Group | null, startPortal: Group | null): void {
+    this.exitPortal = exitPortal;
+    this.startPortal = startPortal;
+  }
+
   update(): void {
     this.ctx.fillStyle = this.bgColor;
     this.ctx.fillRect(0, 0, this.mapSize, this.mapSize);
@@ -62,11 +70,14 @@ export class Minimap {
     const playerMapX = this.worldToMapX(this.playerPosition.x);
     const playerMapZ = this.worldToMapZ(this.playerPosition.z);
     this.ctx.translate(-playerMapX, -playerMapZ);
+
+    // Draw other entities
     this.entities.forEach((entity) => {
       if (
         !entity ||
         entity === this.player ||
-        (entity instanceof Character && entity.isDead)
+        (entity instanceof Character && entity.isDead) ||
+        entity.userData?.isPortal // Skip portals here as they are drawn above
       )
         return;
       const mesh =
@@ -110,6 +121,24 @@ export class Minimap {
       }
       if (draw) this.drawDot(entityMapX, entityMapZ, color, size);
     });
+
+    // Draw Portals First (if they exist)
+    const drawPortal = (portal: Group | null) => {
+      if (portal && portal.visible && portal.userData?.isPortal) {
+        portal.getWorldPosition(this.portalPosition);
+        const portalMapX = this.worldToMapX(this.portalPosition.x);
+        const portalMapZ = this.worldToMapZ(this.portalPosition.z);
+        this.drawText(
+          portal.userData.minimapLabel || "Portal",
+          portalMapX,
+          portalMapZ,
+          "white"
+        );
+      }
+    };
+    drawPortal(this.exitPortal);
+    drawPortal(this.startPortal);
+
     this.ctx.restore();
     this.drawPlayerTriangle(
       this.halfMapSize,
@@ -132,6 +161,17 @@ export class Minimap {
     this.ctx.beginPath();
     this.ctx.arc(mapX, mapY, size, 0, Math.PI * 2);
     this.ctx.fill();
+  }
+
+  drawText(text: string, mapX: number, mapY: number, color: string): void {
+    this.ctx.fillStyle = color;
+    this.ctx.font = "12px Arial"; // Small font for minimap
+    this.ctx.textAlign = "center";
+    this.ctx.textBaseline = "middle";
+    this.ctx.shadowColor = "black";
+    this.ctx.shadowBlur = 2;
+    this.ctx.fillText(text, mapX, mapY);
+    this.ctx.shadowBlur = 0; // Reset shadow
   }
 
   drawPlayerTriangle(
