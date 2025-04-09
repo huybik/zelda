@@ -10,7 +10,7 @@ import {
   Scene,
   Box3,
 } from "three";
-import { Character } from "../entities/entities";
+import { Character } from "../entities/character";
 import { Inventory, InteractionResult, randomFloat } from "../core/helper";
 import { Colors } from "../core/constants";
 

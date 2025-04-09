@@ -7,7 +7,7 @@ import {
   Raycaster,
   Box3,
 } from "three";
-import { Character } from "../entities/entities";
+import { Character } from "../entities/character";
 
 export interface EntityUserData {
   entityReference: any | null;

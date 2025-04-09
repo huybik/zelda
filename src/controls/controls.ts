@@ -1,4 +1,4 @@
-import { Character } from "../entities/entities";
+import { Character } from "../entities/character";
 import { ThirdPersonCamera } from "../systems/camera";
 import { Game } from "../main";
 import { KeyState, MouseState, MoveState } from "../core/helper";

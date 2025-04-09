@@ -1,5 +1,5 @@
 import { Scene, Vector3, Object3D, Group, AnimationClip } from "three";
-import { Character } from "../entities/entities";
+import { Character } from "../entities/character";
 import { createTree, createRock, createHerb } from "../objects/objects";
 import { getTerrainHeight, randomFloat, Inventory } from "./helper";
 import { Game } from "../main";

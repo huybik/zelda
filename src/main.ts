@@ -8,21 +8,18 @@ import {
   Color,
   Fog,
   Mesh,
-  PlaneGeometry,
-  MeshLambertMaterial,
   BoxGeometry,
   MeshBasicMaterial,
   DoubleSide,
   PCFSoftShadowMap,
-  MathUtils,
   Object3D,
   Group,
   AnimationClip,
-  Vector2,
   Box3,
 } from "three";
 import WebGL from "three/examples/jsm/capabilities/WebGL.js";
-import { Character, Entity } from "./entities/entities";
+import { Entity } from "./entities/entitiy";
+import { Character } from "./entities/character";
 import { InteractionSystem } from "./systems/interaction";
 import { Physics } from "./systems/physics";
 import { ThirdPersonCamera } from "./systems/camera";
@@ -32,7 +29,7 @@ import { HUD } from "./ui/hud";
 import { InventoryDisplay } from "./ui/inventory";
 import { JournalDisplay } from "./ui/journal";
 import { Minimap } from "./ui/minimap";
-import { Inventory, EventLog, getTerrainHeight, Quest } from "./core/helper";
+import { Inventory, getTerrainHeight, Quest } from "./core/helper";
 import { WORLD_SIZE, TERRAIN_SEGMENTS } from "./core/constants";
 import { loadModels } from "./core/assetLoader";
 import { createTerrain } from "./core/terrain";

@@ -1,4 +1,4 @@
-import { Character } from "../entities/entities";
+import { Character } from "../entities/character";
 import { Object3D, Vector3 } from "three";
 
 export class Minimap {

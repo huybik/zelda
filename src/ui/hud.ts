@@ -1,4 +1,4 @@
-import { Character } from "../entities/entities";
+import { Character } from "../entities/character";
 
 export class HUD {
   player: Character;
@@ -60,4 +60,3 @@ export class HUD {
     }
   }
 }
-

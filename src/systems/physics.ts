@@ -1,5 +1,5 @@
 import { Object3D, Vector3, Box3 } from "three";
-import { Character } from "../entities/entities";
+import { Character } from "../entities/character";
 
 export class Physics {
   player: Character;

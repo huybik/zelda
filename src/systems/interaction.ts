@@ -5,14 +5,13 @@ import {
   Raycaster,
   Vector2,
 } from "three";
-import { Character, Entity } from "../entities/entities";
+import { Character } from "../entities/character";
 import {
   Inventory,
   EventLog,
   InteractionResult,
   TargetInfo,
   ActiveGather,
-  MoveState,
 } from "../core/helper";
 import { Controls } from "../controls/controls";
 import { Game } from "../main";

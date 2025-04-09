@@ -1,5 +1,6 @@
 import { Vector3, Object3D } from "three";
-import { Character, Entity } from "./entities";
+import { Entity } from "./entitiy";
+import { Character } from "./character";
 import { MoveState, getTerrainHeight } from "../core/helper";
 import { Game } from "../main";
 
