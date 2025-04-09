@@ -543,7 +543,7 @@ export class Game {
     const banner = document.getElementById("welcome-banner");
     if (banner) {
       const welcomeText = this.mobileControls?.isActive()
-        ? "Welcome! Use joysticks to move/look, buttons to act."
+        ? "Welcome! Use joysticks to move, drag the screen to look, buttons to act."
         : "Welcome! [WASD] Move, Mouse Look, [I] Inv, [J] Journal, [E] Interact, [F] Attack, [C] Switch, [Esc] Unlock/Close";
       banner.textContent = welcomeText;
       banner.classList.remove("hidden");
