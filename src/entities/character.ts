@@ -1,3 +1,4 @@
+// File: /src/entities/character.ts
 import {
   Scene,
   Vector3,
@@ -90,6 +91,15 @@ export class Character extends Entity {
     model.scale.set(scale, scale, scale);
     model.position.y = -box.min.y * scale;
     this.mesh!.add(model);
+
+    // Enable shadow casting for all meshes within the character model
+    model.traverse((child) => {
+      if (child instanceof Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = false; // Characters usually don't receive shadows on themselves
+      }
+    });
+
     this.mixer = new AnimationMixer(model);
     const idleAnim = animations.find((anim) =>
       anim.name.toLowerCase().includes("idled")
@@ -120,7 +130,7 @@ export class Character extends Entity {
       if (e.action === this.attackAction) {
         if (this.moveState.attack) {
           this.performAttack();
-          this.attackAction.reset().play();
+          this.attackAction?.reset().play();
         } else if (!this.isGathering) {
           this.isPerformingAction = false;
           this.actionType = "none";
@@ -159,14 +169,12 @@ export class Character extends Entity {
     const damage = this.name === "Player" ? 10 : 5;
     if (!this.mesh || !this.scene || !this.game) return;
 
-    // Set up the ray from the attacker's mid-height position
     const rayOrigin = this.mesh.position
       .clone()
       .add(new Vector3(0, CHARACTER_HEIGHT / 2, 0));
     const rayDirection = this.mesh.getWorldDirection(new Vector3());
     this.rayCaster!.set(rayOrigin, rayDirection);
 
-    // Filter potential targets
     const potentialTargets = this.game.entities.filter(
       (entity): entity is Character =>
         entity instanceof Character &&
@@ -175,7 +183,6 @@ export class Character extends Entity {
         entity.mesh !== null
     );
 
-    // Find the closest target within range
     let closestTarget: Character | null = null;
     let closestDistance = Infinity;
     let closestPoint: Vector3 | null = null;
@@ -196,7 +203,6 @@ export class Character extends Entity {
       }
     }
 
-    // Apply damage and spawn particle effect if a target is hit
     if (closestTarget && closestPoint) {
       closestTarget.takeDamage(damage, this);
       this.game.spawnParticleEffect(closestPoint, "red");
@@ -283,6 +289,7 @@ export class Character extends Entity {
         this.switchAction(this.idleAction);
       }
     } else if (this.isPerformingAction && this.attackAction) {
+      // Animation is handled by the 'finished' listener
     } else {
       const isMoving =
         Math.abs(this.moveState.forward) > 0.1 ||
