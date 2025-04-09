@@ -332,7 +332,7 @@ export class Game {
   initScene(): void {
     this.scene = new Scene();
     this.scene.background = new Color(0x87ceeb);
-    this.scene.fog = new Fog(0x87ceeb, 150, 600);
+    this.scene.fog = new Fog(0x87ceeb, 15, 50);
     setupLighting(this.scene);
     const terrain = createTerrain(WORLD_SIZE, TERRAIN_SEGMENTS);
     this.scene.add(terrain);
@@ -803,7 +803,6 @@ export class Game {
   }
 
   destroy(): void {
-    // Cleanup resources
     document.removeEventListener(
       "visibilitychange",
       this.boundHandleVisibilityChange
@@ -811,8 +810,6 @@ export class Game {
     this.renderer?.setAnimationLoop(null);
     this.controls?.dispose();
     this.mobileControls?.destroy();
-    // Add other cleanup logic here (removing listeners, disposing geometry/materials)
-    // For example:
     this.entities.forEach((entity) => entity.destroy?.());
     this.scene?.traverse((object) => {
       if (object instanceof THREE.Mesh) {
@@ -829,11 +826,9 @@ export class Game {
       .getElementById("game-container")
       ?.removeChild(this.renderer!.domElement);
 
-    // Nullify properties
     this.scene = null;
     this.renderer = null;
     this.camera = null;
-    // ... nullify other properties ...
   }
 }
 
@@ -853,7 +848,7 @@ if (WebGL.isWebGL2Available()) {
     window.addEventListener("resize", onResize, false);
     window.addEventListener("beforeunload", () => {
       window.removeEventListener("resize", onResize);
-      gameInstance.destroy(); // Call destroy on unload
+      gameInstance.destroy();
     });
   }
   startGame();
