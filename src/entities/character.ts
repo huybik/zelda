@@ -421,9 +421,10 @@ export class Character extends Entity {
     // Handle gathering animation loop (using attack/gather action)
     if (this.isGathering && this.gatherAction) {
       this.gatherAttackTimer += deltaTime;
+      this.switchAction(this.gatherAction); // Will reset and play if not already playing
+
       if (this.gatherAttackTimer >= this.gatherAttackInterval) {
         // Play the gather/attack animation
-        this.switchAction(this.gatherAction); // Will reset and play if not already playing
         this.gatherAttackTimer = 0; // Reset timer for next swing
       } else if (
         !this.gatherAction.isRunning() && // If the action finished before interval
