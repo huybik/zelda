@@ -88,7 +88,10 @@ export class InteractionSystem {
       return;
     }
     const targetInfo = this.findInteractableTarget();
-    if (targetInfo?.instance?.userData?.isInteractable) {
+    if (
+      targetInfo?.instance?.userData?.isInteractable &&
+      targetInfo.instance !== this.player
+    ) {
       if (this.currentTarget !== targetInfo.instance) {
         this.currentTarget = targetInfo.instance;
         this.currentTargetMesh = targetInfo.mesh;
@@ -118,7 +121,8 @@ export class InteractionSystem {
         if (
           !(mesh instanceof Object3D) ||
           !mesh.userData?.isInteractable ||
-          !mesh.visible
+          !mesh.visible ||
+          mesh === this.player.mesh
         )
           return false;
         const entityRef = mesh.userData?.entityReference;
@@ -155,7 +159,12 @@ export class InteractionSystem {
           }
           hitObject = hitObject.parent;
         }
-        if (rootInstance && rootMesh && rootInstance.userData?.isInteractable) {
+        if (
+          rootInstance &&
+          rootMesh &&
+          rootInstance.userData?.isInteractable &&
+          rootInstance !== this.player
+        ) {
           if (rootInstance instanceof Character && rootInstance.isDead)
             continue;
           this.objectDirection
