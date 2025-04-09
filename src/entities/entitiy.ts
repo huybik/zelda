@@ -80,7 +80,9 @@ export class Entity {
   update(deltaTime: number, options: UpdateOptions = {}): void {}
 
   initNameDisplay(): void {
-    if (this.userData.isPlayer || this.userData.isAnimal) return; // Don't show for player or animals for now
+    // Allow for NPCs and Animals, but not the player
+    if (this.userData.isPlayer) return;
+
     if (!this.nameCanvas) {
       this.nameCanvas = document.createElement("canvas");
       this.nameCanvas.width = 200;
@@ -93,7 +95,9 @@ export class Entity {
       this.nameSprite = new Sprite(material);
       const aspectRatio = this.nameCanvas.width / this.nameCanvas.height;
       this.nameSprite.scale.set(aspectRatio * 0.3, 0.3, 1);
-      this.nameSprite.position.set(0, CHARACTER_HEIGHT + 0.15, 0);
+      // Position above the entity based on its height
+      const displayHeight = (this.userData.height ?? CHARACTER_HEIGHT) + 0.15;
+      this.nameSprite.position.set(0, displayHeight, 0);
       this.mesh!.add(this.nameSprite);
     }
     this.updateNameDisplay(this.name);
@@ -101,14 +105,20 @@ export class Entity {
 
   updateNameDisplay(name: string): void {
     if (!this.nameContext || !this.nameCanvas || !this.nameTexture) return;
+
+    // Determine the name to display (Type for animals, full name for others)
+    const displayName = this.userData.isAnimal
+      ? (this.userData.animalType ?? this.name) // Use animalType if available
+      : name;
+
     const ctx = this.nameContext;
     const canvas = this.nameCanvas;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.font = "16px Arial";
-    ctx.fillStyle = "blue";
+    ctx.fillStyle = this.userData.isAggressive ? "red" : "blue"; // Different color for animals?
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(name, canvas.width / 2, canvas.height / 2);
+    ctx.fillText(String(displayName), canvas.width / 2, canvas.height / 2);
     this.nameTexture.needsUpdate = true;
   }
 

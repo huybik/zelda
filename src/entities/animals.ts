@@ -242,6 +242,9 @@ export class Animal extends Entity {
 
     // Initialize AI
     this.aiController = new AnimalAIController(this);
+
+    // Initialize name display for the animal
+    this.initNameDisplay();
   }
 
   // Helper to transition from an action back to idle/walk/run
