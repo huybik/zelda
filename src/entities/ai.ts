@@ -468,7 +468,7 @@ ${eventLog}
 
 Based on this information, decide your next action. Respond ONLY with a valid JSON object:
 {
-  "action": "idle" | "roam" | "gather" | "moveTo" | "attack" | "chat",
+  "action": "gather" | "moveTo" | "attack" | "chat",
   "object_id": "object_id_here",
   "target_id": "character_id_here",
   "message": "message_here",
@@ -535,25 +535,8 @@ Based on this information, decide your next action. Respond ONLY with a valid JS
     this.target = null;
     this.targetAction = null;
     this.message = null;
-    if (action === "idle") {
-      this.aiState = "idle";
-    } else if (action === "roam") {
-      this.aiState = "roaming";
-      const angle = Math.random() * Math.PI * 2;
-      const distance = Math.random() * this.roamRadius;
-      this.destination = this.homePosition
-        .clone()
-        .add(
-          new Vector3(Math.cos(angle) * distance, 0, Math.sin(angle) * distance)
-        );
-      if (this.character.scene) {
-        this.destination.y = getTerrainHeight(
-          this.character.scene,
-          this.destination.x,
-          this.destination.z
-        );
-      }
-    } else if (action === "gather" && object_id) {
+    // 'idle' and 'roam' are no longer expected from the API
+    if (action === "gather" && object_id) {
       const targetObject = this.character.scene?.children.find(
         (child) =>
           child.userData.id === object_id &&
@@ -568,7 +551,7 @@ Based on this information, decide your next action. Respond ONLY with a valid JS
         this.aiState = "movingToResource";
       } else {
         this.currentIntent += ` (couldn't find object ${object_id})`;
-        this.aiState = "idle";
+        this.aiState = "idle"; // Fallback to local idle if API suggests invalid gather
       }
     } else if (
       (action === "moveTo" || action === "attack" || action === "chat") &&
@@ -606,35 +589,42 @@ Based on this information, decide your next action. Respond ONLY with a valid JS
           );
         }
         if (action === "moveTo") {
-          this.aiState = "roaming";
+          this.aiState = "roaming"; // Treat API 'moveTo' as local 'roaming'
         } else if (targetEntity) {
           this.aiState = "movingToTarget";
           this.target = targetEntity;
           this.targetAction = action;
           if (action === "chat") this.message = message || "...";
         } else {
-          this.aiState = "roaming";
+          this.aiState = "roaming"; // Fallback to local roam if target invalid for attack/chat
         }
       } else {
         this.currentIntent += ` (invalid target ${target_id})`;
-        this.aiState = "idle";
+        this.aiState = "idle"; // Fallback to local idle if target is invalid
       }
     } else {
+      // If API returns an unknown or invalid action, default to local idle
       this.aiState = "idle";
     }
     if (this.character.game) {
       let actionMessage = "";
-      if (action === "idle") actionMessage = "idle";
-      else if (action === "roam") actionMessage = "roam";
-      else if (action === "gather" && object_id)
-        actionMessage = `gather from ${object_id}`;
-      else if (action === "moveTo" && target_id)
-        actionMessage = `move to ${target_id}`;
-      else if (action === "attack" && target_id)
-        actionMessage = `attack ${target_id}`;
-      else if (action === "chat" && target_id)
-        actionMessage = `chat with ${target_id}`;
-      else actionMessage = action;
+      if (this.aiState === "idle")
+        actionMessage = "idle (fallback or API error)";
+      else if (this.aiState === "roaming")
+        actionMessage = `roam (moving to ${target_id || "destination"})`;
+      else if (this.aiState === "movingToResource")
+        actionMessage = `move to gather ${object_id}`;
+      else if (
+        this.aiState === "movingToTarget" &&
+        this.targetAction === "attack"
+      )
+        actionMessage = `move to attack ${target_id}`;
+      else if (
+        this.aiState === "movingToTarget" &&
+        this.targetAction === "chat"
+      )
+        actionMessage = `move to chat with ${target_id}`;
+      else actionMessage = this.aiState; // Should cover 'gathering'
       const messageLog = `${this.character.name} decided to ${actionMessage} because: ${intent}`;
       this.character.game.logEvent(
         this.character,
