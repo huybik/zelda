@@ -1,4 +1,4 @@
-// File: /src/entities/entity.ts
+// File: /src/entities/entitiy.ts
 import {
   Scene,
   Vector3,
@@ -134,10 +134,17 @@ export class Entity {
   removeDisplays(): void {
     if (this.intentSprite && this.mesh) {
       this.mesh.remove(this.intentSprite);
-      this.intentSprite = null;
+      // No need to dispose texture/canvas here if they might be reused
+      // this.intentTexture?.dispose();
+      // this.intentCanvas = null;
+      // this.intentContext = null;
+      this.intentSprite = null; // Allow garbage collection
     }
     if (this.nameSprite && this.mesh) {
       this.mesh.remove(this.nameSprite);
+      // this.nameTexture?.dispose();
+      // this.nameCanvas = null;
+      // this.nameContext = null;
       this.nameSprite = null;
     }
   }
@@ -220,10 +227,15 @@ export class Entity {
       : "";
     this.updateIntentDisplay(message);
     setTimeout(() => {
-      const currentIntentText = this.aiController
-        ? `${this.name}: ${this.aiController.currentIntent}`
-        : "";
-      this.updateIntentDisplay(currentIntentText || originalText);
+      // Check if the entity still exists and has an AI controller before resetting
+      if (this.aiController) {
+        const currentIntentText = `${this.name}: ${this.aiController.currentIntent}`;
+        this.updateIntentDisplay(currentIntentText || originalText);
+      } else if (!this.isDead) {
+        // If no AI, but still alive, clear the message
+        this.updateIntentDisplay(originalText); // Reset to original (likely empty if no AI)
+      }
+      // If dead, the message will just stay or be cleared by other logic
     }, duration);
   }
 
@@ -275,14 +287,27 @@ export class Entity {
   die(attacker: Entity | null = null): void {
     if (this.isDead) return;
     this.isDead = true;
-    this.velocity.set(0, 0, 0);
+    this.velocity.set(0, 0, 0); // Stop movement
     this.health = 0;
-    this.userData.isCollidable = false;
-    this.userData.isInteractable = false;
+    this.userData.isCollidable = false; // Make non-collidable
+    this.userData.isInteractable = false; // Make non-interactable
+    // Specific death behavior (like animation) is handled in Character subclass
   }
 
   destroy(): void {
     if (!this.mesh || !this.scene) return;
+
+    // Remove sprites first
+    this.removeDisplays();
+
+    // Dispose textures and canvases if they exist
+    this.intentTexture?.dispose();
+    this.nameTexture?.dispose();
+    this.intentCanvas = null;
+    this.nameCanvas = null;
+    this.intentContext = null;
+    this.nameContext = null;
+
     this.mesh.traverse((child) => {
       if (child instanceof Mesh) {
         child.geometry?.dispose();
@@ -291,11 +316,16 @@ export class Entity {
         } else {
           (child.material as Material)?.dispose();
         }
+      } else if (child instanceof Sprite) {
+        child.material?.map?.dispose();
+        child.material?.dispose();
       }
     });
     this.scene.remove(this.mesh);
     this.mesh = null;
     this.scene = null;
     this.userData.entityReference = null;
+    this.aiController = null; // Clean up AI controller reference
+    this.game = null; // Clean up game reference
   }
 }

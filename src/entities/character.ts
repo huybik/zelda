@@ -9,6 +9,11 @@ import {
   AnimationAction,
   LoopOnce,
   Mesh,
+  LoopRepeat,
+  SkeletonHelper, // For debugging
+  Bone,
+  SkinnedMesh,
+  Object3D,
 } from "three";
 import {
   EventLog,
@@ -21,6 +26,14 @@ import {
 import { AIController } from "./ai";
 import { Entity } from "../entities/entitiy";
 import { CHARACTER_HEIGHT, CHARACTER_RADIUS } from "../core/constants";
+import {
+  createIdleAnimation,
+  createWalkAnimation,
+  createRunAnimation,
+  createAttackAnimation,
+  createGatherAnimation, // Assuming gather uses attack for now
+  createDeadAnimation,
+} from "../core/animations"; // Import animation generation functions
 
 export class Character extends Entity {
   maxStamina: number;
@@ -39,6 +52,8 @@ export class Character extends Entity {
   walkAction?: AnimationAction;
   runAction?: AnimationAction;
   attackAction?: AnimationAction;
+  gatherAction?: AnimationAction; // Can reuse attack or be specific
+  deadAction?: AnimationAction;
   isGathering: boolean = false;
   gatherAttackTimer: number = 0;
   gatherAttackInterval: number = 1.0;
@@ -50,6 +65,7 @@ export class Character extends Entity {
   currentAction?: AnimationAction;
   actionType: string = "none";
   isPerformingAction: boolean = false;
+  skeletonRoot: Object3D | null = null; // Store the root for animation generation
 
   constructor(
     scene: Scene,
@@ -85,11 +101,55 @@ export class Character extends Entity {
     };
     this.inventory = inventory;
     this.eventLog = new EventLog(50);
+
+    // Find the actual mesh with bones for animation
+    let skinnedMesh: SkinnedMesh | null = null;
+    model.traverse((child) => {
+      if (child instanceof SkinnedMesh) {
+        skinnedMesh = child;
+      }
+      if (child instanceof Bone && !this.skeletonRoot) {
+        // Find the root of the skeleton hierarchy
+        let current: Object3D = child;
+        while (
+          current.parent &&
+          !(current.parent instanceof Scene) &&
+          !(current.parent === model)
+        ) {
+          if (
+            current.parent instanceof Bone ||
+            current.parent?.type === "Object3D"
+          ) {
+            // Check common rig structures
+            current = current.parent;
+          } else {
+            break; // Stop if parent is not a typical rig node
+          }
+        }
+        // Heuristic: Assume the highest Bone or Object3D parent under the main model group is the root
+        if (current !== child) {
+          // Make sure we moved up
+          this.skeletonRoot = current;
+        }
+      }
+    });
+
+    // If skeletonRoot wasn't found via Bone traversal, assume the model itself is the root
+    if (!this.skeletonRoot) {
+      this.skeletonRoot = model;
+      console.warn(
+        `Could not reliably find skeleton root for ${name}, using model root. Procedural animations might be incorrect.`
+      );
+    }
+
+    // Scale and position model
     const box = new Box3().setFromObject(model);
     const currentHeight = box.max.y - box.min.y;
-    const scale = CHARACTER_HEIGHT / currentHeight;
+    const scale =
+      CHARACTER_HEIGHT /
+      (currentHeight > 0.1 ? currentHeight : CHARACTER_HEIGHT); // Avoid division by zero/tiny numbers
     model.scale.set(scale, scale, scale);
-    model.position.y = -box.min.y * scale;
+    model.position.y = -box.min.y * scale; // Adjust based on scaled bounding box
     this.mesh!.add(model);
 
     // Enable shadow casting for all meshes within the character model
@@ -100,74 +160,144 @@ export class Character extends Entity {
       }
     });
 
-    this.mixer = new AnimationMixer(model);
-    const idleAnim = animations.find((anim) =>
-      anim.name.toLowerCase().includes("idled")
-    );
+    // --- Animation Setup ---
+    this.mixer = new AnimationMixer(model); // Use the main model group for the mixer
+
+    // Helper to find animation or generate fallback
+    const getOrCreateAnimation = (
+      nameIdentifier: string,
+      generator: (root: Object3D) => AnimationClip
+    ): AnimationClip | null => {
+      const foundAnim = animations.find((anim) =>
+        anim.name.toLowerCase().includes(nameIdentifier)
+      );
+      if (foundAnim) {
+        console.log(
+          `Using existing "${nameIdentifier}" animation for ${this.name}.`
+        );
+        return foundAnim;
+      } else if (this.skeletonRoot) {
+        console.log(
+          `Generating fallback "${nameIdentifier}" animation for ${this.name}.`
+        );
+        const generatedAnim = generator(this.skeletonRoot);
+        // Optional: Add generated animation to the original array if needed elsewhere
+        // animations.push(generatedAnim);
+        return generatedAnim;
+      }
+      console.warn(
+        `Could not find or generate "${nameIdentifier}" animation for ${this.name}.`
+      );
+      return null;
+    };
+
+    const idleAnim = getOrCreateAnimation("idled", createIdleAnimation);
+    const walkAnim = getOrCreateAnimation("walk", createWalkAnimation);
+    const runAnim = getOrCreateAnimation("run", createRunAnimation);
+    const attackAnim = getOrCreateAnimation("attack", createAttackAnimation);
+    // For now, gather uses attack animation logic, but we could generate a specific one:
+    // const gatherAnim = getOrCreateAnimation('gather', createGatherAnimation);
+    const deadAnim = getOrCreateAnimation("dead", createDeadAnimation); // Or 'death'
+
     if (idleAnim) this.idleAction = this.mixer.clipAction(idleAnim);
-    const walkAnim = animations.find((anim) =>
-      anim.name.toLowerCase().includes("walk")
-    );
     if (walkAnim) this.walkAction = this.mixer.clipAction(walkAnim);
-    const runAnim = animations.find((anim) =>
-      anim.name.toLowerCase().includes("run")
-    );
     if (runAnim) this.runAction = this.mixer.clipAction(runAnim);
-    const attackAnim = animations.find((anim) =>
-      anim.name.toLowerCase().includes("attack")
-    );
     if (attackAnim) {
       this.attackAction = this.mixer.clipAction(attackAnim);
       this.attackAction.setLoop(LoopOnce, 1);
       this.attackAction.clampWhenFinished = true;
+      // Use attack animation for gather as well for now
+      this.gatherAction = this.attackAction;
     }
-    if (this.idleAction) this.switchAction(this.idleAction);
+    if (deadAnim) {
+      this.deadAction = this.mixer.clipAction(deadAnim);
+      this.deadAction.setLoop(LoopOnce, 1);
+      this.deadAction.clampWhenFinished = true;
+    }
+
+    if (this.idleAction) {
+      this.switchAction(this.idleAction);
+    } else {
+      console.error(`Character ${this.name} has no idle animation!`);
+    }
+
     this.userData.height = CHARACTER_HEIGHT;
     this.userData.radius = CHARACTER_RADIUS;
     this.updateBoundingBox();
 
     this.mixer.addEventListener("finished", (e) => {
-      if (e.action === this.attackAction) {
-        if (this.moveState.attack) {
+      // Handle finishing attack/gather actions
+      if (e.action === this.attackAction || e.action === this.gatherAction) {
+        if (this.moveState.attack && e.action === this.attackAction) {
+          // Chain attacks if button held (only for attack, not gather)
           this.performAttack();
           this.attackAction?.reset().play();
         } else if (!this.isGathering) {
+          // If not gathering or chaining attacks, transition back to idle/move
           this.isPerformingAction = false;
           this.actionType = "none";
-          const isMoving =
-            Math.abs(this.moveState.forward) > 0.1 ||
-            Math.abs(this.moveState.right) > 0.1;
-          let targetAction: AnimationAction | undefined;
-          if (isMoving) {
-            targetAction =
-              this.isSprinting && this.runAction
-                ? this.runAction
-                : this.walkAction;
-          } else {
-            targetAction = this.idleAction;
-          }
-          this.switchAction(targetAction);
+          this.transitionToLocomotion();
         }
+        // If gathering, the gathering logic handles the state transition
       }
+      // Handle finishing death animation (it clamps, so no transition needed)
+      // if (e.action === this.deadAction) { ... }
     });
 
     if (this.userData.isNPC) this.aiController = new AIController(this);
   }
 
+  // Helper to transition from an action back to idle/walk/run
+  transitionToLocomotion(): void {
+    if (this.isDead) return; // Don't transition if dead
+    const isMoving =
+      Math.abs(this.moveState.forward) > 0.1 ||
+      Math.abs(this.moveState.right) > 0.1;
+    let targetAction: AnimationAction | undefined;
+    if (isMoving) {
+      targetAction =
+        this.isSprinting && this.runAction ? this.runAction : this.walkAction;
+    } else {
+      targetAction = this.idleAction;
+    }
+    this.switchAction(targetAction);
+  }
+
   switchAction(newAction: AnimationAction | undefined): void {
+    if (this.isDead && newAction !== this.deadAction) return; // Only allow dead action if dead
+    if (!newAction) return; // Don't switch to nothing
+
     if (newAction === this.currentAction) {
-      if (newAction && !newAction.isRunning()) newAction.play();
+      if (!newAction.isRunning()) newAction.play();
       return;
     }
-    if (this.currentAction) this.currentAction.fadeOut(0.2);
-    if (newAction) newAction.reset().fadeIn(0.1).play();
+
+    const fadeDuration = 0.2;
+    if (this.currentAction) {
+      // If the current action is looping (like walk/run/idle), fade it out
+      if (this.currentAction.loop === LoopRepeat) {
+        this.currentAction.fadeOut(fadeDuration);
+      } else {
+        // If it's a one-shot action that might still be playing, stop it abruptly before fading? Or let fadeOut handle it.
+        this.currentAction.fadeOut(fadeDuration); // Fade out might be smoother
+        // this.currentAction.stop(); // Alternative: Stop immediately
+      }
+    }
+
+    newAction
+      .reset()
+      .setEffectiveTimeScale(1)
+      .setEffectiveWeight(1)
+      .fadeIn(fadeDuration)
+      .play();
+
     this.currentAction = newAction;
   }
 
   performAttack(): void {
     const range = 2.0;
     const damage = this.name === "Player" ? 40 : 10;
-    if (!this.mesh || !this.scene || !this.game) return;
+    if (!this.mesh || !this.scene || !this.game || this.isDead) return;
 
     const rayOrigin = this.mesh.position
       .clone()
@@ -210,6 +340,7 @@ export class Character extends Entity {
   }
 
   handleStamina(deltaTime: number): void {
+    if (this.isDead) return;
     const isMoving = this.moveState.forward !== 0 || this.moveState.right !== 0;
     this.isSprinting =
       this.moveState.sprint &&
@@ -257,6 +388,7 @@ export class Character extends Entity {
   }
 
   handleMovement(deltaTime: number): void {
+    if (this.isDead) return;
     const forward = new Vector3(0, 0, 1).applyQuaternion(this.mesh!.quaternion);
     const right = new Vector3(1, 0, 0).applyQuaternion(this.mesh!.quaternion);
     const moveDirection = new Vector3(
@@ -277,96 +409,139 @@ export class Character extends Entity {
 
   updateAnimations(deltaTime: number): void {
     this.mixer.update(deltaTime);
-    if (this.isGathering && this.attackAction) {
+
+    if (this.isDead) {
+      if (this.currentAction !== this.deadAction && this.deadAction) {
+        this.switchAction(this.deadAction);
+      }
+      return; // Don't update locomotion/action animations if dead
+    }
+
+    // Handle gathering animation loop (using attack/gather action)
+    if (this.isGathering && this.gatherAction) {
       this.gatherAttackTimer += deltaTime;
       if (this.gatherAttackTimer >= this.gatherAttackInterval) {
-        this.switchAction(this.attackAction);
-        this.gatherAttackTimer = 0;
+        // Play the gather/attack animation
+        this.switchAction(this.gatherAction); // Will reset and play if not already playing
+        this.gatherAttackTimer = 0; // Reset timer for next swing
       } else if (
-        !this.attackAction.isRunning() &&
-        this.currentAction !== this.idleAction
+        !this.gatherAction.isRunning() && // If the action finished before interval
+        this.currentAction !== this.idleAction // And we are not already idle
       ) {
+        // Switch back to idle between gather swings
         this.switchAction(this.idleAction);
       }
-    } else if (this.isPerformingAction && this.attackAction) {
-      // Animation is handled by the 'finished' listener
-    } else {
-      const isMoving =
-        Math.abs(this.moveState.forward) > 0.1 ||
-        Math.abs(this.moveState.right) > 0.1;
-      let targetAction: AnimationAction | undefined;
-      if (isMoving) {
-        targetAction =
-          this.isSprinting && this.runAction ? this.runAction : this.walkAction;
-      } else {
-        targetAction = this.idleAction;
-      }
-      this.switchAction(targetAction);
+    }
+    // Handle one-shot actions like attack (if not gathering)
+    else if (
+      this.isPerformingAction &&
+      this.actionType === "attack" &&
+      this.attackAction
+    ) {
+      // Animation is playing, wait for 'finished' event to transition back
+      // No need to switch here, the listener handles it.
+    }
+    // Handle locomotion (idle/walk/run) if not doing a specific action
+    else if (!this.isPerformingAction && !this.isGathering) {
+      this.transitionToLocomotion();
     }
   }
 
   triggerAction(actionType: string): void {
-    if (
-      actionType === "attack" &&
-      this.attackAction &&
-      !this.isPerformingAction &&
-      !this.isGathering
-    ) {
+    if (this.isDead || this.isPerformingAction || this.isGathering) return; // Prevent actions if dead or already busy
+
+    if (actionType === "attack" && this.attackAction) {
       this.actionType = actionType;
       this.isPerformingAction = true;
-      this.attackAction.reset().play();
-      if (this.idleAction?.isRunning()) this.idleAction.stop();
-      if (this.walkAction?.isRunning()) this.walkAction.stop();
-      if (this.runAction?.isRunning()) this.runAction.stop();
-      this.performAttack();
-    } else if (actionType === "gather" && this.attackAction) {
+      this.switchAction(this.attackAction); // SwitchAction handles reset and play
+      this.performAttack(); // Perform the actual attack logic
+    } else if (actionType === "gather" && this.gatherAction) {
+      // Note: 'gather' state is primarily managed by InteractionSystem's activeGather
+      // This trigger is mainly for the animation aspect within Character
       this.actionType = actionType;
-      this.attackAction.reset().play();
-      this.switchAction(this.attackAction);
-      this.gatherAttackTimer = 0;
+      // isGathering flag is set by InteractionSystem
+      this.switchAction(this.gatherAction); // Start the animation
+      this.gatherAttackTimer = 0; // Reset timer for the first swing
     }
   }
 
   update(deltaTime: number, options: UpdateOptions = {}): void {
-    if (this.isDead) return;
+    if (this.isDead) {
+      this.updateAnimations(deltaTime); // Still update mixer for death animation
+      return;
+    }
+
     const { moveState, collidables } = options;
     if (!moveState || !collidables) return;
-    this.moveState = moveState;
+
+    this.moveState = moveState; // Update internal move state
+
     this.handleStamina(deltaTime);
-    if (!this.isPerformingAction && !this.isGathering) {
+
+    // Apply movement only if not performing a blocking action (like attack wind-up/swing)
+    // Gathering allows movement cancellation but doesn't block initial movement input handling here.
+    if (!this.isPerformingAction) {
       this.handleMovement(deltaTime);
     } else {
+      // If performing an action, usually stop movement
       this.velocity.x = 0;
       this.velocity.z = 0;
     }
+
+    // Apply velocity to position
     this.mesh!.position.x += this.velocity.x * deltaTime;
     this.mesh!.position.z += this.velocity.z * deltaTime;
+
+    // Ground clamping
     if (this.scene) {
       const groundY = getTerrainHeight(
         this.scene,
         this.mesh!.position.x,
         this.mesh!.position.z
       );
-      this.mesh!.position.y = groundY;
+      this.mesh!.position.y = groundY; // Simple ground clamp
     }
-    this.velocity.y = 0;
+    this.velocity.y = 0; // Reset vertical velocity after clamping
+
+    // Handle attack trigger
     if (moveState.attack && !this.attackTriggered) {
       this.attackTriggered = true;
-      this.triggerAction("attack");
+      // Only trigger if not already gathering or performing another action
+      if (!this.isGathering && !this.isPerformingAction) {
+        this.triggerAction("attack");
+      }
     } else if (!moveState.attack) {
       this.attackTriggered = false;
     }
+
     this.updateAnimations(deltaTime);
-    this.updateBoundingBox();
+    this.updateBoundingBox(); // Update bounding box after position change
   }
 
   die(attacker: Entity | null = null): void {
     if (this.isDead) return;
-    super.die(attacker);
+
+    // Call super.die() first to set basic flags
+    super.die(attacker); // Sets this.isDead = true, stops velocity, etc.
+
+    // AI specific state change
     if (this.aiController) this.aiController.aiState = "dead";
+
+    // Reset action states
     this.isGathering = false;
     this.isPerformingAction = false;
     this.actionType = "none";
+    this.attackTriggered = false; // Ensure attack can't be triggered
+
+    // Play death animation
+    if (this.deadAction) {
+      this.switchAction(this.deadAction);
+    } else {
+      // Fallback if no death animation: maybe rotate the model?
+      // this.mesh?.rotateX(Math.PI / 2);
+    }
+
+    // Logging
     if (this.game) {
       const message = `${this.name} has died!`;
       const details = attacker ? { killedBy: attacker.name } : {};
@@ -376,7 +551,7 @@ export class Character extends Entity {
         message,
         undefined,
         details,
-        this.mesh!.position
+        this.mesh!.position.clone() // Clone position at time of death
       );
       if (attacker instanceof Character) {
         const defeatMessage = `${attacker.name} defeated ${this.name}.`;
@@ -393,19 +568,24 @@ export class Character extends Entity {
   }
 
   respawn(position: Vector3): void {
-    this.setPosition(position);
+    // Reset state before calling super.respawn if it exists, or handle here
     this.health = this.maxHealth * 0.75;
     this.stamina = this.maxStamina;
     this.velocity.set(0, 0, 0);
-    this.isDead = false;
+    this.isDead = false; // Critical: Set isDead back to false
     this.isExhausted = false;
     this.isGathering = false;
     this.gatherAttackTimer = 0;
     this.isPerformingAction = false;
     this.actionType = "none";
     this.attackTriggered = false;
+
+    // Reset position and collision state
+    this.setPosition(position);
     this.userData.isCollidable = true;
     this.userData.isInteractable = true;
+
+    // Reset AI state
     if (this.aiController) {
       this.aiController.aiState = "idle";
       this.aiController.previousAiState = "idle";
@@ -415,10 +595,16 @@ export class Character extends Entity {
       this.aiController.targetAction = null;
       this.aiController.message = null;
     }
-    if (this.idleAction) this.idleAction.reset().play();
-    if (this.walkAction) this.walkAction.stop();
-    if (this.runAction) this.runAction.stop();
-    if (this.attackAction) this.attackAction.stop();
+
+    // Reset animations
+    this.mixer.stopAllAction(); // Stop everything first
+    if (this.idleAction) {
+      this.switchAction(this.idleAction); // Switch back to idle
+    } else {
+      console.error(`Character ${this.name} cannot respawn to idle animation!`);
+    }
+
+    // Logging
     if (this.game)
       this.game.logEvent(
         this,
@@ -428,10 +614,13 @@ export class Character extends Entity {
         {},
         position
       );
+
     this.updateBoundingBox();
   }
 
   interact(player: Character): InteractionResult | null {
+    if (this.isDead)
+      return { type: "error", message: "Cannot interact with the deceased." };
     this.lookAt(player.mesh!.position);
     if (this.game)
       this.game.logEvent(
