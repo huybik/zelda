@@ -291,7 +291,7 @@ export class Animal extends Entity {
 
   performAttack(): void {
     const range = 1.5; // Shorter range for animals?
-    const damage = this.animalType === "Wolf" ? 15 : 5; // Example damage
+    const damage = this.animalType === "Wolf" ? 5 : 2; // Example damage
     if (!this.mesh || !this.scene || !this.game || this.isDead) return;
 
     const attackOrigin = this.mesh.position

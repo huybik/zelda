@@ -132,7 +132,7 @@ export function populateEnvironment(
     20 * 20,
     randomFloat(1, 2.5)
   );
-  addObject(createHerb, Math.floor(worldSize / 3), 10 * 10);
+  addObject(createHerb, Math.floor(worldSize / 5), 10 * 10);
 
   // Add Animals
   const addAnimal = (

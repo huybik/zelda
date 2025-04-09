@@ -102,12 +102,10 @@ export class Minimap {
         switch (entity.userData.resource) {
           case "wood":
             color = "saddlebrown";
-            return;
-            break;
+            return; // skip drawing wood
           case "stone":
             color = "darkgray";
-            return;
-            break;
+            return; // skip drawing stone
           case "herb":
             color = "limegreen";
             break;
