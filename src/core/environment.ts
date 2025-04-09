@@ -1,7 +1,20 @@
 // File: /src/core/environment.ts
-import { Scene, Vector3, Object3D, Group, AnimationClip } from "three";
+import {
+  Scene,
+  Vector3,
+  Object3D,
+  Group,
+  AnimationClip,
+  MathUtils,
+} from "three";
 import { Character } from "../entities/character";
-import { createTree, createRock, createHerb } from "../objects/objects";
+import {
+  createTree,
+  createRock,
+  createHerb,
+  createGrassPatch,
+  createFlowerPatch,
+} from "../objects/objects";
 import { getTerrainHeight, randomFloat, Inventory } from "./utils";
 import { Game } from "../main";
 
@@ -17,6 +30,8 @@ export function populateEnvironment(
 ): void {
   const halfSize = worldSize / 2;
   const villageCenter = new Vector3(5, 0, 10);
+  const villageRadiusSq = 15 * 15; // Don't spawn decorations too close to village center
+
   const addCharacter = (
     pos: Vector3,
     name: string,
@@ -51,6 +66,8 @@ export function populateEnvironment(
     interactableObjects.push(character);
     return character;
   };
+
+  // Add NPCs
   const farmerGiles = addCharacter(
     villageCenter.clone().add(new Vector3(-12, 0, 2)),
     "Farmer Giles",
@@ -60,6 +77,7 @@ export function populateEnvironment(
     "A hardworking farmer who values community and is always willing to help others. He is knowledgeable about crops and livestock but can be a bit stubborn. He prefers to stay close to his farm but will venture out if necessary.";
   if (farmerGiles.aiController)
     farmerGiles.aiController.persona = farmerGiles.persona;
+
   const blacksmithBrynn = addCharacter(
     villageCenter.clone().add(new Vector3(10, 0, -3)),
     "Blacksmith Brynn",
@@ -69,6 +87,7 @@ export function populateEnvironment(
     "A skilled artisan who takes pride in her work. She is strong-willed and independent, often focused on her craft. She can be gruff but has a kind heart, especially towards those in need.";
   if (blacksmithBrynn.aiController)
     blacksmithBrynn.aiController.persona = blacksmithBrynn.persona;
+
   const hunterRex = addCharacter(
     new Vector3(halfSize * 0.4, 0, -halfSize * 0.3),
     "Hunter Rex",
@@ -78,6 +97,8 @@ export function populateEnvironment(
     "An experienced tracker and survivalist. He is quiet and observant, preferring the wilderness over the village. He is resourceful and can be relied upon in tough situations but is not very social.";
   if (hunterRex.aiController)
     hunterRex.aiController.persona = hunterRex.persona;
+
+  // Add Objects (Trees, Rocks, Herbs)
   const addObject = (
     creator: (pos: Vector3, ...args: any[]) => Group,
     count: number,
@@ -88,18 +109,21 @@ export function populateEnvironment(
       const x = randomFloat(-halfSize * 0.95, halfSize * 0.95);
       const z = randomFloat(-halfSize * 0.95, halfSize * 0.95);
       const distSq = (x - villageCenter.x) ** 2 + (z - villageCenter.z) ** 2;
-      if (distSq < minDistSq) continue;
+      if (distSq < minDistSq) continue; // Avoid spawning too close to village
+
       const obj = creator(new Vector3(x, 0, z), ...args);
       const height = getTerrainHeight(scene, x, z);
       obj.position.y = height;
-      if (obj.name === "Herb Plant") obj.position.y = height + 0.1;
+      if (obj.name === "Herb Plant") obj.position.y = height + 0.1; // Adjust herb height slightly
+
       scene.add(obj);
       if (obj.userData.isCollidable) collidableObjects.push(obj);
       if (obj.userData.isInteractable) interactableObjects.push(obj);
-      entities.push(obj);
+      entities.push(obj); // Add to entities for potential minimap display if needed later
       obj.userData.id = `${obj.name}_${obj.uuid.substring(0, 6)}`;
     }
   };
+
   addObject(createTree, worldSize, 25 * 25);
   addObject(
     createRock,
@@ -108,4 +132,36 @@ export function populateEnvironment(
     randomFloat(1, 2.5)
   );
   addObject(createHerb, Math.floor(worldSize / 3), 10 * 10);
+
+  // Add Decorative Grass and Flowers
+  const addDecoration = (
+    creator: (pos: Vector3, ...args: any[]) => Group,
+    count: number,
+    minDistSq: number,
+    ...args: any[]
+  ) => {
+    for (let i = 0; i < count; i++) {
+      const x = randomFloat(-halfSize * 0.95, halfSize * 0.95);
+      const z = randomFloat(-halfSize * 0.95, halfSize * 0.95);
+      const distSq = (x - villageCenter.x) ** 2 + (z - villageCenter.z) ** 2;
+      if (distSq < minDistSq) continue; // Avoid spawning too close to village
+
+      const decoration = creator(new Vector3(x, 0, z), ...args);
+      const height = getTerrainHeight(scene, x, z);
+      decoration.position.y = height;
+
+      // Add directly to scene, NOT to collidables, interactables, or entities list for game logic
+      scene.add(decoration);
+    }
+  };
+
+  // Add Grass Patches (more numerous)
+  addDecoration(createGrassPatch, worldSize * 5, villageRadiusSq);
+
+  // Add Flower Patches (less numerous)
+  addDecoration(
+    createFlowerPatch,
+    Math.floor(worldSize * 1.5),
+    villageRadiusSq
+  );
 }
