@@ -213,7 +213,7 @@ export class Entity {
     this.intentTexture.needsUpdate = true;
   }
 
-  showTemporaryMessage(message: string, duration: number = 7000): void {
+  showTemporaryMessage(message: string, duration: number = 10000): void {
     if (!this.intentSprite) return;
     const originalText = this.aiController
       ? `${this.name}: ${this.aiController.currentIntent}`

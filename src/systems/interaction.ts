@@ -499,94 +499,172 @@ The player character is named ${this.player.name} just said to you: "${playerMes
 Recent events observed by you:
 ${recentEvents || "Nothing significant recently."}
 
-Respond to the player in brief 1-2 sentences.
+Respond to the player in brief 1-2 sentences as a JSON object like {"response": "Your response here."}.
 `.trim();
   }
 
   async openChatInterface(target: Character): Promise<void> {
-    if (!this.chatContainer || !this.chatInput || this.isChatOpen) return;
+    // Reset input state first
+    if (this.chatInput) {
+      this.chatInput.disabled = false;
+      this.chatInput.value = "";
+    }
+
+    if (!this.chatContainer || !this.chatInput || this.isChatOpen) {
+      // If already open, ensure focus
+      if (this.isChatOpen && this.chatInput && !this.chatInput.disabled) {
+        requestAnimationFrame(() => {
+          this.chatInput?.focus();
+        });
+      }
+      return;
+    }
+
     this.game.setPauseState(true);
     this.isChatOpen = true;
     this.chatTarget = target;
     this.chatContainer.classList.remove("hidden");
-    this.chatInput.value = "";
-    this.chatInput.focus();
+
+    // Ensure it's focusable *after* being made visible
+    requestAnimationFrame(() => {
+      this.chatInput?.focus();
+    });
+
+    // Define or redefine bound functions if they don't exist
     if (!this.boundSendMessage) {
       this.boundSendMessage = async () => {
         if (!this.chatTarget || !this.chatInput) return;
         const message = this.chatInput.value.trim();
         if (!message) return;
+
+        const targetAtSendStart = this.chatTarget; // Store the target
+
         this.player.showTemporaryMessage(message);
-        this.chatInput.value = "";
-        this.chatInput.disabled = true;
         this.game.logEvent(
+          // Log immediately
           this.player,
           "chat",
-          `${this.player.name} said "${message}" to ${this.chatTarget.name}.`,
-          this.chatTarget,
+          `${this.player.name} said "${message}" to ${targetAtSendStart.name}.`,
+          targetAtSendStart,
           { message: message },
           this.player.mesh!.position
         );
-        const prompt = this.generateChatPrompt(this.chatTarget, message);
+
+        this.chatInput.value = "";
+        this.chatInput.disabled = true; // Disable while waiting
+
+        const prompt = this.generateChatPrompt(targetAtSendStart, message);
         try {
           const responseJson = await sendToGemini(prompt);
+
           let npcMessage = "Hmm....";
           if (responseJson) {
-            const parsedResponse = JSON.parse(responseJson)["response"];
-            npcMessage = parsedResponse?.trim() || "Hmm....";
+            console.log(this.chatTarget.id, responseJson);
+            try {
+              const parsedText = JSON.parse(responseJson);
+              if (
+                parsedText &&
+                typeof parsedText === "object" &&
+                parsedText.response
+              ) {
+                npcMessage = parsedText.response.trim() || "Hmm....";
+              } else {
+                // Fallback if structure is different
+                npcMessage = responseJson.trim() || "Hmm....";
+              }
+            } catch (parseError) {
+              // If JSON.parse fails, assume the response is a simple string
+              npcMessage = responseJson.trim() || "Hmm....";
+              console.log(
+                "Chat response was not JSON, treating as string:",
+                responseJson
+              );
+            }
           }
-          this.chatTarget.showTemporaryMessage(npcMessage);
-          this.chatTarget.game?.logEvent(
-            this.chatTarget,
-            "chat",
-            `${this.chatTarget.name} said "${npcMessage}" to ${this.player.name}.`,
-            this.player,
-            { message: npcMessage },
-            this.chatTarget.mesh!.position
-          );
-          this.game.checkQuestCompletion(this.chatTarget, npcMessage);
+
+          // Check if chat is still associated with the original target
+          if (this.isChatOpen && this.chatTarget === targetAtSendStart) {
+            targetAtSendStart.showTemporaryMessage(npcMessage);
+            targetAtSendStart.game?.logEvent(
+              targetAtSendStart,
+              "chat",
+              `${targetAtSendStart.name} said "${npcMessage}" to ${this.player.name}.`,
+              this.player,
+              { message: npcMessage },
+              targetAtSendStart.mesh!.position
+            );
+            this.game.checkQuestCompletion(targetAtSendStart, npcMessage);
+          } else {
+            console.log("Chat closed or target changed before NPC response.");
+          }
         } catch (error) {
           console.error("Error during chat API call:", error);
-          this.chatTarget.showTemporaryMessage("I... don't know what to say.");
-          this.game.logEvent(
-            this.chatTarget,
-            "chat_error",
-            `${this.chatTarget.name} failed to respond to ${this.player.name}.`,
-            this.player,
-            { error: (error as Error).message },
-            this.chatTarget.mesh!.position
-          );
+          // Check if chat is still associated with the original target
+          if (this.isChatOpen && this.chatTarget === targetAtSendStart) {
+            targetAtSendStart.showTemporaryMessage(
+              "I... don't know what to say."
+            );
+            this.game.logEvent(
+              targetAtSendStart,
+              "chat_error",
+              `${targetAtSendStart.name} failed to respond to ${this.player.name}.`,
+              this.player,
+              { error: (error as Error).message },
+              targetAtSendStart.mesh!.position
+            );
+          }
         } finally {
           this.closeChatInterface();
         }
       };
     }
+
     if (!this.boundHandleChatKeyDown) {
       this.boundHandleChatKeyDown = (e: KeyboardEvent) => {
-        if (e.key === "Enter" && this.boundSendMessage) {
+        if (
+          e.key === "Enter" &&
+          this.boundSendMessage &&
+          !this.chatInput?.disabled
+        ) {
           this.boundSendMessage();
         }
       };
     }
+
     if (!this.boundCloseChat) {
       this.boundCloseChat = () => {
         this.closeChatInterface();
       };
     }
+
+    // Remove existing listener before adding a new one to prevent duplicates
+    this.chatInput.removeEventListener("keydown", this.boundHandleChatKeyDown);
     this.chatInput.addEventListener("keydown", this.boundHandleChatKeyDown);
   }
 
   closeChatInterface(): void {
     if (!this.isChatOpen || !this.chatContainer || !this.chatInput) return;
+
     this.isChatOpen = false;
     this.chatTarget = null;
     this.chatContainer.classList.add("hidden");
-    this.game.setPauseState(false);
+    this.chatInput.disabled = false; // Ensure enabled
+    this.chatInput.blur(); // Remove focus explicitly
+
+    // Remove the keydown listener
     if (this.boundHandleChatKeyDown) {
       this.chatInput.removeEventListener(
         "keydown",
         this.boundHandleChatKeyDown
       );
     }
+
+    // Unpause the game *after* UI is hidden and listeners removed
+    this.game.setPauseState(false);
+
+    // Attempt to refocus the game element to allow pointer lock re-request later
+    requestAnimationFrame(() => {
+      this.game.renderer?.domElement.focus();
+    });
   }
 }
