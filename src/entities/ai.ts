@@ -100,7 +100,7 @@ export class AIController {
   targetAction: string | null = null;
   message: string | null = null;
   private lastApiCallTime: number = 0;
-  private apiCallCooldown: number = 10000;
+  private apiCallCooldown: number = 20000;
   private lastObservation: Observation | null = null;
 
   constructor(character: Character) {

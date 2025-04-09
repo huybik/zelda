@@ -7,6 +7,7 @@ import {
   AnimationClip,
   AnimationAction,
   LoopOnce,
+  Mesh,
 } from "three";
 import {
   EventLog,
@@ -118,7 +119,10 @@ export class Character extends Entity {
 
     this.mixer.addEventListener("finished", (e) => {
       if (e.action === this.attackAction) {
-        if (!this.isGathering) {
+        if (this.moveState.attack) {
+          this.performAttack();
+          this.attackAction.reset().play();
+        } else if (!this.isGathering) {
           this.isPerformingAction = false;
           this.actionType = "none";
           const isMoving =
@@ -154,13 +158,16 @@ export class Character extends Entity {
   performAttack(): void {
     const range = 2.0;
     const damage = this.name === "Player" ? 10 : 5;
-    if (!this.rayCaster || !this.mesh || !this.scene || !this.game) return;
+    if (!this.mesh || !this.scene || !this.game) return;
+
+    // Set up the ray from the attacker's mid-height position
     const rayOrigin = this.mesh.position
       .clone()
       .add(new Vector3(0, CHARACTER_HEIGHT / 2, 0));
     const rayDirection = this.mesh.getWorldDirection(new Vector3());
-    this.rayCaster.set(rayOrigin, rayDirection);
-    this.rayCaster.far = range;
+    this.rayCaster!.set(rayOrigin, rayDirection);
+
+    // Filter potential targets
     const potentialTargets = this.game.entities.filter(
       (entity): entity is Character =>
         entity instanceof Character &&
@@ -168,26 +175,32 @@ export class Character extends Entity {
         !entity.isDead &&
         entity.mesh !== null
     );
-    const targetMeshes = potentialTargets.map((char) => char.mesh!);
-    const intersects = this.rayCaster.intersectObjects(targetMeshes, true);
-    if (intersects.length > 0) {
-      for (const hit of intersects) {
-        let hitObject = hit.object;
-        let targetEntity: Character | null = null;
-        while (hitObject) {
-          if (hitObject.userData?.entityReference instanceof Character) {
-            targetEntity = hitObject.userData.entityReference;
-            break;
-          }
-          if (!hitObject.parent) break;
-          hitObject = hitObject.parent;
-        }
-        if (targetEntity && targetEntity !== this && !targetEntity.isDead) {
-          targetEntity.takeDamage(damage, this);
-          this.game.spawnParticleEffect(hit.point, "red");
-          break;
+
+    // Find the closest target within range
+    let closestTarget: Character | null = null;
+    let closestDistance = Infinity;
+    let closestPoint: Vector3 | null = null;
+
+    for (const target of potentialTargets) {
+      const box = target.boundingBox;
+      const intersectionPoint = this.rayCaster?.ray.intersectBox(
+        box,
+        new Vector3()
+      );
+      if (intersectionPoint) {
+        const distance = rayOrigin.distanceTo(intersectionPoint);
+        if (distance < closestDistance && distance <= range) {
+          closestDistance = distance;
+          closestTarget = target;
+          closestPoint = intersectionPoint;
         }
       }
+    }
+
+    // Apply damage and spawn particle effect if a target is hit
+    if (closestTarget && closestPoint) {
+      closestTarget.takeDamage(damage, this);
+      this.game.spawnParticleEffect(closestPoint, "red");
     }
   }
 
