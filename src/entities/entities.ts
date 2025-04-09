@@ -408,21 +408,23 @@ export class Character extends Entity {
 
     this.mixer.addEventListener("finished", (e) => {
       if (e.action === this.attackAction) {
-        this.isPerformingAction = false;
-        this.actionType = "none";
-        const isMoving =
-          Math.abs(this.moveState.forward) > 0.1 ||
-          Math.abs(this.moveState.right) > 0.1;
-        let targetAction: AnimationAction | undefined;
-        if (isMoving) {
-          targetAction =
-            this.isSprinting && this.runAction
-              ? this.runAction
-              : this.walkAction;
-        } else {
-          targetAction = this.idleAction;
+        if (!this.isGathering) {
+          this.isPerformingAction = false;
+          this.actionType = "none";
+          const isMoving =
+            Math.abs(this.moveState.forward) > 0.1 ||
+            Math.abs(this.moveState.right) > 0.1;
+          let targetAction: AnimationAction | undefined;
+          if (isMoving) {
+            targetAction =
+              this.isSprinting && this.runAction
+                ? this.runAction
+                : this.walkAction;
+          } else {
+            targetAction = this.idleAction;
+          }
+          this.switchAction(targetAction);
         }
-        this.switchAction(targetAction);
       }
     });
 
@@ -549,14 +551,19 @@ export class Character extends Entity {
     this.mixer.update(deltaTime);
     if (this.isGathering && this.attackAction) {
       this.gatherAttackTimer += deltaTime;
+
       if (this.gatherAttackTimer >= this.gatherAttackInterval) {
         this.switchAction(this.attackAction);
         this.gatherAttackTimer = 0;
-      } else if (!this.attackAction.isRunning()) {
+      } else if (
+        !this.attackAction.isRunning() &&
+        this.currentAction !== this.idleAction
+      ) {
         this.switchAction(this.idleAction);
       }
     } else if (this.isPerformingAction && this.attackAction) {
     } else {
+      // Handle normal movement animations
       const isMoving =
         Math.abs(this.moveState.forward) > 0.1 ||
         Math.abs(this.moveState.right) > 0.1;
@@ -572,18 +579,25 @@ export class Character extends Entity {
   }
 
   triggerAction(actionType: string): void {
-    if (this.attackAction && !this.isPerformingAction && !this.isGathering) {
+    if (
+      actionType === "attack" &&
+      this.attackAction &&
+      !this.isPerformingAction &&
+      !this.isGathering
+    ) {
       this.actionType = actionType;
       this.isPerformingAction = true;
       this.attackAction.reset().play();
       if (this.idleAction?.isRunning()) this.idleAction.stop();
       if (this.walkAction?.isRunning()) this.walkAction.stop();
       if (this.runAction?.isRunning()) this.runAction.stop();
-      if (actionType === "attack") {
-        this.performAttack();
-      }
+      this.performAttack();
     } else if (actionType === "gather" && this.attackAction) {
       this.actionType = actionType;
+
+      this.attackAction.reset().play();
+      this.switchAction(this.attackAction);
+      this.gatherAttackTimer = 0; // Reset timer
     }
   }
 

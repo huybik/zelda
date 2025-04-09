@@ -24,7 +24,7 @@ export class MobileControls {
   private inventoryButton: HTMLElement | null = null;
   private journalButton: HTMLElement | null = null;
   private attackHeld: boolean = false;
-  private interactPressed: boolean = false;
+  private interactHeld: boolean = false;
 
   private boundHandleCameraTouchStart: (event: TouchEvent) => void;
   private boundHandleCameraTouchMove: (event: TouchEvent) => void;
@@ -199,7 +199,7 @@ export class MobileControls {
       "touchstart",
       (e) => {
         e.preventDefault();
-        this.interactPressed = true;
+        this.interactHeld = true;
         this.interactButton?.classList.add("active");
       },
       { passive: false }
@@ -208,6 +208,7 @@ export class MobileControls {
       "touchend",
       (e) => {
         e.preventDefault();
+        this.interactHeld = false;
         this.interactButton?.classList.remove("active");
       },
       { passive: false }
@@ -285,12 +286,7 @@ export class MobileControls {
       Math.min(1, this.controls.moveState.right)
     );
     this.controls.moveState.sprint = false;
-    if (this.interactPressed) {
-      this.controls.moveState.interact = true;
-      this.interactPressed = false;
-    } else {
-      this.controls.moveState.interact = false;
-    }
+    this.controls.moveState.interact = this.interactHeld;
     this.controls.moveState.attack = this.attackHeld;
     this.controls.moveState.jump = false;
     const touchCameraSensitivity = 0.3;

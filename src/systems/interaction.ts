@@ -80,7 +80,7 @@ export class InteractionSystem {
     }
     if (this.activeGather) {
       const moved = this.player.velocity.lengthSq() * deltaTime > 0.001;
-      if (moved || this.controls.consumeInteraction()) {
+      if (!this.controls.moveState.interact || moved) {
         this.cancelGatherAction();
         return;
       }
@@ -99,7 +99,7 @@ export class InteractionSystem {
               : "Press E to interact")
         );
       }
-      if (this.controls.consumeInteraction())
+      if (this.controls.moveState.interact && !this.activeGather)
         this.tryInteract(this.currentTarget);
     } else if (this.currentTarget) {
       this.currentTarget = null;
@@ -347,7 +347,7 @@ export class InteractionSystem {
     this.player.velocity.z = 0;
     this.player.isGathering = true;
     this.player.gatherAttackTimer = 0;
-    if (this.player.attackAction) this.player.triggerAction("gather");
+    this.player.triggerAction("gather");
   }
 
   updateGatherAction(deltaTime: number): void {

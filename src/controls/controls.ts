@@ -165,6 +165,7 @@ export class Controls {
     if (this.game?.mobileControls?.isActive()) return;
     const keyCode = event.code;
     this.keys[keyCode] = false;
+    if (keyCode === "KeyE") this.moveState.interact = false;
     if (keyCode === "KeyF") this.moveState.attack = false;
     this.updateContinuousMoveState();
   }
@@ -256,12 +257,6 @@ export class Controls {
     this.mouse.dx = 0;
     this.mouse.dy = 0;
     this.updateContinuousMoveState();
-  }
-
-  consumeInteraction(): boolean {
-    if (!this.moveState.interact) return false;
-    this.moveState.interact = false;
-    return true;
   }
 
   dispose(): void {
