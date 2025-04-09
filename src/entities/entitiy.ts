@@ -19,7 +19,7 @@ import {
 } from "../core/utils";
 import { Raycaster } from "three";
 import { Game } from "../main";
-import { AIController } from "./ai";
+import { AIController } from "../ai/npcAI";
 import { CHARACTER_HEIGHT, CHARACTER_RADIUS } from "../core/constants";
 
 export class Entity {

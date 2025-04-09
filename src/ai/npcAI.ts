@@ -1,7 +1,7 @@
 // File: /src/entities/ai.ts
 import { Vector3, Object3D } from "three";
-import { Entity } from "./entitiy";
-import { Character } from "./character";
+import { Entity } from "../entities/entitiy";
+import { Character } from "../entities/character";
 import { MoveState, getTerrainHeight } from "../core/utils";
 
 const API_KEY1 = import.meta.env.VITE_API_KEY1;

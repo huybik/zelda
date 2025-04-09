@@ -23,7 +23,7 @@ import {
   getTerrainHeight,
   InteractionResult,
 } from "../core/utils";
-import { AIController } from "./ai";
+import { AIController } from "../ai/npcAI";
 import { Entity } from "../entities/entitiy";
 import { CHARACTER_HEIGHT, CHARACTER_RADIUS } from "../core/constants";
 import {

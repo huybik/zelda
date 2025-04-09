@@ -38,7 +38,7 @@ import {
   spawnParticleEffect,
   updateParticleEffects,
 } from "./systems/particles";
-import { AIController } from "./entities/ai.ts";
+import { AIController } from "./ai/npcAI.ts";
 
 export class Game {
   scene: Scene | null = null;

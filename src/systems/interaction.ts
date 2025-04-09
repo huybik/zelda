@@ -16,7 +16,7 @@ import {
 } from "../core/utils";
 import { Controls } from "../controls/controls";
 import { Game } from "../main";
-import { sendToGemini } from "../entities/ai";
+import { sendToGemini } from "../ai/npcAI";
 import { INTERACTION_DISTANCE, AIM_TOLERANCE } from "../core/constants";
 
 export class InteractionSystem {
