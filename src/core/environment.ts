@@ -100,7 +100,12 @@ export function populateEnvironment(
       obj.userData.id = `${obj.name}_${obj.uuid.substring(0, 6)}`;
     }
   };
-  addObject(createTree, 100, 25 * 25);
-  addObject(createRock, 50, 20 * 20, randomFloat(1, 2.5));
-  addObject(createHerb, 30, 10 * 10);
+  addObject(createTree, worldSize, 25 * 25);
+  addObject(
+    createRock,
+    Math.floor(worldSize / 2),
+    20 * 20,
+    randomFloat(1, 2.5)
+  );
+  addObject(createHerb, Math.floor(worldSize / 3), 10 * 10);
 }
