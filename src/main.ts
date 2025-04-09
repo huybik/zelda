@@ -32,8 +32,8 @@ import { loadModels } from "./core/assetLoader";
 import { createTerrain } from "./core/terrain";
 import { setupLighting } from "./core/lighting";
 import { populateEnvironment } from "./core/environment";
-import { createExitPortal, createStartPortal } from "./objects/portals";
-import { createWorldBoundary } from "./objects/walls.ts";
+import { createExitPortal, createStartPortal } from "./models/portals.ts";
+import { createWorldBoundary } from "./models/walls.ts";
 import {
   spawnParticleEffect,
   updateParticleEffects,

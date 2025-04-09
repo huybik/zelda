@@ -14,7 +14,7 @@ import {
   createHerb,
   createGrassPatch,
   createFlowerPatch,
-} from "../objects/objects";
+} from "../models/objects";
 import { getTerrainHeight, randomFloat, Inventory } from "./utils";
 import { Game } from "../main";
 
