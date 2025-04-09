@@ -20,6 +20,7 @@ import {
 import { Raycaster } from "three";
 import { Game } from "../main";
 import { AIController } from "../ai/npcAI";
+import { AnimalAIController } from "../ai/animalAI"; // Import Animal AI
 import { CHARACTER_HEIGHT, CHARACTER_RADIUS } from "../core/constants";
 
 export class Entity {
@@ -42,7 +43,8 @@ export class Entity {
   nameContext: CanvasRenderingContext2D | null = null;
   nameTexture: CanvasTexture | null = null;
   nameSprite: Sprite | null = null;
-  aiController: AIController | null = null;
+  // Use a union type for the AI controller
+  aiController: AIController | AnimalAIController | null = null;
   rayCaster: Raycaster | null = null;
   deathTimestamp: number | null = null;
 
@@ -77,7 +79,7 @@ export class Entity {
   update(deltaTime: number, options: UpdateOptions = {}): void {}
 
   initNameDisplay(): void {
-    if (this.userData.isPlayer) return;
+    if (this.userData.isPlayer || this.userData.isAnimal) return; // Don't show for player or animals for now
     if (!this.nameCanvas) {
       this.nameCanvas = document.createElement("canvas");
       this.nameCanvas.width = 200;
@@ -110,6 +112,9 @@ export class Entity {
   }
 
   initIntentDisplay(): void {
+    // Only init for NPCs with AIController, not animals
+    if (!(this.aiController instanceof AIController)) return;
+
     this.rayCaster = new Raycaster();
     if (this.game?.camera) {
       this.rayCaster.camera = this.game.camera;
@@ -135,22 +140,20 @@ export class Entity {
   removeDisplays(): void {
     if (this.intentSprite && this.mesh) {
       this.mesh.remove(this.intentSprite);
-      // No need to dispose texture/canvas here if they might be reused
-      // this.intentTexture?.dispose();
-      // this.intentCanvas = null;
-      // this.intentContext = null;
-      this.intentSprite = null; // Allow garbage collection
+      this.intentSprite = null;
     }
     if (this.nameSprite && this.mesh) {
       this.mesh.remove(this.nameSprite);
-      // this.nameTexture?.dispose();
-      // this.nameCanvas = null;
-      // this.nameContext = null;
       this.nameSprite = null;
     }
   }
 
   updateIntentDisplay(text: string): void {
+    // Only update for NPCs with AIController
+    if (!(this.aiController instanceof AIController)) {
+      if (this.intentSprite) this.intentSprite.visible = false;
+      return;
+    }
     if (!this.intentContext || !this.intentCanvas || !this.intentTexture)
       return;
     if (!text || text.trim() === "") {
@@ -222,28 +225,29 @@ export class Entity {
   }
 
   showTemporaryMessage(message: string, duration: number = 10000): void {
-    if (!this.intentSprite) return;
+    // Only show for NPCs with AIController
+    if (!(this.aiController instanceof AIController) || !this.intentSprite)
+      return;
+
     const originalText = this.aiController
       ? `${this.name}: ${this.aiController.currentIntent}`
       : "";
     this.updateIntentDisplay(message);
     setTimeout(() => {
-      // Check if the entity still exists and has an AI controller before resetting
-      if (this.aiController) {
+      if (this.aiController instanceof AIController) {
         const currentIntentText = `${this.name}: ${this.aiController.currentIntent}`;
         this.updateIntentDisplay(currentIntentText || originalText);
       } else if (!this.isDead) {
-        // If no AI, but still alive, clear the message
-        this.updateIntentDisplay(originalText); // Reset to original (likely empty if no AI)
+        this.updateIntentDisplay(originalText);
       }
-      // If dead, the message will just stay or be cleared by other logic
     }, duration);
   }
 
   updateBoundingBox(): void {
     if (!this.mesh) return;
-    const height = this.userData.height ?? 1.8;
-    const radius = this.userData.radius ?? 0.4;
+    // Use specific height/radius if available, otherwise fallback
+    const height = this.userData.height ?? CHARACTER_HEIGHT;
+    const radius = this.userData.radius ?? CHARACTER_RADIUS;
     const center = this.mesh.position
       .clone()
       .add(new Vector3(0, height / 2, 0));
@@ -294,16 +298,22 @@ export class Entity {
     this.userData.isInteractable = false; // Make non-interactable
     this.deathTimestamp = performance.now(); // Record time of death
 
-    // Specific death behavior (like animation) is handled in Character subclass
+    // Stop AI updates
+    if (this.aiController) {
+      if (this.aiController instanceof AIController) {
+        this.aiController.aiState = "dead";
+      } else if (this.aiController instanceof AnimalAIController) {
+        this.aiController.aiState = "dead";
+      }
+    }
+    this.removeDisplays(); // Remove name/intent displays on death
   }
 
   destroy(): void {
     if (!this.mesh || !this.scene) return;
 
-    // Remove sprites first
     this.removeDisplays();
 
-    // Dispose textures and canvases if they exist
     this.intentTexture?.dispose();
     this.nameTexture?.dispose();
     this.intentCanvas = null;
@@ -328,7 +338,7 @@ export class Entity {
     this.mesh = null;
     this.scene = null;
     this.userData.entityReference = null;
-    this.aiController = null; // Clean up AI controller reference
-    this.game = null; // Clean up game reference
+    this.aiController = null;
+    this.game = null;
   }
 }

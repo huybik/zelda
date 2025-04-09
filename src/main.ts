@@ -17,6 +17,7 @@ import {
 import WebGL from "three/examples/jsm/capabilities/WebGL.js";
 import { Entity } from "./entities/entitiy";
 import { Character } from "./entities/character";
+import { Animal } from "./entities/animals"; // Import Animal
 import { InteractionSystem } from "./systems/interaction";
 import { Physics } from "./systems/physics";
 import { ThirdPersonCamera } from "./systems/camera";
@@ -39,6 +40,7 @@ import {
   updateParticleEffects,
 } from "./systems/particles";
 import { AIController } from "./ai/npcAI.ts";
+import { AnimalAIController } from "./ai/animalAI.ts"; // Import Animal AI
 
 export class Game {
   scene: Scene | null = null;
@@ -77,6 +79,7 @@ export class Game {
   quests: Quest[] | undefined;
   boundHandleVisibilityChange: () => void;
   wasPausedBeforeVisibilityChange: boolean = false;
+  worldSize: number = WORLD_SIZE; // Make world size accessible
 
   constructor() {
     this.boundHandleVisibilityChange = this.handleVisibilityChange.bind(this);
@@ -121,10 +124,13 @@ export class Game {
     }
 
     this.entities.forEach((entity) => {
-      if (entity instanceof Character) {
+      if (entity instanceof Character || entity instanceof Animal) {
         entity.game = this;
-        entity.initIntentDisplay();
-        entity.initNameDisplay();
+        // Only init displays for Characters (NPCs)
+        if (entity instanceof Character) {
+          entity.initIntentDisplay();
+          entity.initNameDisplay();
+        }
       }
     });
     document.addEventListener(
@@ -363,6 +369,8 @@ export class Game {
       models,
       this
     );
+    // Note: Animals are NOT added here yet, as per user request.
+    // They would be added similarly to Characters if needed.
   }
 
   initSystems(): void {
@@ -506,18 +514,41 @@ export class Game {
       this.physics!.update(deltaTime);
       this.entities.forEach((entity) => {
         if (entity === this.activeCharacter) return;
-        if (entity instanceof Character && entity.aiController) {
+        // Handle Character AI
+        if (
+          entity instanceof Character &&
+          entity.aiController instanceof AIController
+        ) {
           const aiMoveState = entity.aiController.computeAIMoveState(deltaTime);
           entity.update(deltaTime, {
             moveState: aiMoveState,
             collidables: this.collidableObjects,
           });
-        } else if (entity.update && !(entity instanceof Character)) {
+        }
+        // Handle Animal AI
+        else if (
+          entity instanceof Animal &&
+          entity.aiController instanceof AnimalAIController
+        ) {
+          // Animal AI directly updates its moveState within computeAIMoveState
+          // and the Animal's update method uses that internal state.
+          entity.update(deltaTime, { collidables: this.collidableObjects });
+        }
+        // Handle other generic entity updates
+        else if (
+          entity.update &&
+          !(entity instanceof Character) &&
+          !(entity instanceof Animal)
+        ) {
           entity.update(deltaTime);
         }
       });
+      // Update NPC observations after all movements
       this.entities.forEach((entity) => {
-        if (entity instanceof Character && entity.aiController)
+        if (
+          entity instanceof Character &&
+          entity.aiController instanceof AIController
+        )
           entity.aiController.updateObservation(this.entities);
       });
       this.interactionSystem!.update(deltaTime);
@@ -574,7 +605,7 @@ export class Game {
         }
 
         // Call destroy method
-        entityToRemove.destroy();
+        entityToRemove.destroy?.(); // Use optional chaining just in case
 
         // Remove from main entities list
         const entityIndex = this.entities.findIndex(
@@ -733,15 +764,19 @@ export class Game {
       oldPlayer.aiController = new AIController(oldPlayer);
       oldPlayer.aiController.persona = oldPlayer.persona;
     }
-    oldPlayer.aiController!.aiState = "idle";
-    oldPlayer.aiController!.previousAiState = "idle";
+    // Ensure the AI controller is the correct type and reset state
+    if (oldPlayer.aiController instanceof AIController) {
+      oldPlayer.aiController.aiState = "idle";
+      oldPlayer.aiController.previousAiState = "idle";
+    }
+
     newPlayer.userData.isPlayer = true;
     newPlayer.userData.isNPC = false;
     oldPlayer.initIntentDisplay();
     oldPlayer.initNameDisplay();
     newPlayer.removeDisplays();
     this.activeCharacter = newPlayer;
-    if (newPlayer.aiController) newPlayer.aiController = null;
+    if (newPlayer.aiController) newPlayer.aiController = null; // Remove AI from new player
     this.controls!.player = newPlayer;
     this.thirdPersonCamera!.target = newPlayer.mesh!;
     this.physics!.player = newPlayer;
@@ -796,6 +831,7 @@ export class Game {
       details,
       location,
     };
+    // Log to all Characters' event logs
     this.entities.forEach((entity) => {
       if (entity instanceof Character && entity.eventLog)
         entity.eventLog.addEntry(eventEntry);

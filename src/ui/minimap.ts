@@ -132,7 +132,7 @@ export class Minimap {
           portal.userData.minimapLabel || "Portal",
           portalMapX,
           portalMapZ,
-          "white"
+          "white" // i want white!
         );
       }
     };
