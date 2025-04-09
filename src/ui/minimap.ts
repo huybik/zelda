@@ -1,5 +1,6 @@
 // File: /src/ui/minimap.ts
 import { Character } from "../entities/character";
+import { Animal } from "../entities/animals"; // Import Animal
 import { Object3D, Vector3, Group } from "three";
 
 export class Minimap {
@@ -15,6 +16,8 @@ export class Minimap {
   bgColor: string = "rgba(100, 100, 100, 0.6)";
   playerColor: string = "yellow";
   npcColor: string = "cyan";
+  animalPassiveColor: string = "yellowgreen";
+  animalAggressiveColor: string = "red";
   dotSize: number = 3;
   playerDotSize: number = 4;
   playerTriangleSize: number;
@@ -77,11 +80,14 @@ export class Minimap {
         !entity ||
         entity === this.player ||
         (entity instanceof Character && entity.isDead) ||
+        (entity instanceof Animal && entity.isDead) || // Check if animal is dead
         entity.userData?.isPortal // Skip portals here as they are drawn above
       )
         return;
       const mesh =
-        entity instanceof Character || entity instanceof Object3D
+        entity instanceof Character ||
+        entity instanceof Animal || // Include Animal
+        entity instanceof Object3D
           ? ((entity as any).mesh ?? entity)
           : null;
       if (!mesh || !(mesh instanceof Object3D) || !mesh.parent || !mesh.visible)
@@ -96,9 +102,11 @@ export class Minimap {
         switch (entity.userData.resource) {
           case "wood":
             color = "saddlebrown";
+            return;
             break;
           case "stone":
             color = "darkgray";
+            return;
             break;
           case "herb":
             color = "limegreen";
@@ -111,7 +119,15 @@ export class Minimap {
         color = this.npcColor;
         size += 1;
         draw = true;
+      } else if (entity.userData?.isAnimal) {
+        // Draw animals
+        color = entity.userData.isAggressive
+          ? this.animalAggressiveColor
+          : this.animalPassiveColor;
+        size += 1;
+        draw = true;
       } else if (entity.userData?.isEnemy) {
+        // Keep isEnemy check for potential non-animal enemies
         color = "red";
         size += 1;
         draw = true;

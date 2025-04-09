@@ -8,6 +8,7 @@ import {
   MathUtils,
 } from "three";
 import { Character } from "../entities/character";
+import { Animal } from "../entities/animals"; // Import Animal
 import {
   createTree,
   createRock,
@@ -132,6 +133,50 @@ export function populateEnvironment(
     randomFloat(1, 2.5)
   );
   addObject(createHerb, Math.floor(worldSize / 3), 10 * 10);
+
+  // Add Animals
+  const addAnimal = (
+    animalType: string,
+    modelKey: string,
+    count: number,
+    minDistSq: number
+  ) => {
+    const model = models[modelKey];
+    if (!model) {
+      console.warn(
+        `Model key "${modelKey}" not found for animal ${animalType}`
+      );
+      return;
+    }
+    for (let i = 0; i < count; i++) {
+      const x = randomFloat(-halfSize * 0.9, halfSize * 0.9);
+      const z = randomFloat(-halfSize * 0.9, halfSize * 0.9);
+      const distSq = (x - villageCenter.x) ** 2 + (z - villageCenter.z) ** 2;
+      if (distSq < minDistSq) continue; // Avoid spawning too close to village
+
+      const pos = new Vector3(x, 0, z);
+      pos.y = getTerrainHeight(scene, x, z);
+
+      const animal = new Animal(
+        scene,
+        pos,
+        `${animalType} ${i + 1}`,
+        animalType,
+        model.scene.clone(), // Clone the model scene
+        model.animations // Share animations
+      );
+      animal.game = gameInstance;
+
+      entities.push(animal);
+      collidableObjects.push(animal.mesh!);
+      // Animals are not typically interactable directly
+      // interactableObjects.push(animal);
+    }
+  };
+
+  // Spawn some deer and wolves
+  addAnimal("Deer", "deer_procedural", 5, 20 * 20); // Spawn 5 deer, further out
+  addAnimal("Wolf", "wolf_procedural", 3, 40 * 40); // Spawn 3 wolves, even further out
 
   // Add Decorative Grass and Flowers
   const addDecoration = (

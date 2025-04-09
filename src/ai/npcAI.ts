@@ -3,6 +3,7 @@ import { Vector3, Object3D } from "three";
 import { Entity } from "../entities/entitiy";
 import { Character } from "../entities/character";
 import { MoveState, getTerrainHeight } from "../core/utils";
+import { Animal } from "../entities/animals";
 
 const API_KEY1 = import.meta.env.VITE_API_KEY1;
 const API_KEY2 = import.meta.env.VITE_API_KEY2;
@@ -69,6 +70,15 @@ export interface Observation {
     position: Vector3;
     health: number;
     isDead: boolean;
+    currentAction: string;
+  }>;
+  nearbyAnimals: Array<{
+    id: string;
+    type: string;
+    position: Vector3;
+    health: number;
+    isDead: boolean;
+    isAggressive: boolean;
     currentAction: string;
   }>;
   nearbyObjects: Array<{
@@ -342,6 +352,20 @@ export class AIController {
       )
         return true;
     }
+    // Check animals too
+    const currentAnimals = this.observation.nearbyAnimals;
+    const lastAnimals = this.lastObservation.nearbyAnimals;
+    for (const currAnimal of currentAnimals) {
+      const matchingLastAnimal = lastAnimals.find(
+        (a) => a.id === currAnimal.id
+      );
+      if (!matchingLastAnimal) return true; // New animal appeared
+      if (
+        currAnimal.health < matchingLastAnimal.health ||
+        currAnimal.isDead !== matchingLastAnimal.isDead
+      )
+        return true; // Animal took damage or died
+    }
     return false;
   }
 
@@ -350,6 +374,7 @@ export class AIController {
       ? JSON.parse(JSON.stringify(this.observation))
       : null;
     const nearbyCharacters: Observation["nearbyCharacters"] = [];
+    const nearbyAnimals: Observation["nearbyAnimals"] = [];
     const nearbyObjects: Observation["nearbyObjects"] = [];
     const selfPosition = this.character.mesh!.position;
     const searchRadiusSq = this.searchRadius * this.searchRadius;
@@ -384,6 +409,19 @@ export class AIController {
                 ? "dead"
                 : "unknown"),
         });
+      } else if (entity instanceof Animal) {
+        nearbyAnimals.push({
+          id: entity.id,
+          type: entity.animalType,
+          position: entityPosition.clone(),
+          health: entity.health,
+          isDead: entity.isDead,
+          isAggressive:
+            typeof entity.userData.isAggressive === "boolean"
+              ? entity.userData.isAggressive
+              : false,
+          currentAction: entity.aiController?.aiState || "unknown",
+        });
       } else if (entity.userData?.isInteractable && entity.visible) {
         nearbyObjects.push({
           id: entity.userData.id || entity.uuid,
@@ -398,6 +436,7 @@ export class AIController {
       timestamp: Date.now(),
       self,
       nearbyCharacters,
+      nearbyAnimals,
       nearbyObjects,
     };
   }
@@ -421,6 +460,20 @@ export class AIController {
               )}, ${c.position.z.toFixed(1)}), health: ${c.health}, ${
                 c.isDead ? "dead" : "alive"
               }, action: ${c.currentAction}`
+          )
+          .join("\n")
+      : "None";
+    let nearbyAnimals = observation?.nearbyAnimals.length
+      ? observation.nearbyAnimals
+          .map(
+            (a) =>
+              `- ${a.type} (${a.id}) at (${a.position.x.toFixed(
+                1
+              )}, ${a.position.y.toFixed(1)}, ${a.position.z.toFixed(1)}), ${
+                a.isDead ? "dead" : "alive"
+              }, ${a.isAggressive ? "aggressive" : "passive"}, action: ${
+                a.currentAction
+              }`
           )
           .join("\n")
       : "None";
@@ -460,6 +513,9 @@ Here are your recent observations:
 Nearby characters:
 ${nearbyCharacters}
 
+Nearby animals:
+${nearbyAnimals}
+
 Nearby objects:
 ${nearbyObjects}
 
@@ -470,7 +526,7 @@ Based on this information, decide your next action. Respond ONLY with a valid JS
 {
   "action": "gather" | "moveTo" | "attack" | "chat",
   "object_id": "object_id_here",
-  "target_id": "character_id_here",
+  "target_id": "character_or_animal_id_here",
   "message": "message_here",
   "intent": "less than 5 words reason here"
 }
@@ -567,7 +623,8 @@ Based on this information, decide your next action. Respond ONLY with a valid JS
         if (
           targetEntity &&
           targetEntity.mesh &&
-          this.observation?.nearbyCharacters.some((c) => c.id === target_id) &&
+          (this.observation?.nearbyCharacters.some((c) => c.id === target_id) ||
+            this.observation?.nearbyAnimals.some((a) => a.id === target_id)) &&
           !targetEntity.isDead
         ) {
           targetPos = targetEntity.mesh.position.clone();

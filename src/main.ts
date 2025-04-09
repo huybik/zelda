@@ -101,10 +101,10 @@ export class Game {
     this.initControls();
     this.initMobileControls();
     this.initPhysics();
-    this.initEnvironment(models);
+    this.initEnvironment(models); // Populates NPCs, objects, and animals
     this.initSystems();
     this.initQuests();
-    this.initUI();
+    this.initUI(); // Initializes minimap among other things
     this.setupUIControls();
 
     // Create portals AFTER minimap is initialized in initUI
@@ -369,8 +369,7 @@ export class Game {
       models,
       this
     );
-    // Note: Animals are NOT added here yet, as per user request.
-    // They would be added similarly to Characters if needed.
+    // Animals are now added within populateEnvironment
   }
 
   initSystems(): void {
@@ -390,7 +389,7 @@ export class Game {
     this.minimap = new Minimap(
       document.getElementById("minimap-canvas") as HTMLCanvasElement,
       this.activeCharacter!,
-      this.entities,
+      this.entities, // Pass the entities array which now includes animals
       WORLD_SIZE
     );
     this.inventoryDisplay = new InventoryDisplay(this.inventory!);
