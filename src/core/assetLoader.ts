@@ -15,9 +15,9 @@ export async function loadModels(): Promise<
   const loader = new GLTFLoader();
   const modelPaths = {
     player: "assets/player/scene.gltf",
-    tavernMan: "assets/player/scene.gltf",
-    oldMan: "assets/player/scene.gltf",
-    woman: "assets/player/scene.gltf",
+    tavernMan: "assets/the_tavern_man_2/scene.gltf",
+    oldMan: "assets/the_tavern_old_man/scene.gltf",
+    woman: "assets/the_tavern_woman_2/scene.gltf",
     // Add paths for GLTF animals if you have them
     // wolf_gltf: "assets/animals/wolf.gltf",
     // deer_gltf: "assets/animals/deer.gltf",
