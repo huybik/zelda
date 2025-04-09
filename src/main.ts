@@ -707,6 +707,7 @@ export class Game {
     this.interactionSystem!.eventLog = newPlayer.eventLog;
     this.inventory = newPlayer.inventory;
     this.inventoryDisplay!.setInventory(this.inventory!);
+    this.interactionSystem!.inventory = newPlayer.inventory!;
     this.hud!.player = newPlayer;
     this.minimap!.player = newPlayer;
     this.journalDisplay!.setEventLog(newPlayer.eventLog);
