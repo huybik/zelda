@@ -1,3 +1,4 @@
+// File: /src/systems/interaction.ts
 import {
   PerspectiveCamera,
   Object3D,
@@ -12,7 +13,7 @@ import {
   InteractionResult,
   TargetInfo,
   ActiveGather,
-} from "../core/helper";
+} from "../core/utils";
 import { Controls } from "../controls/controls";
 import { Game } from "../main";
 import { sendToGemini } from "../entities/ai";

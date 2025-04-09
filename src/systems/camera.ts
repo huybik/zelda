@@ -1,3 +1,4 @@
+// File: /src/systems/camera.ts
 import {
   PerspectiveCamera,
   Object3D,
@@ -5,7 +6,7 @@ import {
   Raycaster,
   MathUtils,
 } from "three";
-import { smoothVectorLerp } from "../core/helper";
+import { smoothVectorLerp } from "../core/utils";
 
 export class ThirdPersonCamera {
   camera: PerspectiveCamera;

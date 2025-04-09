@@ -1,4 +1,5 @@
-import { EventLog, EventEntry } from "../core/helper";
+// File: /src/ui/journal.ts
+import { EventLog, EventEntry } from "../core/utils";
 import { Game } from "../main";
 
 export class JournalDisplay {

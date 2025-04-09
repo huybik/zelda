@@ -1,3 +1,4 @@
+// File: main.ts
 import * as THREE from "three";
 import {
   Scene,
@@ -29,7 +30,7 @@ import { HUD } from "./ui/hud";
 import { InventoryDisplay } from "./ui/inventory";
 import { JournalDisplay } from "./ui/journal";
 import { Minimap } from "./ui/minimap";
-import { Inventory, getTerrainHeight, Quest } from "./core/helper";
+import { Inventory, getTerrainHeight, Quest } from "./core/utils.ts";
 import { WORLD_SIZE, TERRAIN_SEGMENTS } from "./core/constants";
 import { loadModels } from "./core/assetLoader";
 import { createTerrain } from "./core/terrain";

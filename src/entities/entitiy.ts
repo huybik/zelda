@@ -1,3 +1,4 @@
+// File: /src/entities/entity.ts
 import {
   Scene,
   Vector3,
@@ -15,7 +16,7 @@ import {
   UpdateOptions,
   getNextEntityId,
   getTerrainHeight,
-} from "../core/helper";
+} from "../core/utils";
 import { Raycaster } from "three";
 import { Game } from "../main";
 import { AIController } from "./ai";

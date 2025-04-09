@@ -16,8 +16,7 @@ import {
   MoveState,
   getTerrainHeight,
   InteractionResult,
-} from "../core/helper";
-import { Game } from "../main";
+} from "../core/utils";
 import { AIController } from "./ai";
 import { Entity } from "../entities/entitiy";
 import { CHARACTER_HEIGHT, CHARACTER_RADIUS } from "../core/constants";

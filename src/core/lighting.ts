@@ -1,3 +1,4 @@
+// File: /src/core/lighting.ts
 import { Scene, AmbientLight, DirectionalLight, HemisphereLight } from "three";
 
 export function setupLighting(scene: Scene): void {

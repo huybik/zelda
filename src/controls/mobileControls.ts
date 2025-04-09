@@ -1,3 +1,4 @@
+// File: /src/controls/mobileControls.ts
 import nipplejs, {
   JoystickManager,
   EventData,

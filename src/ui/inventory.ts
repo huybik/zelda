@@ -1,4 +1,5 @@
-import { Inventory, InventoryItem } from "../core/helper";
+// File: /src/ui/inventory.ts
+import { Inventory, InventoryItem } from "../core/utils";
 
 export class InventoryDisplay {
   inventory: Inventory;

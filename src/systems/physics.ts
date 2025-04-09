@@ -1,3 +1,4 @@
+// File: /src/systems/physics.ts
 import { Object3D, Vector3, Box3 } from "three";
 import { Character } from "../entities/character";
 

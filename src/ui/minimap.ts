@@ -1,3 +1,4 @@
+// File: /src/ui/minimap.ts
 import { Character } from "../entities/character";
 import { Object3D, Vector3 } from "three";
 

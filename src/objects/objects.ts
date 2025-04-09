@@ -1,3 +1,4 @@
+// File: /src/objects/objects.ts
 import {
   Vector3,
   Mesh,
@@ -11,7 +12,7 @@ import {
   Box3,
 } from "three";
 import { Character } from "../entities/character";
-import { Inventory, InteractionResult, randomFloat } from "../core/helper";
+import { Inventory, InteractionResult, randomFloat } from "../core/utils";
 import { Colors } from "../core/constants";
 
 const treeTrunkMat = new MeshLambertMaterial({ color: Colors.PASTEL_BROWN });

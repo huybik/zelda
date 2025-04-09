@@ -1,7 +1,8 @@
+// File: /src/controls/controls.ts
 import { Character } from "../entities/character";
 import { ThirdPersonCamera } from "../systems/camera";
 import { Game } from "../main";
-import { KeyState, MouseState, MoveState } from "../core/helper";
+import { KeyState, MouseState, MoveState } from "../core/utils";
 
 export class Controls {
   player: Character | null;

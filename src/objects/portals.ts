@@ -1,5 +1,6 @@
+// File: /src/objects/portals.ts
 import * as THREE from "three";
-import { getTerrainHeight } from "../core/helper";
+import { getTerrainHeight } from "../core/utils";
 import { Game } from "../main";
 import { Vector3 } from "three";
 

@@ -1,3 +1,4 @@
+// File: /src/ui/hud.ts
 import { Character } from "../entities/character";
 
 export class HUD {

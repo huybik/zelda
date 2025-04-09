@@ -1,4 +1,4 @@
-// Core game constants
+// File: /src/core/constants.ts
 export const WORLD_SIZE = 100;
 export const TERRAIN_SEGMENTS = 15;
 

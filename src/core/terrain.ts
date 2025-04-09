@@ -1,6 +1,7 @@
+// File: /src/core/terrain.ts
 import { Mesh, PlaneGeometry, MeshLambertMaterial, MathUtils } from "three";
 import { SimplexNoise } from "three/examples/jsm/math/SimplexNoise.js";
-import { smoothstep } from "./helper";
+import { smoothstep } from "./utils";
 
 export function createTerrain(size: number, segments: number = 150): Mesh {
   const simplexTerrain = new SimplexNoise();

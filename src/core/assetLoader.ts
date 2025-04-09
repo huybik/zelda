@@ -1,3 +1,4 @@
+// File: /src/core/assetLoader.ts
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { Group, AnimationClip } from "three";
 

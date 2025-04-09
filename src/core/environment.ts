@@ -1,7 +1,8 @@
+// File: /src/core/environment.ts
 import { Scene, Vector3, Object3D, Group, AnimationClip } from "three";
 import { Character } from "../entities/character";
 import { createTree, createRock, createHerb } from "../objects/objects";
-import { getTerrainHeight, randomFloat, Inventory } from "./helper";
+import { getTerrainHeight, randomFloat, Inventory } from "./utils";
 import { Game } from "../main";
 
 export function populateEnvironment(
