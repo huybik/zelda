@@ -12,69 +12,259 @@ import {
   Bone,
 } from "three";
 
-// Helper function to find a bone by name (case-insensitive, partial match)
+interface BoneRegexMap {
+  [categoryKey: string]: RegExp[];
+}
+
+// Regex patterns to match common bone naming conventions
+const boneMappings: BoneRegexMap = {
+  LeftArm: [
+    /^(left|l)[._\-\s]?(arm|hand|forearm|clavicle|shoulder)/i, // e.g., left_arm, l hand
+    /^(arm|hand|forearm|clavicle|shoulder)[._\-\s]?(left|l)/i, // e.g., arm_l, Hand.L
+    /^arm\.l/i,
+    /^hand\.l/i, // Specific common patterns
+  ],
+  RightArm: [
+    /^(right|r)[._\-\s]?(arm|hand|forearm|clavicle|shoulder)/i,
+    /^(arm|hand|forearm|clavicle|shoulder)[._\-\s]?(right|r)/i,
+    /^arm\.r/i,
+    /^hand\.r/i,
+  ],
+  LeftUpLeg: [
+    /^(left|l)[._\-\s]?(up(per)?|thigh)[._\-\s]?leg/i,
+    /^(up(per)?|thigh)[._\-\s]?leg[._\-\s]?(left|l)/i,
+    /^upleg\.l/i,
+    /^thigh\.l/i,
+  ],
+  RightUpLeg: [
+    /^(right|r)[._\-\s]?(up(per)?|thigh)[._\-\s]?leg/i,
+    /^(up(per)?|thigh)[._\-\s]?leg[._\-\s]?(right|r)/i,
+    /^upleg\.r/i,
+    /^thigh\.r/i,
+  ],
+  LeftLowLeg: [
+    // Renamed from LeftLeg for clarity
+    /^(left|l)[._\-\s]?(leg|shin|calf|lowerleg)(?![._\-\s]?up)/i, // Avoid matching upper leg
+    /^(leg|shin|calf|lowerleg)[._\-\s]?(left|l)/i,
+    /^(left|l)[._\-\s]?(shin|calf)/i,
+    /^leg\.l/i,
+  ],
+  RightLowLeg: [
+    // Renamed from RightLeg for clarity
+    /^(right|r)[._\-\s]?(leg|shin|calf|lowerleg)(?![._\-\s]?up)/i,
+    /^(leg|shin|calf|lowerleg)[._\-\s]?(right|r)/i,
+    /^(right|r)[._\-\s]?(shin|calf)/i,
+    /^leg\.r/i,
+  ],
+  LeftFoot: [/^(left|l)[._\-\s]?foot/i, /^foot[._\-\s]?(left|l)/i, /^foot\.l/i],
+  RightFoot: [
+    /^(right|r)[._\-\s]?foot/i,
+    /^foot[._\-\s]?(right|r)/i,
+    /^foot\.r/i,
+  ],
+  Spine: [/spine|chest|torso|upperbody/i],
+  Hips: [/hips|pelvis|root|waist/i],
+  Head: [/head/i],
+  Neck: [/neck/i],
+  LeftForeArm: [/^(left|l)[._\-\s]?forearm/i, /^forearm[._\-\s]?(left|l)/i],
+  RightForeArm: [/^(right|r)[._\-\s]?forearm/i, /^forearm[._\-\s]?(right|r)/i],
+};
+
+// Map common input names (like "LeftLeg") to the more specific keys used in boneMappings
+const categoryNameMapping: { [inputName: string]: string } = {
+  leftarm: "LeftArm",
+  lefthand: "LeftArm", // Map hand to arm category for general arm swing
+  leftforearm: "LeftForeArm",
+  rightarm: "RightArm",
+  righthand: "RightArm",
+  rightforearm: "RightForeArm",
+  leftupleg: "LeftUpLeg",
+  leftthigh: "LeftUpLeg",
+  rightupleg: "RightUpLeg",
+  rightthigh: "RightUpLeg",
+  leftleg: "LeftLowLeg", // Map generic "LeftLeg" to lower leg
+  leftshin: "LeftLowLeg",
+  leftcalf: "LeftLowLeg",
+  rightleg: "RightLowLeg",
+  rightshin: "RightLowLeg",
+  rightcalf: "RightLowLeg",
+  leftfoot: "LeftFoot",
+  rightfoot: "RightFoot",
+  spine: "Spine",
+  chest: "Spine",
+  torso: "Spine",
+  hips: "Hips",
+  pelvis: "Hips",
+  root: "Hips",
+  head: "Head",
+  neck: "Neck",
+};
+
+// Define relationships between categories for fallback searching
+const relatedBoneCategories: { [categoryKey: string]: string[] } = {
+  LeftLowLeg: ["LeftFoot"], // If looking for lower leg, foot might be relevant
+  RightLowLeg: ["RightFoot"],
+  LeftArm: ["LeftForeArm"], // If looking for arm, forearm might be relevant
+  RightArm: ["RightForeArm"],
+  LeftUpLeg: ["LeftLowLeg", "LeftFoot"], // If upper leg fails, try lower leg/foot
+  RightUpLeg: ["RightLowLeg", "RightFoot"],
+  // Add more relationships if needed
+};
+
+function getBoneCategoryKey(boneName: string): string | null {
+  // Normalize input name (remove spaces, dots, underscores, dashes)
+  const lowerName = boneName.toLowerCase().replace(/[._\-\s]/g, "");
+  return categoryNameMapping[lowerName] || null;
+}
+
 function findBone(skeletonRoot: Object3D, boneName: string): Bone | null {
-  let foundBone: Bone | null = null;
+  const normalizedTarget = boneName.toLowerCase();
+  let bestMatch: Bone | null = null;
+  let bestMatchLevel = -1; // -1: No match, 0: Includes/Fallback, 1: Related Regex, 2: Primary Regex, 3: Exact
+
+  const primaryCategoryKey = getBoneCategoryKey(boneName);
+  const primaryRegexes = primaryCategoryKey
+    ? boneMappings[primaryCategoryKey]
+    : null;
+  const relatedKeys = primaryCategoryKey
+    ? relatedBoneCategories[primaryCategoryKey] || []
+    : [];
+  const relatedRegexesList = relatedKeys
+    .map((key) => boneMappings[key])
+    .filter((regexList) => regexList) as RegExp[][]; // Array of arrays of regexes
+
   skeletonRoot.traverse((object) => {
-    if (foundBone) return; // Stop searching if found
-    if (
-      object instanceof Bone &&
-      object.name.toLowerCase().includes(boneName.toLowerCase())
-    ) {
-      foundBone = object;
+    if (bestMatchLevel === 3) return; // Already found exact match
+
+    if (object instanceof Bone) {
+      const currentBoneNameLower = object.name.toLowerCase();
+      let currentMatchLevel = -1;
+
+      // Level 3: Exact Match
+      if (currentBoneNameLower === normalizedTarget) {
+        currentMatchLevel = 3;
+      }
+      // Level 2: Primary Regex Match
+      else if (primaryRegexes && bestMatchLevel < 3) {
+        for (const regex of primaryRegexes) {
+          if (regex.test(currentBoneNameLower)) {
+            currentMatchLevel = Math.max(currentMatchLevel, 2);
+            break;
+          }
+        }
+      }
+      // Level 1: Related Regex Match
+      if (
+        currentMatchLevel < 2 &&
+        bestMatchLevel < 2 &&
+        relatedRegexesList.length > 0
+      ) {
+        for (const regexList of relatedRegexesList) {
+          for (const regex of regexList) {
+            if (regex.test(currentBoneNameLower)) {
+              currentMatchLevel = Math.max(currentMatchLevel, 1);
+              break; // Found a related regex match
+            }
+          }
+          if (currentMatchLevel >= 1) break; // Stop checking related categories if one matched
+        }
+      }
+      // Level 0: Includes Match (Fallback)
+      // Use a simplified target for includes check (remove common separators)
+      const simpleTarget = normalizedTarget.replace(/[._\-\s]/g, "");
+      if (
+        currentMatchLevel < 1 &&
+        bestMatchLevel < 1 &&
+        currentBoneNameLower.includes(simpleTarget)
+      ) {
+        currentMatchLevel = Math.max(currentMatchLevel, 0);
+      }
+
+      // Update best match if current is better
+      if (currentMatchLevel > bestMatchLevel) {
+        bestMatch = object;
+        bestMatchLevel = currentMatchLevel;
+      }
     }
   });
-  // Fallback: If not found by partial name, try finding the first available bone of a certain type (e.g., leg)
-  if (!foundBone && (boneName.includes("Leg") || boneName.includes("Arm"))) {
-    skeletonRoot.traverse((object) => {
-      if (foundBone) return;
-      if (
-        object instanceof Bone &&
-        object.name
-          .toLowerCase()
-          .includes(boneName.substring(0, 4).toLowerCase())
-      ) {
-        foundBone = object;
-      }
-    });
+
+  // Last resort fallback for common limb/side patterns if no match found yet (Level 0)
+  if (
+    bestMatchLevel < 1 &&
+    (normalizedTarget.includes("leg") || normalizedTarget.includes("arm"))
+  ) {
+    const part = normalizedTarget.includes("left")
+      ? "left"
+      : normalizedTarget.includes("right")
+        ? "right"
+        : null;
+    const limb = normalizedTarget.includes("leg") ? "leg" : "arm";
+    if (part) {
+      skeletonRoot.traverse((object) => {
+        if (bestMatchLevel >= 1) return; // Don't overwrite better matches
+        if (object instanceof Bone) {
+          const nameLower = object.name.toLowerCase();
+          if (nameLower.includes(part) && nameLower.includes(limb)) {
+            if (bestMatchLevel < 0) {
+              // Only take if absolutely no match found yet
+              bestMatch = object;
+              bestMatchLevel = 0;
+            }
+          }
+        }
+      });
+    }
   }
-  if (!foundBone && boneName.includes("Spine")) {
+  if (bestMatchLevel < 1 && normalizedTarget.includes("spine")) {
     skeletonRoot.traverse((object) => {
-      if (foundBone) return;
+      if (bestMatchLevel >= 1) return;
       if (
         object instanceof Bone &&
         object.name.toLowerCase().includes("spine")
       ) {
-        foundBone = object;
+        if (bestMatchLevel < 0) {
+          bestMatch = object;
+          bestMatchLevel = 0;
+        }
       }
     });
   }
-  if (!foundBone && boneName.toLowerCase() === "hips") {
+  if (
+    bestMatchLevel < 1 &&
+    (normalizedTarget.includes("hip") ||
+      normalizedTarget.includes("pelvis") ||
+      normalizedTarget.includes("root"))
+  ) {
     skeletonRoot.traverse((object) => {
-      if (foundBone) return;
+      if (bestMatchLevel >= 1) return;
       if (
         object instanceof Bone &&
         (object.name.toLowerCase().includes("hip") ||
           object.name.toLowerCase().includes("root") ||
           object.name.toLowerCase().includes("pelvis"))
       ) {
-        foundBone = object;
+        if (bestMatchLevel < 0) {
+          bestMatch = object;
+          bestMatchLevel = 0;
+        }
       }
     });
   }
-  if (!foundBone) {
-    console.warn(`Bone containing "${boneName}" not found.`);
-  }
-  return foundBone;
-}
 
-// --- Animation Creation Functions ---
+  if (!bestMatch) {
+    console.warn(`Bone matching "${boneName}" not found using any method.`);
+  }
+  // else {
+  //     console.log(`Found bone for "${boneName}": "${bestMatch.name}" (Level: ${bestMatchLevel})`);
+  // }
+  return bestMatch;
+}
 
 export function createIdleAnimation(
   skeletonRoot: Object3D,
   duration: number = 5
 ): AnimationClip {
-  const spineBone = findBone(skeletonRoot, "Spine"); // Find a spine bone
+  const spineBone = findBone(skeletonRoot, "Spine");
   const tracks: KeyframeTrack[] = [];
 
   if (spineBone) {
@@ -103,8 +293,6 @@ export function createIdleAnimation(
       new QuaternionKeyframeTrack(spineNodeName, spineTimes, spineValues)
     );
   } else {
-    // Fallback: No spine bone found, create an empty idle animation
-    // Add a dummy track to make it a valid AnimationClip
     const dummyTimes = [0, duration];
     const dummyValues = [0, 0];
     tracks.push(
@@ -121,17 +309,16 @@ export function createWalkAnimation(
 ): AnimationClip {
   const leftUpLeg = findBone(skeletonRoot, "LeftUpLeg");
   const rightUpLeg = findBone(skeletonRoot, "RightUpLeg");
-  const leftLeg = findBone(skeletonRoot, "LeftLeg"); // Lower leg
-  const rightLeg = findBone(skeletonRoot, "RightLeg"); // Lower leg
+  const leftLeg = findBone(skeletonRoot, "LeftLeg"); // Will map to LeftLowLeg, may find foot
+  const rightLeg = findBone(skeletonRoot, "RightLeg"); // Will map to RightLowLeg, may find foot
   const leftArm = findBone(skeletonRoot, "LeftArm");
   const rightArm = findBone(skeletonRoot, "RightArm");
 
   const tracks: KeyframeTrack[] = [];
-  const swingAngle = 0.6; // Radians
+  const swingAngle = 0.6;
   const kneeBendAngle = 0.8;
   const armSwingAngle = 0.4;
 
-  // --- Legs ---
   if (leftUpLeg && rightUpLeg) {
     const qInitialL = new Quaternion().copy(leftUpLeg.quaternion);
     const qInitialR = new Quaternion().copy(rightUpLeg.quaternion);
@@ -146,7 +333,6 @@ export function createWalkAnimation(
 
     const legTimes = [0, duration / 2, duration];
 
-    // Left Up Leg
     tracks.push(
       new QuaternionKeyframeTrack(`${leftUpLeg.name}.quaternion`, legTimes, [
         ...qInitialL.clone().multiply(qForward).toArray(),
@@ -155,7 +341,6 @@ export function createWalkAnimation(
       ])
     );
 
-    // Right Up Leg
     tracks.push(
       new QuaternionKeyframeTrack(`${rightUpLeg.name}.quaternion`, legTimes, [
         ...qInitialR.clone().multiply(qBackward).toArray(),
@@ -165,7 +350,6 @@ export function createWalkAnimation(
     );
   }
 
-  // --- Knees (Lower Legs) ---
   if (leftLeg && rightLeg) {
     const qKneeInitialL = new Quaternion().copy(leftLeg.quaternion);
     const qKneeInitialR = new Quaternion().copy(rightLeg.quaternion);
@@ -182,30 +366,27 @@ export function createWalkAnimation(
       duration,
     ];
 
-    // Left Knee
     tracks.push(
       new QuaternionKeyframeTrack(`${leftLeg.name}.quaternion`, kneeTimes, [
-        ...qKneeInitialL.toArray(), // Start straight
-        ...qKneeInitialL.clone().multiply(qKneeBent).toArray(), // Bend as leg moves back
-        ...qKneeInitialL.toArray(), // Straighten at back
-        ...qKneeInitialL.toArray(), // Stay straight moving forward
-        ...qKneeInitialL.toArray(), // End straight
+        ...qKneeInitialL.toArray(),
+        ...qKneeInitialL.clone().multiply(qKneeBent).toArray(),
+        ...qKneeInitialL.toArray(),
+        ...qKneeInitialL.toArray(),
+        ...qKneeInitialL.toArray(),
       ])
     );
 
-    // Right Knee
     tracks.push(
       new QuaternionKeyframeTrack(`${rightLeg.name}.quaternion`, kneeTimes, [
-        ...qKneeInitialR.toArray(), // Start straight
-        ...qKneeInitialR.toArray(), // Stay straight moving forward
-        ...qKneeInitialR.toArray(), // End straight
-        ...qKneeInitialR.clone().multiply(qKneeBent).toArray(), // Bend as leg moves back
-        ...qKneeInitialR.toArray(), // Straighten at back
+        ...qKneeInitialR.toArray(),
+        ...qKneeInitialR.toArray(),
+        ...qKneeInitialR.toArray(),
+        ...qKneeInitialR.clone().multiply(qKneeBent).toArray(),
+        ...qKneeInitialR.toArray(),
       ])
     );
   }
 
-  // --- Arms ---
   if (leftArm && rightArm) {
     const qArmInitialL = new Quaternion().copy(leftArm.quaternion);
     const qArmInitialR = new Quaternion().copy(rightArm.quaternion);
@@ -220,7 +401,6 @@ export function createWalkAnimation(
 
     const armTimes = [0, duration / 2, duration];
 
-    // Left Arm (Opposite to Right Leg)
     tracks.push(
       new QuaternionKeyframeTrack(`${leftArm.name}.quaternion`, armTimes, [
         ...qArmInitialL.clone().multiply(qArmForward).toArray(),
@@ -229,7 +409,6 @@ export function createWalkAnimation(
       ])
     );
 
-    // Right Arm (Opposite to Left Leg)
     tracks.push(
       new QuaternionKeyframeTrack(`${rightArm.name}.quaternion`, armTimes, [
         ...qArmInitialR.clone().multiply(qArmBackward).toArray(),
@@ -240,7 +419,6 @@ export function createWalkAnimation(
   }
 
   if (tracks.length === 0) {
-    // Fallback: No bones found, create an empty walk animation
     const dummyTimes = [0, duration];
     const dummyValues = [0, 0];
     tracks.push(
@@ -264,12 +442,11 @@ export function createRunAnimation(
   const spineBone = findBone(skeletonRoot, "Spine");
 
   const tracks: KeyframeTrack[] = [];
-  const swingAngle = 1.0; // Larger swing for running
-  const kneeBendAngle = 1.2; // More bend
-  const armSwingAngle = 0.8; // Larger arm swing
-  const spineLeanAngle = 0.15; // Slight forward lean
+  const swingAngle = 1.0;
+  const kneeBendAngle = 1.2;
+  const armSwingAngle = 0.8;
+  const spineLeanAngle = 0.15;
 
-  // --- Legs ---
   if (leftUpLeg && rightUpLeg) {
     const qInitialL = new Quaternion().copy(leftUpLeg.quaternion);
     const qInitialR = new Quaternion().copy(rightUpLeg.quaternion);
@@ -300,7 +477,6 @@ export function createRunAnimation(
     );
   }
 
-  // --- Knees ---
   if (leftLeg && rightLeg) {
     const qKneeInitialL = new Quaternion().copy(leftLeg.quaternion);
     const qKneeInitialR = new Quaternion().copy(rightLeg.quaternion);
@@ -337,7 +513,6 @@ export function createRunAnimation(
     );
   }
 
-  // --- Arms ---
   if (leftArm && rightArm) {
     const qArmInitialL = new Quaternion().copy(leftArm.quaternion);
     const qArmInitialR = new Quaternion().copy(rightArm.quaternion);
@@ -368,14 +543,13 @@ export function createRunAnimation(
     );
   }
 
-  // --- Spine Lean ---
   if (spineBone) {
     const qSpineInitial = new Quaternion().copy(spineBone.quaternion);
     const qSpineLean = new Quaternion().setFromAxisAngle(
       new Vector3(1, 0, 0),
       spineLeanAngle
     );
-    const spineTimes = [0, duration]; // Constant lean
+    const spineTimes = [0, duration];
     tracks.push(
       new QuaternionKeyframeTrack(`${spineBone.name}.quaternion`, spineTimes, [
         ...qSpineInitial.clone().multiply(qSpineLean).toArray(),
@@ -385,7 +559,6 @@ export function createRunAnimation(
   }
 
   if (tracks.length === 0) {
-    // Fallback: No bones found, create an empty run animation
     const dummyTimes = [0, duration];
     const dummyValues = [0, 0];
     tracks.push(
@@ -402,33 +575,31 @@ export function createAttackAnimation(
 ): AnimationClip {
   const rightArm = findBone(skeletonRoot, "RightArm");
   const rightForeArm = findBone(skeletonRoot, "RightForeArm");
-  const spineBone = findBone(skeletonRoot, "Spine"); // For body rotation
+  const spineBone = findBone(skeletonRoot, "Spine");
 
   const tracks: KeyframeTrack[] = [];
 
-  // --- Right Arm Swing ---
   if (rightArm) {
     const qInitial = new Quaternion().copy(rightArm.quaternion);
     const qRaise = new Quaternion().setFromEuler(
       new THREE.Euler(-Math.PI / 2.5, 0, -Math.PI / 4)
-    ); // Raise arm back and slightly out
-    const qSwing = new Quaternion().setFromEuler(new THREE.Euler(0.5, 0, 0.2)); // Swing forward
+    );
+    const qSwing = new Quaternion().setFromEuler(new THREE.Euler(0.5, 0, 0.2));
 
     const armTimes = [0, duration * 0.3, duration * 0.6, duration];
     tracks.push(
       new QuaternionKeyframeTrack(`${rightArm.name}.quaternion`, armTimes, [
         ...qInitial.toArray(),
-        ...qInitial.clone().multiply(qRaise).toArray(), // Wind up
-        ...qInitial.clone().multiply(qSwing).toArray(), // Swing
-        ...qInitial.toArray(), // Return to initial
+        ...qInitial.clone().multiply(qRaise).toArray(),
+        ...qInitial.clone().multiply(qSwing).toArray(),
+        ...qInitial.toArray(),
       ])
     );
   }
 
-  // --- Forearm Action ---
   if (rightForeArm) {
     const qInitial = new Quaternion().copy(rightForeArm.quaternion);
-    const qExtend = new Quaternion().setFromEuler(new THREE.Euler(-0.5, 0, 0)); // Extend forearm during swing
+    const qExtend = new Quaternion().setFromEuler(new THREE.Euler(-0.5, 0, 0));
 
     const forearmTimes = [0, duration * 0.4, duration * 0.7, duration];
     tracks.push(
@@ -437,39 +608,37 @@ export function createAttackAnimation(
         forearmTimes,
         [
           ...qInitial.toArray(),
-          ...qInitial.toArray(), // Keep initial during wind up
-          ...qInitial.clone().multiply(qExtend).toArray(), // Extend during swing
-          ...qInitial.toArray(), // Return
+          ...qInitial.toArray(),
+          ...qInitial.clone().multiply(qExtend).toArray(),
+          ...qInitial.toArray(),
         ]
       )
     );
   }
 
-  // --- Spine Rotation ---
   if (spineBone) {
     const qInitial = new Quaternion().copy(spineBone.quaternion);
     const qRotate = new Quaternion().setFromAxisAngle(
       new Vector3(0, 1, 0),
       -0.3
-    ); // Rotate body slightly for wind up
+    );
     const qRotateSwing = new Quaternion().setFromAxisAngle(
       new Vector3(0, 1, 0),
       0.2
-    ); // Rotate during swing
+    );
 
     const spineTimes = [0, duration * 0.3, duration * 0.6, duration];
     tracks.push(
       new QuaternionKeyframeTrack(`${spineBone.name}.quaternion`, spineTimes, [
         ...qInitial.toArray(),
-        ...qInitial.clone().multiply(qRotate).toArray(), // Rotate back
-        ...qInitial.clone().multiply(qRotateSwing).toArray(), // Rotate forward
-        ...qInitial.toArray(), // Return
+        ...qInitial.clone().multiply(qRotate).toArray(),
+        ...qInitial.clone().multiply(qRotateSwing).toArray(),
+        ...qInitial.toArray(),
       ])
     );
   }
 
   if (tracks.length === 0) {
-    // Fallback: No bones found, create an empty attack animation
     const dummyTimes = [0, duration];
     const dummyValues = [0, 0];
     tracks.push(
@@ -478,7 +647,6 @@ export function createAttackAnimation(
   }
 
   const clip = new AnimationClip("Attack_Generated", duration, tracks);
-  // clip.loop = THREE.LoopOnce; // Set loop mode if needed (handled in Character class now)
   return clip;
 }
 
@@ -486,50 +654,48 @@ export function createGatherAnimation(
   skeletonRoot: Object3D,
   duration: number = 1.2
 ): AnimationClip {
-  const spineBone = findBone(skeletonRoot, "Spine"); // Bend down
-  const rightArm = findBone(skeletonRoot, "RightArm"); // Reach
+  const spineBone = findBone(skeletonRoot, "Spine");
+  const rightArm = findBone(skeletonRoot, "RightArm");
   const rightForeArm = findBone(skeletonRoot, "RightForeArm");
 
   const tracks: KeyframeTrack[] = [];
 
-  // --- Spine Bend ---
   if (spineBone) {
     const qInitial = new Quaternion().copy(spineBone.quaternion);
     const qBend = new Quaternion().setFromEuler(
       new THREE.Euler(Math.PI / 4, 0, 0)
-    ); // Bend forward
+    );
 
     const spineTimes = [0, duration * 0.4, duration * 0.7, duration];
     tracks.push(
       new QuaternionKeyframeTrack(`${spineBone.name}.quaternion`, spineTimes, [
         ...qInitial.toArray(),
-        ...qInitial.clone().multiply(qBend).toArray(), // Bend down
-        ...qInitial.clone().multiply(qBend).toArray(), // Hold bend
-        ...qInitial.toArray(), // Straighten up
+        ...qInitial.clone().multiply(qBend).toArray(),
+        ...qInitial.clone().multiply(qBend).toArray(),
+        ...qInitial.toArray(),
       ])
     );
   }
 
-  // --- Arm Reach ---
   if (rightArm) {
     const qInitial = new Quaternion().copy(rightArm.quaternion);
     const qReach = new Quaternion().setFromEuler(
       new THREE.Euler(Math.PI / 3, 0, 0)
-    ); // Reach arm forward/down
+    );
 
     const armTimes = [0, duration * 0.4, duration * 0.7, duration];
     tracks.push(
       new QuaternionKeyframeTrack(`${rightArm.name}.quaternion`, armTimes, [
         ...qInitial.toArray(),
-        ...qInitial.clone().multiply(qReach).toArray(), // Reach
-        ...qInitial.clone().multiply(qReach).toArray(), // Hold reach
-        ...qInitial.toArray(), // Return
+        ...qInitial.clone().multiply(qReach).toArray(),
+        ...qInitial.clone().multiply(qReach).toArray(),
+        ...qInitial.toArray(),
       ])
     );
   }
   if (rightForeArm) {
     const qInitial = new Quaternion().copy(rightForeArm.quaternion);
-    const qExtend = new Quaternion().setFromEuler(new THREE.Euler(-0.3, 0, 0)); // Slight forearm extension
+    const qExtend = new Quaternion().setFromEuler(new THREE.Euler(-0.3, 0, 0));
 
     const forearmTimes = [0, duration * 0.4, duration * 0.7, duration];
     tracks.push(
@@ -547,7 +713,6 @@ export function createGatherAnimation(
   }
 
   if (tracks.length === 0) {
-    // Fallback: No bones found, create an empty gather animation
     const dummyTimes = [0, duration];
     const dummyValues = [0, 0];
     tracks.push(
@@ -556,7 +721,6 @@ export function createGatherAnimation(
   }
 
   const clip = new AnimationClip("Gather_Generated", duration, tracks);
-  // clip.loop = THREE.LoopOnce; // Set loop mode if needed
   return clip;
 }
 
@@ -644,10 +808,10 @@ export function createDeadAnimation(
   relaxLimb(rightUpLeg, new THREE.Euler(0.1, 0, 0));
   relaxLimb(leftLeg, new THREE.Euler(0.2, 0, 0));
   relaxLimb(rightLeg, new THREE.Euler(0.2, 0, 0));
-  relaxLimb(leftArm, new THREE.Euler(0.1, 0, 0.4)); // Splay slightly out
-  relaxLimb(rightArm, new THREE.Euler(0.1, 0, -0.4)); // Splay slightly out
-  relaxLimb(leftForeArm, new THREE.Euler(0.3, 0, 0)); // Slight bend
-  relaxLimb(rightForeArm, new THREE.Euler(0.3, 0, 0)); // Slight bend
+  relaxLimb(leftArm, new THREE.Euler(0.1, 0, 0.4));
+  relaxLimb(rightArm, new THREE.Euler(0.1, 0, -0.4));
+  relaxLimb(leftForeArm, new THREE.Euler(0.3, 0, 0));
+  relaxLimb(rightForeArm, new THREE.Euler(0.3, 0, 0));
 
   if (tracks.length === 0) {
     const dummyTimes = [0, duration];
