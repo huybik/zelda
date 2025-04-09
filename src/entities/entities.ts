@@ -408,7 +408,6 @@ export class Character extends Entity {
 
     this.mixer.addEventListener("finished", (e) => {
       if (e.action === this.attackAction) {
-        if (this.actionType === "attack") this.performAttack();
         this.isPerformingAction = false;
         this.actionType = "none";
         const isMoving =
@@ -580,6 +579,9 @@ export class Character extends Entity {
       if (this.idleAction?.isRunning()) this.idleAction.stop();
       if (this.walkAction?.isRunning()) this.walkAction.stop();
       if (this.runAction?.isRunning()) this.runAction.stop();
+      if (actionType === "attack") {
+        this.performAttack();
+      }
     } else if (actionType === "gather" && this.attackAction) {
       this.actionType = actionType;
     }
