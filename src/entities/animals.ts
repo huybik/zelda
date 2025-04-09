@@ -56,7 +56,7 @@ export class Animal extends Entity {
     position: Vector3,
     name: string,
     animalType: string,
-    model: Group,
+    model: Group, // This is the mixer root
     animations: AnimationClip[] // Existing animations from GLTF if any
   ) {
     super(scene, position, name);
@@ -83,43 +83,39 @@ export class Animal extends Entity {
       attack: false,
     };
 
-    // Find skeleton root (similar to Character)
-    let skinnedMesh: SkinnedMesh | null = null;
-    model.traverse((child) => {
-      if (child instanceof SkinnedMesh) {
-        skinnedMesh = child;
-      }
-      if (child instanceof Object3D && child.children.length > 0) {
-        // Check if this object has bones as direct children
-        const hasBoneChild = child.children.some((c) => c.type === "Bone");
-        if (hasBoneChild && !this.skeletonRoot) {
-          // A common pattern is an Object3D containing the bones
-          this.skeletonRoot = child;
-        }
-      }
-      // Fallback: find the highest bone if no clear container found
-      if (
-        child.type === "Bone" &&
-        !this.skeletonRoot &&
-        (!child.parent ||
-          child.parent === model ||
-          child.parent.type === "Scene")
-      ) {
-        this.skeletonRoot = child; // Might be the root bone itself
-      }
-    });
-
-    // If still not found, try finding the skeleton root provided by procedural models
-    if (!this.skeletonRoot && model.userData.skeletonRoot) {
+    // Find skeleton root (primarily for reference, maybe not needed for generators)
+    if (model.userData.skeletonRoot) {
       this.skeletonRoot = model.userData.skeletonRoot;
-    }
-
-    // If skeletonRoot wasn't found, assume the model itself is the root
-    if (!this.skeletonRoot) {
-      this.skeletonRoot = model;
-      console.warn(
-        `Could not reliably find skeleton root for ${name}, using model root. Procedural animations might be incorrect.`
-      );
+    } else {
+      // Fallback: try finding it manually (less reliable for procedural)
+      model.traverse((child) => {
+        if (child.type === "Bone" && !this.skeletonRoot) {
+          let current: Object3D = child;
+          while (
+            current.parent &&
+            !(current.parent instanceof Scene) &&
+            !(current.parent === model)
+          ) {
+            if (
+              current.parent instanceof Object3D &&
+              current.parent.type !== "Scene"
+            ) {
+              current = current.parent;
+            } else {
+              break;
+            }
+          }
+          if (current !== child) {
+            this.skeletonRoot = current;
+          }
+        }
+      });
+      if (!this.skeletonRoot) {
+        this.skeletonRoot = model; // Less ideal fallback
+        console.warn(
+          `Could not reliably find skeleton root for ${name}, using model root. Procedural animations might be incorrect.`
+        );
+      }
     }
 
     // --- Model Scaling and Positioning ---
@@ -127,13 +123,22 @@ export class Animal extends Entity {
     const approxHeight = animalType === "Wolf" ? 0.8 : 1.2;
     const approxRadius = animalType === "Wolf" ? 0.3 : 0.4;
 
+    // Calculate bounding box *after* adding the skeleton/meshes to the group in animalModels.ts
     const box = new Box3().setFromObject(model);
-    const currentHeight = box.max.y - box.min.y;
+    const size = box.getSize(new Vector3());
+    const currentHeight = size.y;
     const scale =
       approxHeight / (currentHeight > 0.1 ? currentHeight : approxHeight);
+
+    // Apply scale to the main group
     model.scale.set(scale, scale, scale);
-    model.position.y = -box.min.y * scale; // Adjust based on scaled bounding box
-    this.mesh!.add(model);
+
+    // Adjust position based on the *new* scaled bounding box minimum y
+    // We need to recompute the box after scaling
+    const scaledBox = new Box3().setFromObject(model);
+    model.position.y = -scaledBox.min.y; // Adjust to place bottom at origin
+
+    this.mesh!.add(model); // Add the scaled and positioned model group
 
     // Enable shadow casting
     model.traverse((child) => {
@@ -144,13 +149,13 @@ export class Animal extends Entity {
     });
 
     // --- Animation Setup ---
-    this.mixer = new AnimationMixer(model);
+    this.mixer = new AnimationMixer(model); // Mixer targets the main model group
 
+    // Generator function now expects the mixer root (model group)
     const getOrCreateAnimalAnimation = (
       nameIdentifier: string,
-      generator: (root: Object3D) => AnimationClip
+      generator: (mixerRoot: Object3D) => AnimationClip // Changed parameter name/meaning
     ): AnimationClip | null => {
-      // Prioritize existing animations if they match
       const foundAnim = animations.find((anim) =>
         anim.name.toLowerCase().includes(nameIdentifier)
       );
@@ -159,12 +164,14 @@ export class Animal extends Entity {
           `Using existing "${nameIdentifier}" animation for ${this.name}.`
         );
         return foundAnim;
-      } else if (this.skeletonRoot) {
+      } else {
+        // Always try to generate if not found
         console.log(
           `Generating fallback "${nameIdentifier}" animation for ${this.name}.`
         );
         try {
-          const generatedAnim = generator(this.skeletonRoot);
+          // Pass the mixer root (the main model group) to the generator
+          const generatedAnim = generator(model); // <--- Pass model (Group) here
           return generatedAnim;
         } catch (error) {
           console.error(
@@ -174,12 +181,14 @@ export class Animal extends Entity {
           return null;
         }
       }
-      console.warn(
-        `Could not find or generate "${nameIdentifier}" animation for ${this.name}.`
-      );
-      return null;
+      // Removed the check for this.skeletonRoot here, generation relies on mixerRoot
+      // console.warn(
+      //   `Could not find or generate "${nameIdentifier}" animation for ${this.name}.`
+      // );
+      // return null; // Redundant now
     };
 
+    // Call generators (they now receive the 'model' group)
     const idleAnim = getOrCreateAnimalAnimation(
       "idle",
       createAnimalIdleAnimation
@@ -218,7 +227,7 @@ export class Animal extends Entity {
     // Use approximate size for bounding box
     this.userData.height = approxHeight;
     this.userData.radius = approxRadius;
-    this.updateBoundingBox();
+    this.updateBoundingBox(); // Update box after scaling and adding model
 
     this.mixer.addEventListener("finished", (e) => {
       if (e.action === this.attackAction) {

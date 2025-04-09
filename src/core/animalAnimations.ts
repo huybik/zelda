@@ -1,4 +1,4 @@
-// File: src/core/animalAnimations.ts
+// File: /src/core/animalAnimations.ts
 import * as THREE from "three";
 import {
   AnimationClip,
@@ -15,12 +15,13 @@ import { findBone } from "./animations"; // Reuse the bone finding utility
 
 // --- Quadruped Idle ---
 export function createAnimalIdleAnimation(
-  skeletonRoot: Object3D,
+  mixerRoot: Object3D, // Changed parameter name
   duration: number = 6
 ): AnimationClip {
-  const spineBase = findBone(skeletonRoot, "SpineBase");
-  const head = findBone(skeletonRoot, "Head");
-  const tailBase = findBone(skeletonRoot, "TailBase");
+  // Find bones by searching within the mixerRoot
+  const spineBase = findBone(mixerRoot, "SpineBase");
+  const head = findBone(mixerRoot, "Head");
+  const tailBase = findBone(mixerRoot, "TailBase");
   const tracks: KeyframeTrack[] = [];
 
   // Subtle spine bend/sway
@@ -100,30 +101,27 @@ export function createAnimalIdleAnimation(
 
 // --- Quadruped Walk ---
 export function createAnimalWalkAnimation(
-  skeletonRoot: Object3D,
+  mixerRoot: Object3D, // Changed parameter name
   duration: number = 1.2 // Slower than human walk
 ): AnimationClip {
-  // Find bones - adjust names if your skeleton uses different conventions
-  const frontLeftUpLeg = findBone(skeletonRoot, "FrontLeftUpLeg");
-  const frontRightUpLeg = findBone(skeletonRoot, "FrontRightUpLeg");
-  const hindLeftUpLeg = findBone(skeletonRoot, "HindLeftUpLeg");
-  const hindRightUpLeg = findBone(skeletonRoot, "HindRightUpLeg");
-  const frontLeftLowLeg = findBone(skeletonRoot, "FrontLeftLowLeg");
-  const frontRightLowLeg = findBone(skeletonRoot, "FrontRightLowLeg");
-  const hindLeftLowLeg = findBone(skeletonRoot, "HindLeftLowLeg");
-  const hindRightLowLeg = findBone(skeletonRoot, "HindRightLowLeg");
-  const spineBase = findBone(skeletonRoot, "SpineBase");
+  // Find bones by searching within the mixerRoot
+  const frontLeftUpLeg = findBone(mixerRoot, "FrontLeftUpLeg");
+  const frontRightUpLeg = findBone(mixerRoot, "FrontRightUpLeg");
+  const hindLeftUpLeg = findBone(mixerRoot, "HindLeftUpLeg");
+  const hindRightUpLeg = findBone(mixerRoot, "HindRightUpLeg");
+  const frontLeftLowLeg = findBone(mixerRoot, "FrontLeftLowLeg");
+  const frontRightLowLeg = findBone(mixerRoot, "FrontRightLowLeg");
+  const hindLeftLowLeg = findBone(mixerRoot, "HindLeftLowLeg");
+  const hindRightLowLeg = findBone(mixerRoot, "HindRightLowLeg");
+  const spineBase = findBone(mixerRoot, "SpineBase");
 
   const tracks: KeyframeTrack[] = [];
-  const upLegSwingAngle = 0.4;
-  const lowLegBendAngle = 0.6; // Knee/Elbow bend
+  const upLegSwingAngle = 0.5; // Reduced swing angle
+  const lowLegBendAngle = 0.7; // Reduced bend angle
   const spineSwayAngle = 0.05;
 
   // Gait pattern (diagonal pairs): FL+HR move, then FR+HL move
   const times = [0, duration / 2, duration];
-  const timesShifted = [0, duration / 2, duration].map(
-    (t) => (t + duration / 2) % duration
-  ); // Offset by half duration
 
   const createLegTracks = (
     upLeg: Bone | null,
@@ -150,16 +148,16 @@ export function createAnimalWalkAnimation(
       bendAngle
     );
 
-    // Upper Leg Swing
+    // Upper Leg Swing (Starts Forward, moves Backward)
     tracks.push(
       new QuaternionKeyframeTrack(`${upLeg.name}.quaternion`, times, [
-        ...qUpInitial.clone().multiply(qUpForward).toArray(),
-        ...qUpInitial.clone().multiply(qUpBackward).toArray(),
-        ...qUpInitial.clone().multiply(qUpForward).toArray(),
+        ...qUpInitial.clone().multiply(qUpForward).toArray(), // Start forward
+        ...qUpInitial.clone().multiply(qUpBackward).toArray(), // Midpoint: backward
+        ...qUpInitial.clone().multiply(qUpForward).toArray(), // End: forward (loop)
       ])
     );
 
-    // Lower Leg Bend (bends when leg is moving forward)
+    // Lower Leg Bend (bends most when leg is moving forward/up)
     const kneeTimes = [
       0,
       duration / 4,
@@ -169,11 +167,11 @@ export function createAnimalWalkAnimation(
     ];
     tracks.push(
       new QuaternionKeyframeTrack(`${lowLeg.name}.quaternion`, kneeTimes, [
-        ...qLowInitial.toArray(), // Start extended backward
-        ...qLowInitial.clone().multiply(qLowBent).toArray(), // Bend as it comes forward
-        ...qLowInitial.toArray(), // Extend forward
-        ...qLowInitial.toArray(), // Stay extended backward
-        ...qLowInitial.toArray(), // Back to start
+        ...qLowInitial.clone().multiply(qLowBent).toArray(), // 0: Start bent (leg forward)
+        ...qLowInitial.toArray(), // duration / 4: Extending (moving back)
+        ...qLowInitial.toArray(), // duration / 2: Extended (leg back)
+        ...qLowInitial.toArray(), // 3 * duration / 4: Still extended (moving forward)
+        ...qLowInitial.clone().multiply(qLowBent).toArray(), // duration: End bent (leg forward, loop)
       ])
     );
   };
@@ -195,7 +193,6 @@ export function createAnimalWalkAnimation(
   );
 
   // Front Right & Hind Left (move together, offset phase)
-  // Need to adjust the keyframe values for the offset phase
   const createOffsetLegTracks = (
     upLeg: Bone | null,
     lowLeg: Bone | null,
@@ -221,16 +218,16 @@ export function createAnimalWalkAnimation(
       bendAngle
     );
 
-    // Upper Leg Swing (starts backward)
+    // Upper Leg Swing (Starts Backward, moves Forward)
     tracks.push(
       new QuaternionKeyframeTrack(`${upLeg.name}.quaternion`, times, [
-        ...qUpInitial.clone().multiply(qUpBackward).toArray(),
-        ...qUpInitial.clone().multiply(qUpForward).toArray(),
-        ...qUpInitial.clone().multiply(qUpBackward).toArray(),
+        ...qUpInitial.clone().multiply(qUpBackward).toArray(), // Start backward
+        ...qUpInitial.clone().multiply(qUpForward).toArray(), // Midpoint: forward
+        ...qUpInitial.clone().multiply(qUpBackward).toArray(), // End: backward (loop)
       ])
     );
 
-    // Lower Leg Bend (bends when leg is moving forward - phase shifted)
+    // Lower Leg Bend (bends most when leg is moving forward/up - phase shifted)
     const kneeTimes = [
       0,
       duration / 4,
@@ -240,11 +237,11 @@ export function createAnimalWalkAnimation(
     ];
     tracks.push(
       new QuaternionKeyframeTrack(`${lowLeg.name}.quaternion`, kneeTimes, [
-        ...qLowInitial.toArray(), // Start extended forward
-        ...qLowInitial.toArray(), // Stay extended forward
-        ...qLowInitial.toArray(), // Start bending backward
-        ...qLowInitial.clone().multiply(qLowBent).toArray(), // Bend as it comes forward (end of cycle)
-        ...qLowInitial.toArray(), // Back to start (extended forward)
+        ...qLowInitial.toArray(), // 0: Start extended (leg back)
+        ...qLowInitial.toArray(), // duration / 4: Still extended (moving forward)
+        ...qLowInitial.clone().multiply(qLowBent).toArray(), // duration / 2: Bent (leg forward)
+        ...qLowInitial.toArray(), // 3 * duration / 4: Extending (moving back)
+        ...qLowInitial.toArray(), // duration: End extended (leg back, loop)
       ])
     );
   };
@@ -275,11 +272,12 @@ export function createAnimalWalkAnimation(
       new Vector3(0, 0, 1),
       -spineSwayAngle
     );
+    // Sway should align with leg movement (e.g., sway left when right legs are forward)
     tracks.push(
       new QuaternionKeyframeTrack(`${spineBase.name}.quaternion`, times, [
-        ...qInitial.clone().multiply(qSwayLeft).toArray(),
-        ...qInitial.clone().multiply(qSwayRight).toArray(),
-        ...qInitial.clone().multiply(qSwayLeft).toArray(),
+        ...qInitial.clone().multiply(qSwayRight).toArray(), // Start sway right (FR/HL forward)
+        ...qInitial.clone().multiply(qSwayLeft).toArray(), // Midpoint sway left (FL/HR forward)
+        ...qInitial.clone().multiply(qSwayRight).toArray(), // End sway right (loop)
       ])
     );
   }
@@ -297,24 +295,24 @@ export function createAnimalWalkAnimation(
 
 // --- Quadruped Run ---
 export function createAnimalRunAnimation(
-  skeletonRoot: Object3D,
+  mixerRoot: Object3D, // Changed parameter name
   duration: number = 0.7 // Faster than walk
 ): AnimationClip {
-  // Find bones
-  const frontLeftUpLeg = findBone(skeletonRoot, "FrontLeftUpLeg");
-  const frontRightUpLeg = findBone(skeletonRoot, "FrontRightUpLeg");
-  const hindLeftUpLeg = findBone(skeletonRoot, "HindLeftUpLeg");
-  const hindRightUpLeg = findBone(skeletonRoot, "HindRightUpLeg");
-  const frontLeftLowLeg = findBone(skeletonRoot, "FrontLeftLowLeg");
-  const frontRightLowLeg = findBone(skeletonRoot, "FrontRightLowLeg");
-  const hindLeftLowLeg = findBone(skeletonRoot, "HindLeftLowLeg");
-  const hindRightLowLeg = findBone(skeletonRoot, "HindRightLowLeg");
-  const spineBase = findBone(skeletonRoot, "SpineBase");
-  const spineMid = findBone(skeletonRoot, "SpineMid");
+  // Find bones by searching within the mixerRoot
+  const frontLeftUpLeg = findBone(mixerRoot, "FrontLeftUpLeg");
+  const frontRightUpLeg = findBone(mixerRoot, "FrontRightUpLeg");
+  const hindLeftUpLeg = findBone(mixerRoot, "HindLeftUpLeg");
+  const hindRightUpLeg = findBone(mixerRoot, "HindRightUpLeg");
+  const frontLeftLowLeg = findBone(mixerRoot, "FrontLeftLowLeg");
+  const frontRightLowLeg = findBone(mixerRoot, "FrontRightLowLeg");
+  const hindLeftLowLeg = findBone(mixerRoot, "HindLeftLowLeg");
+  const hindRightLowLeg = findBone(mixerRoot, "HindRightLowLeg");
+  const spineBase = findBone(mixerRoot, "SpineBase");
+  const spineMid = findBone(mixerRoot, "SpineMid");
 
   const tracks: KeyframeTrack[] = [];
-  const upLegSwingAngle = 0.9; // Larger swing
-  const lowLegBendAngle = 1.1; // More bend
+  const upLegSwingAngle = 0.7; // Reduced swing angle
+  const lowLegBendAngle = 0.9; // Reduced bend angle
   const spineBendAngle = 0.2; // More spine flex
 
   // Gait pattern (Gallop-like): Hind legs push, front legs reach, suspension, front legs land, hind legs swing under
@@ -454,12 +452,13 @@ export function createAnimalRunAnimation(
 
 // --- Quadruped Attack (Example: Wolf Bite) ---
 export function createAnimalAttackAnimation(
-  skeletonRoot: Object3D,
+  mixerRoot: Object3D, // Changed parameter name
   duration: number = 0.8
 ): AnimationClip {
-  const head = findBone(skeletonRoot, "Head");
-  const neck = findBone(skeletonRoot, "Neck");
-  const spineChest = findBone(skeletonRoot, "SpineChest"); // Upper spine for lunge
+  // Find bones by searching within the mixerRoot
+  const head = findBone(mixerRoot, "Head");
+  const neck = findBone(mixerRoot, "Neck");
+  const spineChest = findBone(mixerRoot, "SpineChest"); // Upper spine for lunge
 
   const tracks: KeyframeTrack[] = [];
 
@@ -530,17 +529,18 @@ export function createAnimalAttackAnimation(
 
 // --- Quadruped Die ---
 export function createAnimalDieAnimation(
-  skeletonRoot: Object3D,
+  mixerRoot: Object3D, // Changed parameter name
   duration: number = 1.8
 ): AnimationClip {
-  const hips = findBone(skeletonRoot, "Hips"); // Root bone
-  const spineBase = findBone(skeletonRoot, "SpineBase");
-  const spineMid = findBone(skeletonRoot, "SpineMid");
-  const neck = findBone(skeletonRoot, "Neck");
-  const head = findBone(skeletonRoot, "Head");
+  // Find bones by searching within the mixerRoot
+  const hips = findBone(mixerRoot, "Hips"); // Root bone
+  const spineBase = findBone(mixerRoot, "SpineBase");
+  const spineMid = findBone(mixerRoot, "SpineMid");
+  const neck = findBone(mixerRoot, "Neck");
+  const head = findBone(mixerRoot, "Head");
   // Find representative leg bones for collapsing
-  const frontLeftUpLeg = findBone(skeletonRoot, "FrontLeftUpLeg");
-  const hindRightUpLeg = findBone(skeletonRoot, "HindRightUpLeg");
+  const frontLeftUpLeg = findBone(mixerRoot, "FrontLeftUpLeg");
+  const hindRightUpLeg = findBone(mixerRoot, "HindRightUpLeg");
 
   const tracks: KeyframeTrack[] = [];
   const fallEndTime = duration * 0.8;

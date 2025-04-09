@@ -10,6 +10,7 @@ import {
   CanvasTexture,
   Sprite,
   SpriteMaterial,
+  Raycaster, // Import Raycaster
 } from "three";
 import {
   EntityUserData,
@@ -17,7 +18,7 @@ import {
   getNextEntityId,
   getTerrainHeight,
 } from "../core/utils";
-import { Raycaster } from "three";
+// Removed Raycaster import from here as it's imported above
 import { Game } from "../main";
 import { AIController } from "../ai/npcAI";
 import { AnimalAIController } from "../ai/animalAI"; // Import Animal AI
@@ -45,7 +46,7 @@ export class Entity {
   nameSprite: Sprite | null = null;
   // Use a union type for the AI controller
   aiController: AIController | AnimalAIController | null = null;
-  rayCaster: Raycaster | null = null;
+  rayCaster: Raycaster | null = null; // Raycaster can be null initially
   deathTimestamp: number | null = null;
 
   constructor(scene: Scene, position: Vector3, name: string = "Entity") {
@@ -115,7 +116,10 @@ export class Entity {
     // Only init for NPCs with AIController, not animals
     if (!(this.aiController instanceof AIController)) return;
 
-    this.rayCaster = new Raycaster();
+    // Initialize rayCaster here if not already done (e.g., by Character)
+    if (!this.rayCaster) {
+      this.rayCaster = new Raycaster();
+    }
     if (this.game?.camera) {
       this.rayCaster.camera = this.game.camera;
     }

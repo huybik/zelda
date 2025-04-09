@@ -175,108 +175,81 @@ function createQuadrupedSkeleton(): { root: Bone; bones: Bone[] } {
   return { root, bones: allBones };
 }
 
-function createSkinnedMesh(
-  geometry: BufferGeometry,
-  material: THREE.Material,
-  skeleton: Skeleton
-): SkinnedMesh {
-  const mesh = new SkinnedMesh(geometry, material);
-  mesh.add(skeleton.bones[0]); // Add the root bone
-  mesh.bind(skeleton);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true; // Animals might receive shadows
-
-  // Simple bounding box calculation (adjust if needed)
-  mesh.geometry.computeBoundingBox();
-
-  return mesh;
-}
-
 // --- Deer Model ---
 export function createDeerModel(): Group {
   const group = new Group();
   group.name = "Deer";
 
   const { root: skeletonRoot, bones } = createQuadrupedSkeleton();
-  const skeleton = new Skeleton(bones);
+  const skeleton = new Skeleton(bones); // Skeleton is created but not used for SkinnedMesh
 
-  // Basic Deer Geometry (using simple shapes)
+  // --- Create Meshes and Attach to Bones ---
   const bodyGeo = new BoxGeometry(0.6, 0.7, 1.2); // width, height, length
+  const bodyMesh = new Mesh(bodyGeo, deerFurMaterial);
+  bodyMesh.position.y = 0.25; // Adjust position relative to bone origin
+  const spineMidBone = skeleton.getBoneByName("SpineMid");
+  if (spineMidBone) spineMidBone.add(bodyMesh);
+
   const neckGeo = new CylinderGeometry(0.15, 0.12, 0.5, 8);
+  const neckMesh = new Mesh(neckGeo, deerFurMaterial);
+  neckMesh.position.y = 0.2; // Half height + offset
+  const neckBone = skeleton.getBoneByName("Neck");
+  if (neckBone) neckBone.add(neckMesh);
+
   const headGeo = new BoxGeometry(0.3, 0.35, 0.4);
-  const legGeo = new CylinderGeometry(0.1, 0.08, 0.9, 6); // Combined leg geo for simplicity
-  const tailGeo = new CylinderGeometry(0.05, 0.02, 0.4, 4);
+  const headMesh = new Mesh(headGeo, deerFurMaterial);
+  headMesh.position.y = 0.15; // Adjust position relative to head bone origin
+  const headBone = skeleton.getBoneByName("Head");
+  if (headBone) headBone.add(headMesh);
+
   const noseGeo = new SphereGeometry(0.05, 6, 4);
+  const noseMesh = new Mesh(noseGeo, noseMaterial);
+  noseMesh.position.z = -0.2; // Forward from head center
+  noseMesh.position.y = -0.05;
+  headMesh.add(noseMesh); // Add to headMesh
+
   // Antlers (simple branching)
   const antlerBaseGeo = new CylinderGeometry(0.04, 0.03, 0.3, 5);
   const antlerBranchGeo = new CylinderGeometry(0.03, 0.02, 0.25, 5);
+  const antlerLBase = new Mesh(antlerBaseGeo, antlerMaterial);
+  antlerLBase.position.set(-0.1, 0.2, 0.1);
+  antlerLBase.rotation.z = Math.PI / 6;
+  antlerLBase.rotation.x = -Math.PI / 12;
+  headMesh.add(antlerLBase);
+  const antlerLBranch = new Mesh(antlerBranchGeo, antlerMaterial);
+  antlerLBranch.position.y = 0.15;
+  antlerLBranch.rotation.z = -Math.PI / 4;
+  antlerLBase.add(antlerLBranch);
 
-  // Combine geometries (placeholder - proper skinning needed)
-  // For procedural skinning, you'd calculate vertex weights based on bone proximity.
-  // This is complex. For now, we'll create a placeholder mesh.
-  // A real implementation would use tools like Blender or code complex skinning logic.
+  const antlerRBase = new Mesh(antlerBaseGeo, antlerMaterial);
+  antlerRBase.position.set(0.1, 0.2, 0.1);
+  antlerRBase.rotation.z = -Math.PI / 6;
+  antlerRBase.rotation.x = -Math.PI / 12;
+  headMesh.add(antlerRBase);
+  const antlerRBranch = new Mesh(antlerBranchGeo, antlerMaterial);
+  antlerRBranch.position.y = 0.15;
+  antlerRBranch.rotation.z = Math.PI / 4;
+  antlerRBase.add(antlerRBranch);
 
-  // Placeholder Geometry (Box representing the deer)
-  const placeholderGeo = new BoxGeometry(1, 1.5, 1.8); // Approximate overall size
-  const skinIndices: number[] = [];
-  const skinWeights: number[] = [];
-  const position = placeholderGeo.attributes.position;
+  // Add simple leg representations (optional, can look blocky)
+  const createLegMesh = (boneName: string, length: number, radius: number) => {
+    const legGeo = new CylinderGeometry(radius * 0.8, radius, length, 6);
+    const legMesh = new Mesh(legGeo, deerFurMaterial);
+    legMesh.position.y = length / 2; // Center the mesh along the bone
+    const bone = skeleton.getBoneByName(boneName);
+    if (bone) bone.add(legMesh);
+  };
+  createLegMesh("HindLeftUpLeg", 0.5, 0.1);
+  createLegMesh("HindLeftLowLeg", 0.4, 0.08);
+  createLegMesh("HindRightUpLeg", 0.5, 0.1);
+  createLegMesh("HindRightLowLeg", 0.4, 0.08);
+  createLegMesh("FrontLeftUpLeg", 0.5, 0.1);
+  createLegMesh("FrontLeftLowLeg", 0.4, 0.08);
+  createLegMesh("FrontRightUpLeg", 0.5, 0.1);
+  createLegMesh("FrontRightLowLeg", 0.4, 0.08);
 
-  // Very basic skinning: Assign all vertices to the root bone
-  for (let i = 0; i < position.count; i++) {
-    skinIndices.push(0, 0, 0, 0); // Bone index (0 = root)
-    skinWeights.push(1, 0, 0, 0); // Weight (1 = 100% influence)
-  }
-  placeholderGeo.setAttribute(
-    "skinIndex",
-    new Uint16BufferAttribute(skinIndices, 4)
-  );
-  placeholderGeo.setAttribute(
-    "skinWeight",
-    new Float32BufferAttribute(skinWeights, 4)
-  );
-
-  const skinnedMesh = createSkinnedMesh(
-    placeholderGeo,
-    deerFurMaterial,
-    skeleton
-  );
-  skinnedMesh.name = "DeerMesh";
-  group.add(skinnedMesh);
-
-  // Add simple visual elements (not skinned, just attached to bones for visual aid)
-  const headBone = skeleton.getBoneByName("Head");
-  if (headBone) {
-    const headMesh = new Mesh(headGeo, deerFurMaterial);
-    headMesh.position.y = 0.15; // Adjust position relative to head bone origin
-    headBone.add(headMesh);
-
-    const noseMesh = new Mesh(noseGeo, noseMaterial);
-    noseMesh.position.z = -0.2; // Forward from head center
-    noseMesh.position.y = -0.05;
-    headMesh.add(noseMesh); // Add to headMesh
-
-    // Antlers
-    const antlerLBase = new Mesh(antlerBaseGeo, antlerMaterial);
-    antlerLBase.position.set(-0.1, 0.2, 0.1);
-    antlerLBase.rotation.z = Math.PI / 6;
-    antlerLBase.rotation.x = -Math.PI / 12;
-    headMesh.add(antlerLBase);
-    const antlerLBranch = new Mesh(antlerBranchGeo, antlerMaterial);
-    antlerLBranch.position.y = 0.15;
-    antlerLBranch.rotation.z = -Math.PI / 4;
-    antlerLBase.add(antlerLBranch);
-
-    const antlerRBase = new Mesh(antlerBaseGeo, antlerMaterial);
-    antlerRBase.position.set(0.1, 0.2, 0.1);
-    antlerRBase.rotation.z = -Math.PI / 6;
-    antlerRBase.rotation.x = -Math.PI / 12;
-    headMesh.add(antlerRBase);
-    const antlerRBranch = new Mesh(antlerBranchGeo, antlerMaterial);
-    antlerRBranch.position.y = 0.15;
-    antlerRBranch.rotation.z = Math.PI / 4;
-    antlerRBase.add(antlerRBranch);
-  }
+  // Add the skeleton root to the group
+  group.add(skeletonRoot);
 
   group.userData = {
     isAnimal: true,
@@ -287,7 +260,6 @@ export function createDeerModel(): Group {
   };
 
   // Adjust initial pose slightly (optional)
-  const neckBone = skeleton.getBoneByName("Neck");
   if (neckBone) neckBone.rotation.x = -Math.PI / 12;
   const tailBaseBone = skeleton.getBoneByName("TailBase");
   if (tailBaseBone) tailBaseBone.rotation.x = Math.PI / 8;
@@ -303,66 +275,62 @@ export function createWolfModel(): Group {
   const { root: skeletonRoot, bones } = createQuadrupedSkeleton();
   const skeleton = new Skeleton(bones);
 
-  // Basic Wolf Geometry (using simple shapes) - slightly different proportions
+  // --- Create Meshes and Attach to Bones ---
   const bodyGeo = new BoxGeometry(0.5, 0.6, 1.1);
+  const bodyMesh = new Mesh(bodyGeo, wolfFurMaterial);
+  bodyMesh.position.y = 0.25;
+  const spineMidBone = skeleton.getBoneByName("SpineMid");
+  if (spineMidBone) spineMidBone.add(bodyMesh);
+
   const neckGeo = new CylinderGeometry(0.14, 0.11, 0.4, 8);
+  const neckMesh = new Mesh(neckGeo, wolfFurMaterial);
+  neckMesh.position.y = 0.2;
+  const neckBone = skeleton.getBoneByName("Neck");
+  if (neckBone) neckBone.add(neckMesh);
+
   const headGeo = new BoxGeometry(0.28, 0.3, 0.45); // Longer snout implied
-  const legGeo = new CylinderGeometry(0.09, 0.07, 0.8, 6);
-  const tailGeo = new CylinderGeometry(0.06, 0.03, 0.5, 4);
-  const noseGeo = new SphereGeometry(0.05, 6, 4);
-  const earGeo = new ConeGeometry(0.06, 0.15, 4);
-
-  // Placeholder Geometry (Box representing the wolf)
-  const placeholderGeo = new BoxGeometry(0.8, 1.3, 1.6); // Approximate overall size
-  const skinIndices: number[] = [];
-  const skinWeights: number[] = [];
-  const position = placeholderGeo.attributes.position;
-
-  // Very basic skinning: Assign all vertices to the root bone
-  for (let i = 0; i < position.count; i++) {
-    skinIndices.push(0, 0, 0, 0); // Bone index (0 = root)
-    skinWeights.push(1, 0, 0, 0); // Weight (1 = 100% influence)
-  }
-  placeholderGeo.setAttribute(
-    "skinIndex",
-    new Uint16BufferAttribute(skinIndices, 4)
-  );
-  placeholderGeo.setAttribute(
-    "skinWeight",
-    new Float32BufferAttribute(skinWeights, 4)
-  );
-
-  const skinnedMesh = createSkinnedMesh(
-    placeholderGeo,
-    wolfFurMaterial,
-    skeleton
-  );
-  skinnedMesh.name = "WolfMesh";
-  group.add(skinnedMesh);
-
-  // Add simple visual elements (not skinned)
+  const headMesh = new Mesh(headGeo, wolfFurMaterial);
+  headMesh.position.y = 0.1; // Adjust position relative to head bone origin
   const headBone = skeleton.getBoneByName("Head");
-  if (headBone) {
-    const headMesh = new Mesh(headGeo, wolfFurMaterial);
-    headMesh.position.y = 0.1; // Adjust position relative to head bone origin
-    headBone.add(headMesh);
+  if (headBone) headBone.add(headMesh);
 
-    const noseMesh = new Mesh(noseGeo, noseMaterial);
-    noseMesh.position.z = -0.22; // Further forward for snout
-    noseMesh.position.y = -0.05;
-    headMesh.add(noseMesh);
+  const noseGeo = new SphereGeometry(0.05, 6, 4);
+  const noseMesh = new Mesh(noseGeo, noseMaterial);
+  noseMesh.position.z = -0.22; // Further forward for snout
+  noseMesh.position.y = -0.05;
+  headMesh.add(noseMesh);
 
-    // Ears
-    const earL = new Mesh(earGeo, wolfFurMaterial);
-    earL.position.set(-0.08, 0.18, 0.05);
-    earL.rotation.x = -Math.PI / 8;
-    headMesh.add(earL);
+  // Ears
+  const earGeo = new ConeGeometry(0.06, 0.15, 4);
+  const earL = new Mesh(earGeo, wolfFurMaterial);
+  earL.position.set(-0.08, 0.18, 0.05);
+  earL.rotation.x = -Math.PI / 8;
+  headMesh.add(earL);
 
-    const earR = new Mesh(earGeo, wolfFurMaterial);
-    earR.position.set(0.08, 0.18, 0.05);
-    earR.rotation.x = -Math.PI / 8;
-    headMesh.add(earR);
-  }
+  const earR = new Mesh(earGeo, wolfFurMaterial);
+  earR.position.set(0.08, 0.18, 0.05);
+  earR.rotation.x = -Math.PI / 8;
+  headMesh.add(earR);
+
+  // Add simple leg representations
+  const createLegMesh = (boneName: string, length: number, radius: number) => {
+    const legGeo = new CylinderGeometry(radius * 0.8, radius, length, 6);
+    const legMesh = new Mesh(legGeo, wolfFurMaterial);
+    legMesh.position.y = length / 2;
+    const bone = skeleton.getBoneByName(boneName);
+    if (bone) bone.add(legMesh);
+  };
+  createLegMesh("HindLeftUpLeg", 0.5, 0.09);
+  createLegMesh("HindLeftLowLeg", 0.4, 0.07);
+  createLegMesh("HindRightUpLeg", 0.5, 0.09);
+  createLegMesh("HindRightLowLeg", 0.4, 0.07);
+  createLegMesh("FrontLeftUpLeg", 0.5, 0.09);
+  createLegMesh("FrontLeftLowLeg", 0.4, 0.07);
+  createLegMesh("FrontRightUpLeg", 0.5, 0.09);
+  createLegMesh("FrontRightLowLeg", 0.4, 0.07);
+
+  // Add the skeleton root to the group
+  group.add(skeletonRoot);
 
   group.userData = {
     isAnimal: true,
@@ -374,7 +342,6 @@ export function createWolfModel(): Group {
   };
 
   // Adjust initial pose slightly (optional) - more alert/aggressive
-  const neckBone = skeleton.getBoneByName("Neck");
   if (neckBone) neckBone.rotation.x = -Math.PI / 8;
   const tailBaseBone = skeleton.getBoneByName("TailBase");
   if (tailBaseBone) tailBaseBone.rotation.x = -Math.PI / 16; // Tail less raised than deer

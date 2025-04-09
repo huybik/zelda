@@ -14,6 +14,7 @@ import {
   Bone,
   SkinnedMesh,
   Object3D,
+  Raycaster, // Import Raycaster
 } from "three";
 import {
   EventLog,
@@ -102,6 +103,7 @@ export class Character extends Entity {
     };
     this.inventory = inventory;
     this.eventLog = new EventLog(50);
+    this.rayCaster = new Raycaster(); // Initialize Raycaster here
 
     // Find the actual mesh with bones for animation
     let skinnedMesh: SkinnedMesh | null = null;
@@ -304,23 +306,33 @@ export class Character extends Entity {
       .clone()
       .add(new Vector3(0, CHARACTER_HEIGHT / 2, 0));
     const rayDirection = this.mesh.getWorldDirection(new Vector3());
-    this.rayCaster!.set(rayOrigin, rayDirection);
+
+    // Ensure rayCaster is initialized
+    if (!this.rayCaster) {
+      console.error("Raycaster not initialized for attack!");
+      return;
+    }
+    this.rayCaster.set(rayOrigin, rayDirection);
 
     const potentialTargets = this.game.entities.filter(
-      (entity): entity is Character =>
-        entity instanceof Character &&
+      (
+        entity
+      ): entity is Entity => // Check against Entity base class
+        entity instanceof Entity && // Ensure it's an Entity
         entity !== this &&
         !entity.isDead &&
         entity.mesh !== null
     );
 
-    let closestTarget: Character | null = null;
+    let closestTarget: Entity | null = null; // Target can be Character or Animal
     let closestDistance = Infinity;
     let closestPoint: Vector3 | null = null;
 
     for (const target of potentialTargets) {
       const box = target.boundingBox;
-      const intersectionPoint = this.rayCaster?.ray.intersectBox(
+      if (!box || box.isEmpty()) continue; // Skip targets without valid bounding boxes
+
+      const intersectionPoint = this.rayCaster.ray.intersectBox(
         box,
         new Vector3()
       );
