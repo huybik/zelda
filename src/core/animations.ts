@@ -117,7 +117,10 @@ function getBoneCategoryKey(boneName: string): string | null {
   return categoryNameMapping[lowerName] || null;
 }
 
-function findBone(skeletonRoot: Object3D, boneName: string): Bone | null {
+export function findBone(
+  skeletonRoot: Object3D,
+  boneName: string
+): Bone | null {
   const normalizedTarget = boneName.toLowerCase();
   let bestMatch: Bone | null = null;
   let bestMatchLevel = -1; // -1: No match, 0: Includes/Fallback, 1: Related Regex, 2: Primary Regex, 3: Exact
