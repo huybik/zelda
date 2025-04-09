@@ -71,8 +71,8 @@ export class Animal extends Entity {
     this.health = this.maxHealth;
 
     // Speeds based on type (example)
-    this.walkSpeed = animalType === "Wolf" ? 3.5 : 3.0;
-    this.runSpeed = animalType === "Wolf" ? 7.0 : 6.0;
+    this.walkSpeed = animalType === "Wolf" ? 1.5 : 2.0;
+    this.runSpeed = animalType === "Wolf" ? 3.0 : 4.0;
 
     this.moveState = {
       forward: 0,
@@ -120,8 +120,10 @@ export class Animal extends Entity {
 
     // --- Model Scaling and Positioning ---
     // Use approximate animal size, adjust as needed
-    const approxHeight = animalType === "Wolf" ? 0.8 : 1.2;
-    const approxRadius = animalType === "Wolf" ? 0.3 : 0.4;
+    let approxHeight = animalType === "Wolf" ? 1.3 : 1.8;
+    let approxRadius = animalType === "Wolf" ? 0.3 : 0.4;
+
+    approxHeight = animalType === "Deer" ? 1.5 : 2.0;
 
     // Calculate bounding box *after* adding the skeleton/meshes to the group in animalModels.ts
     const box = new Box3().setFromObject(model);
@@ -299,7 +301,7 @@ export class Animal extends Entity {
   }
 
   performAttack(): void {
-    const range = 1.5; // Shorter range for animals?
+    const range = 2.5; // Shorter range for animals?
     const damage = this.animalType === "Wolf" ? 5 : 2; // Example damage
     if (!this.mesh || !this.scene || !this.game || this.isDead) return;
 

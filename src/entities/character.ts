@@ -298,7 +298,7 @@ export class Character extends Entity {
   }
 
   performAttack(): void {
-    const range = 2.0;
+    const range = 2.5;
     const damage = this.name === "Player" ? 40 : 10;
     if (!this.mesh || !this.scene || !this.game || this.isDead) return;
 

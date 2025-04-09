@@ -19,8 +19,8 @@ import {
 import { Colors } from "../core/constants";
 
 // --- Materials ---
-const deerFurMaterial = new MeshLambertMaterial({ color: 0x967969 }); // Brownish
-const wolfFurMaterial = new MeshLambertMaterial({ color: 0x606060 }); // Grey
+const deerFurMaterial = new MeshLambertMaterial({ color: 0xffff00 }); // Yellow
+const wolfFurMaterial = new MeshLambertMaterial({ color: 0xff0000 }); // Red
 const antlerMaterial = new MeshLambertMaterial({ color: 0xd3c5aa }); // Light beige
 const noseMaterial = new MeshLambertMaterial({ color: 0x333333 }); // Dark grey/black
 
