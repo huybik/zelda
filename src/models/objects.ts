@@ -115,21 +115,7 @@ export class InteractableObject {
           );
           return { type: "error", message: "Inventory full" };
         }
-      case "read_sign":
-        const signText =
-          (this.data as string) || "The sign is worn and illegible.";
-        message = `Read sign: "${signText}"`;
-        action = "read";
-        details = { text: signText };
-        game.logEvent(
-          player,
-          action,
-          message,
-          this.name,
-          details,
-          this.position
-        );
-        return { type: "message", message: signText };
+
       default:
         message = `Looked at ${this.name}.`;
         action = "examine";
@@ -185,7 +171,7 @@ export function createTree(position: Vector3): Group {
     interactionType: "gather",
     resource: "wood",
     gatherTime: 3000,
-    prompt: "Press E to gather Wood",
+    prompt: "Hold E/Interact E to gather Wood",
     isDepletable: true,
     respawnTime: 20000,
     entityReference: treeGroup,
@@ -215,7 +201,7 @@ export function createRock(position: Vector3, size: number): Group {
     interactionType: "gather",
     resource: "stone",
     gatherTime: 4000,
-    prompt: "Press E to gather Stone",
+    prompt: "Hold E/Interact to gather Stone",
     isDepletable: true,
     respawnTime: 30000,
     entityReference: rockGroup,
@@ -239,7 +225,7 @@ export function createHerb(position: Vector3): Group {
     interactionType: "gather",
     resource: "herb",
     gatherTime: 1500,
-    prompt: "Press E to gather Herb",
+    prompt: "Hold E/Interact to gather Herb",
     isDepletable: true,
     respawnTime: 15000,
     entityReference: herbGroup,
