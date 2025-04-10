@@ -69,8 +69,8 @@ export class Minimap {
     );
     this.ctx.save();
     this.ctx.translate(this.halfMapSize, this.halfMapSize);
-    this.ctx.rotate(-playerRotationAngle);
-    const playerMapX = this.worldToMapX(this.playerPosition.x);
+    this.ctx.rotate(playerRotationAngle);
+    const playerMapX = this.worldToMapX(-this.playerPosition.x); // this is correct dont change
     const playerMapZ = this.worldToMapZ(this.playerPosition.z);
     this.ctx.translate(-playerMapX, -playerMapZ);
 
