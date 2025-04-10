@@ -1,4 +1,3 @@
-// File: /src/ai/npcAI.ts
 import { Vector3, Object3D } from "three";
 import { Entity } from "../entities/entitiy";
 import { Character } from "../entities/character";
@@ -9,7 +8,7 @@ import {
   Observation,
   generatePrompt,
   updateObservation,
-  handleChatResponse, // Added for chat response generation
+  handleChatResponse,
 } from "./api";
 
 export class AIController {
@@ -36,8 +35,8 @@ export class AIController {
   lastObservation: Observation | null = null;
   persistentAction: { type: string; targetType: string } | null = null;
   private chatDecisionTimer: ReturnType<typeof setTimeout> | null = null;
-  private lastAffectedTime: number = 0; // Timestamp when last affected
-  private affectedCooldown: number = 10000; // 10 seconds cooldown
+  private lastAffectedTime: number = 0;
+  private affectedCooldown: number = 10000;
 
   constructor(character: Character) {
     this.character = character;
@@ -71,7 +70,6 @@ export class AIController {
         const canCallApi = timeSinceLastCall >= this.apiCallCooldown;
 
         this.actionTimer -= deltaTime;
-        // Only decide next action if no chat timer is active
         if (this.actionTimer <= 0 && this.chatDecisionTimer === null) {
           this.actionTimer = 5 + Math.random() * 5;
           if (canCallApi && (this.justCompletedAction() || true)) {
@@ -225,7 +223,6 @@ export class AIController {
                 }
               }
             } else if (this.targetAction === "chat" && this.message) {
-              // Stop recipient's persistent action and set to idle
               if (
                 this.target instanceof Character &&
                 this.target.aiController
@@ -244,7 +241,6 @@ export class AIController {
                   this.character.mesh!.position
                 );
               }
-              // Handle chat response and replan actions
               handleChatResponse(this.target, this.character, this.message);
               this.aiState = "idle";
               this.target = null;
@@ -298,11 +294,9 @@ export class AIController {
   }
 
   scheduleNextActionDecision(): void {
-    // Clear any existing timer
     if (this.chatDecisionTimer !== null) {
       clearTimeout(this.chatDecisionTimer);
     }
-    // Schedule decideNextAction after 5 seconds
     this.chatDecisionTimer = setTimeout(() => {
       this.decideNextAction();
       this.chatDecisionTimer = null;
@@ -315,7 +309,6 @@ export class AIController {
 
   private isAffectedByEntities(): boolean {
     const currentTime = Date.now();
-    // Check if cooldown is active
     if (currentTime < this.lastAffectedTime + this.affectedCooldown) {
       return false;
     }
@@ -355,7 +348,6 @@ export class AIController {
       }
     }
 
-    // If affected, update the timestamp and return true
     if (affected) {
       this.lastAffectedTime = currentTime;
       return true;
@@ -514,48 +506,50 @@ export class AIController {
   }
 
   findNearestResource(resourceType: string): Object3D | null {
-    if (!this.character.scene) return null;
-    let nearest: Object3D | null = null;
+    if (!this.observation || !this.character.scene) return null;
+    let nearestId: string | null = null;
     let minDistanceSq = Infinity;
-    const selfPosition = this.character.mesh!.position;
-    const searchRadiusSq = this.searchRadius * this.searchRadius;
-    this.character.scene.traverse((child) => {
-      if (
-        child.userData.isInteractable &&
-        child.userData.resource === resourceType &&
-        child.visible
-      ) {
-        const distanceSq = selfPosition.distanceToSquared(child.position);
-        if (distanceSq < searchRadiusSq && distanceSq < minDistanceSq) {
+    const selfPosition = this.observation.self.position;
+    for (const obj of this.observation.nearbyObjects) {
+      if (obj.resource === resourceType) {
+        const distanceSq = selfPosition.distanceToSquared(obj.position);
+        if (distanceSq < minDistanceSq) {
           minDistanceSq = distanceSq;
-          nearest = child;
-        }
-      }
-    });
-    return nearest;
-  }
-
-  findNearestAnimal(animalType: string): Animal | null {
-    if (!this.character.game) return null;
-    let nearest: Animal | null = null;
-    let minDistanceSq = Infinity;
-    const selfPosition = this.character.mesh!.position;
-    const searchRadiusSq = this.searchRadius * this.searchRadius;
-    for (const entity of this.character.game.entities) {
-      if (
-        entity instanceof Animal &&
-        entity.userData.animalType === animalType &&
-        !entity.isDead
-      ) {
-        const distanceSq = selfPosition.distanceToSquared(
-          entity.mesh!.position
-        );
-        if (distanceSq < searchRadiusSq && distanceSq < minDistanceSq) {
-          minDistanceSq = distanceSq;
-          nearest = entity;
+          nearestId = obj.id;
         }
       }
     }
-    return nearest;
+    if (nearestId) {
+      return (
+        this.character.scene.children.find(
+          (child) => child.userData.id === nearestId
+        ) || null
+      );
+    }
+    return null;
+  }
+
+  findNearestAnimal(animalType: string): Animal | null {
+    if (!this.observation || !this.character.game) return null;
+    let nearestId: string | null = null;
+    let minDistanceSq = Infinity;
+    const selfPosition = this.observation.self.position;
+    for (const animal of this.observation.nearbyAnimals) {
+      if (animal.type === animalType && !animal.isDead) {
+        const distanceSq = selfPosition.distanceToSquared(animal.position);
+        if (distanceSq < minDistanceSq) {
+          minDistanceSq = distanceSq;
+          nearestId = animal.id;
+        }
+      }
+    }
+    if (nearestId) {
+      return (
+        (this.character.game.entities.find(
+          (e) => e.id === nearestId && e instanceof Animal
+        ) as Animal | undefined) || null
+      );
+    }
+    return null;
   }
 }
