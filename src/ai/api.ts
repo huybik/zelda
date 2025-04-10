@@ -259,7 +259,7 @@ Based on this information, decide your next action. Respond ONLY with a valid JS
   "object_id": "object_id_here",
   "target_id": "character_or_animal_id_here",
   "message": "message_here",
-  "intent": "less than 5 words reason here"
+  "intent": "less than 10 words reason here"
 }
 `.trim();
   return prompt;
@@ -322,7 +322,6 @@ export async function handleChatResponse(
         target.mesh!.position
       );
     }
-    // Schedule next action for both initiator and target
     if (initiator.aiController) {
       initiator.aiController.scheduleNextActionDecision();
     }
@@ -342,7 +341,6 @@ export async function handleChatResponse(
         target.mesh!.position
       );
     }
-    // Schedule next action even if there's an error
     if (initiator.aiController) {
       initiator.aiController.scheduleNextActionDecision();
     }

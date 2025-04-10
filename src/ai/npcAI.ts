@@ -36,6 +36,8 @@ export class AIController {
   lastObservation: Observation | null = null;
   persistentAction: { type: string; targetType: string } | null = null;
   private chatDecisionTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastAffectedTime: number = 0; // Timestamp when last affected
+  private affectedCooldown: number = 10000; // 10 seconds cooldown
 
   constructor(character: Character) {
     this.character = character;
@@ -57,17 +59,17 @@ export class AIController {
     if (this.character.game)
       updateObservation(this, this.character.game.entities);
 
+    if (this.isAffectedByEntities()) {
+      this.decideNextAction();
+      this.actionTimer = 5 + Math.random() * 5;
+    }
+
     switch (this.aiState) {
       case "idle":
         const currentTime = Date.now();
         const timeSinceLastCall = currentTime - this.lastApiCallTime;
         const canCallApi = timeSinceLastCall >= this.apiCallCooldown;
-        if (this.isAffectedByEntities()) {
-          this.decideNextAction();
-          this.lastApiCallTime = currentTime;
-          this.actionTimer = 5 + Math.random() * 5;
-          break;
-        }
+
         this.actionTimer -= deltaTime;
         // Only decide next action if no chat timer is active
         if (this.actionTimer <= 0 && this.chatDecisionTimer === null) {
@@ -312,7 +314,15 @@ export class AIController {
   }
 
   private isAffectedByEntities(): boolean {
+    const currentTime = Date.now();
+    // Check if cooldown is active
+    if (currentTime < this.lastAffectedTime + this.affectedCooldown) {
+      return false;
+    }
+
     if (!this.observation || !this.lastObservation) return false;
+
+    let affected = false;
     const currentCharacters = this.observation.nearbyCharacters;
     const lastCharacters = this.lastObservation.nearbyCharacters;
     for (const currChar of currentCharacters) {
@@ -321,22 +331,36 @@ export class AIController {
         !matchingLastChar ||
         currChar.health < matchingLastChar.health ||
         currChar.isDead !== matchingLastChar.isDead
-      )
-        return true;
+      ) {
+        affected = true;
+        break;
+      }
     }
-    const currentAnimals = this.observation.nearbyAnimals;
-    const lastAnimals = this.lastObservation.nearbyAnimals;
-    for (const currAnimal of currentAnimals) {
-      const matchingLastAnimal = lastAnimals.find(
-        (a) => a.id === currAnimal.id
-      );
-      if (
-        !matchingLastAnimal ||
-        currAnimal.health < matchingLastAnimal.health ||
-        currAnimal.isDead !== matchingLastAnimal.isDead
-      )
-        return true;
+
+    if (!affected) {
+      const currentAnimals = this.observation.nearbyAnimals;
+      const lastAnimals = this.lastObservation.nearbyAnimals;
+      for (const currAnimal of currentAnimals) {
+        const matchingLastAnimal = lastAnimals.find(
+          (a) => a.id === currAnimal.id
+        );
+        if (
+          !matchingLastAnimal ||
+          currAnimal.health < matchingLastAnimal.health ||
+          currAnimal.isDead !== matchingLastAnimal.isDead
+        ) {
+          affected = true;
+          break;
+        }
+      }
     }
+
+    // If affected, update the timestamp and return true
+    if (affected) {
+      this.lastAffectedTime = currentTime;
+      return true;
+    }
+
     return false;
   }
 
@@ -348,6 +372,7 @@ export class AIController {
       );
       console.log(`Prompt for ${this.character.name}:\n${prompt}\n\n`);
       const response = await sendToGemini(prompt);
+      this.lastApiCallTime = Date.now();
       if (response) {
         const actionData = JSON.parse(response);
         console.log(
