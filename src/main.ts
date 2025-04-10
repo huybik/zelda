@@ -41,7 +41,7 @@ import {
 } from "./systems/particles";
 import { AIController } from "./ai/npcAI.ts";
 import { AnimalAIController } from "./ai/animalAI.ts"; // Import Animal AI
-
+import { updateObservation } from "./ai/api.ts";
 export class Game {
   scene: Scene | null = null;
   renderer: WebGLRenderer | null = null;
@@ -548,7 +548,7 @@ export class Game {
           entity instanceof Character &&
           entity.aiController instanceof AIController
         )
-          entity.aiController.updateObservation(this.entities);
+          updateObservation(entity.aiController, this.entities);
       });
       this.interactionSystem!.update(deltaTime);
       this.thirdPersonCamera!.update(deltaTime, this.collidableObjects);

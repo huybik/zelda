@@ -1,9 +1,8 @@
 // File: /src/ai/animalAI.ts
-import { Vector3, Object3D } from "three";
+import { Vector3 } from "three";
 import { Animal } from "../entities/animals";
 import { MoveState, getTerrainHeight } from "../core/utils";
 import { Character } from "../entities/character";
-import { string } from "three/src/nodes/TSL.js";
 
 export class AnimalAIController {
   animal: Animal;

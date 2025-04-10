@@ -16,7 +16,7 @@ import {
 } from "../core/utils";
 import { Controls } from "../controls/controls";
 import { Game } from "../main";
-import { sendToGemini } from "../ai/npcAI";
+import { sendToGemini, generateChatPrompt } from "../ai/api"; // Import from api.ts
 import { INTERACTION_DISTANCE, AIM_TOLERANCE } from "../core/constants";
 
 export class InteractionSystem {
@@ -486,23 +486,6 @@ export class InteractionSystem {
     this.interactionPromptElement.textContent = "";
   }
 
-  generateChatPrompt(target: Character, playerMessage: string): string {
-    const recentEvents = target.eventLog.entries
-      .slice(-5)
-      .map((entry) => entry.message)
-      .join("\n");
-    const persona = target.persona || "a friendly villager";
-    return `
-You are an NPC named ${target.name} with the following persona: ${persona}
-The player character is named ${this.player.name} just said to you: "${playerMessage}"
-
-Recent events observed by you:
-${recentEvents || "Nothing significant recently."}
-
-Respond to the player in brief 1-2 sentences as a JSON object like {"response": "Your response here."}.
-`.trim();
-  }
-
   async openChatInterface(target: Character): Promise<void> {
     // Reset input state first
     if (this.chatInput) {
@@ -553,9 +536,13 @@ Respond to the player in brief 1-2 sentences as a JSON object like {"response": 
         this.chatInput.value = "";
         this.chatInput.disabled = true; // Disable while waiting
 
-        const prompt = this.generateChatPrompt(targetAtSendStart, message);
+        const prompt = generateChatPrompt(
+          targetAtSendStart,
+          this.player,
+          message
+        ); // Use imported function
         try {
-          const responseJson = await sendToGemini(prompt);
+          const responseJson = await sendToGemini(prompt); // Use imported function
 
           let npcMessage = "Hmm....";
           if (responseJson) {

@@ -4,91 +4,12 @@ import { Entity } from "../entities/entitiy";
 import { Character } from "../entities/character";
 import { MoveState, getTerrainHeight } from "../core/utils";
 import { Animal } from "../entities/animals";
-
-const API_KEY1 = import.meta.env.VITE_API_KEY1;
-const API_KEY2 = import.meta.env.VITE_API_KEY2;
-let switched = false;
-
-let currentApiKey = API_KEY1 || "";
-let API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${currentApiKey}`;
-
-function switchApiKey(): void {
-  if (currentApiKey === API_KEY1) {
-    currentApiKey = API_KEY2;
-    console.log("Switched to VITE_API_KEY2 due to rate limit.");
-  } else if (currentApiKey === API_KEY2) {
-    currentApiKey = API_KEY1;
-    console.log("Switched back to VITE_API_KEY1.");
-  } else {
-    console.warn("No alternate API key available for rotation.");
-  }
-  API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${currentApiKey}`;
-}
-
-export async function sendToGemini(prompt: string): Promise<string | null> {
-  if (!currentApiKey) {
-    console.warn("API_KEY is not configured.");
-    return null;
-  }
-  try {
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json" },
-      }),
-    });
-    if (!response.ok) {
-      if (response.status === 429 && !switched) {
-        console.warn(`Rate limit hit (429). Switching API key...`);
-        switchApiKey();
-        switched = true;
-      }
-      console.error(`HTTP error! status: ${response.status}`);
-      return null;
-    }
-    const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
-  } catch (error) {
-    console.error("Error during API call:", error);
-    return JSON.stringify({ action: "idle", intent: "Error fallback" });
-  }
-}
-
-export interface Observation {
-  timestamp: number;
-  self: {
-    id: string;
-    position: Vector3;
-    health: number;
-    isDead: boolean;
-    currentAction: string;
-  };
-  nearbyCharacters: Array<{
-    id: string;
-    position: Vector3;
-    health: number;
-    isDead: boolean;
-    currentAction: string;
-  }>;
-  nearbyAnimals: Array<{
-    id: string;
-    type: string;
-    position: Vector3;
-    health: number;
-    isDead: boolean;
-    isAggressive: boolean;
-    currentAction: string;
-  }>;
-  nearbyObjects: Array<{
-    id: string;
-    type: string;
-    position: Vector3;
-    isInteractable: boolean;
-    resource?: string;
-  }>;
-}
+import {
+  sendToGemini,
+  Observation,
+  generatePrompt,
+  updateObservation,
+} from "./api"; // Import from the new api file
 
 export class AIController {
   character: Character;
@@ -111,7 +32,7 @@ export class AIController {
   message: string | null = null;
   private lastApiCallTime: number = 0;
   private apiCallCooldown: number = 20000;
-  private lastObservation: Observation | null = null;
+  lastObservation: Observation | null = null;
   persistentAction: { type: string; targetType: string } | null = null;
 
   constructor(character: Character) {
@@ -132,7 +53,7 @@ export class AIController {
       attack: false,
     };
     if (this.character.game)
-      this.updateObservation(this.character.game.entities);
+      updateObservation(this, this.character.game.entities); // Use imported function
     switch (this.aiState) {
       case "idle":
         const currentTime = Date.now();
@@ -393,176 +314,11 @@ export class AIController {
     return false;
   }
 
-  updateObservation(allEntities: Array<any>): void {
-    this.lastObservation = this.observation
-      ? JSON.parse(JSON.stringify(this.observation))
-      : null;
-    const nearbyCharacters: Observation["nearbyCharacters"] = [];
-    const nearbyAnimals: Observation["nearbyAnimals"] = [];
-    const nearbyObjects: Observation["nearbyObjects"] = [];
-    const selfPosition = this.character.mesh!.position;
-    const searchRadiusSq = this.searchRadius * this.searchRadius;
-    const self: Observation["self"] = {
-      id: this.character.id,
-      position: selfPosition.clone(),
-      health: this.character.health,
-      isDead: this.character.isDead,
-      currentAction: this.aiState,
-    };
-    for (const entity of allEntities) {
-      if (entity === this.character || entity === this.character.mesh) continue;
-      const entityMesh =
-        entity instanceof Entity || entity instanceof Object3D
-          ? ((entity as any).mesh ?? entity)
-          : null;
-      if (!entityMesh || !entityMesh.parent) continue;
-      const entityPosition = entityMesh.position;
-      const distanceSq = selfPosition.distanceToSquared(entityPosition);
-      if (distanceSq > searchRadiusSq) continue;
-      if (entity instanceof Character) {
-        nearbyCharacters.push({
-          id: entity.id,
-          position: entityPosition.clone(),
-          health: entity.health,
-          isDead: entity.isDead,
-          currentAction:
-            entity.aiController?.aiState ||
-            (entity === this.character.game?.activeCharacter
-              ? "player_controlled"
-              : entity.isDead
-                ? "dead"
-                : "unknown"),
-        });
-      } else if (entity instanceof Animal) {
-        nearbyAnimals.push({
-          id: entity.id,
-          type: entity.animalType,
-          position: entityPosition.clone(),
-          health: entity.health,
-          isDead: entity.isDead,
-          isAggressive:
-            typeof entity.userData.isAggressive === "boolean"
-              ? entity.userData.isAggressive
-              : false,
-          currentAction: entity.aiController?.aiState || "unknown",
-        });
-      } else if (entity.userData?.isInteractable && entity.visible) {
-        nearbyObjects.push({
-          id: entity.userData.id || entity.uuid,
-          type: entity.name || "unknown",
-          position: entityPosition.clone(),
-          isInteractable: entity.userData.isInteractable,
-          resource: entity.userData.resource,
-        });
-      }
-    }
-    this.observation = {
-      timestamp: Date.now(),
-      self,
-      nearbyCharacters,
-      nearbyAnimals,
-      nearbyObjects,
-    };
-  }
-
-  generatePrompt(): string {
-    const persona = this.persona;
-    const observation = this.observation;
-    const eventLog = this.character.eventLog.entries
-      .slice(-7)
-      .map((entry) => `[${entry.timestamp}] ${entry.message}`)
-      .join("\n");
-    const selfState = observation?.self
-      ? `- Health: ${observation.self.health}\n- Current action: ${observation.self.currentAction}`
-      : "Unknown";
-    let nearbyCharacters = observation?.nearbyCharacters.length
-      ? observation.nearbyCharacters
-          .map(
-            (c) =>
-              `- ${c.id} at (${c.position.x.toFixed(1)}, ${c.position.y.toFixed(
-                1
-              )}, ${c.position.z.toFixed(1)}), health: ${c.health}, ${
-                c.isDead ? "dead" : "alive"
-              }, action: ${c.currentAction}`
-          )
-          .join("\n")
-      : "None";
-    let nearbyAnimals = observation?.nearbyAnimals.length
-      ? observation.nearbyAnimals
-          .map(
-            (a) =>
-              `- ${a.type} (${a.id}) at (${a.position.x.toFixed(
-                1
-              )}, ${a.position.y.toFixed(1)}, ${a.position.z.toFixed(1)}), ${
-                a.isDead ? "dead" : "alive"
-              }, ${a.isAggressive ? "aggressive" : "passive"}, action: ${
-                a.currentAction
-              }`
-          )
-          .join("\n")
-      : "None";
-    let nearbyObjects = "None";
-    if (observation?.nearbyObjects?.length) {
-      const typeCounts: Record<string, number> = {};
-      const limitedObjects = observation.nearbyObjects.filter((o) => {
-        const type = o.type;
-        typeCounts[type] = typeCounts[type] || 0;
-        if (typeCounts[type] < 3) {
-          typeCounts[type]++;
-          return true;
-        }
-        return false;
-      });
-      if (limitedObjects.length > 0) {
-        nearbyObjects = limitedObjects
-          .map(
-            (o) =>
-              `- ${o.type} (${o.id}) at (${o.position.x.toFixed(
-                1
-              )}, ${o.position.y.toFixed(1)}, ${o.position.z.toFixed(1)}${
-                o.resource ? ", resource: " + o.resource : ""
-              }`
-          )
-          .join("\n");
-      }
-    }
-    const prompt = `
-You are controlling an NPC named ${this.character.id} in a game. Here is your persona:
-${persona}
-
-Your current state:
-${selfState}
-
-Here are your recent observations:
-Nearby characters:
-${nearbyCharacters}
-
-Nearby animals:
-${nearbyAnimals}
-
-Nearby objects:
-${nearbyObjects}
-
-Here are the recent events you are aware of:
-${eventLog}
-
-Based on this information, decide your next action. Respond ONLY with a valid JSON object:
-{
-  "action": "gather" | "moveTo" | "attack" | "chat",
-  "object_id": "object_id_here",
-  "target_id": "character_or_animal_id_here",
-  "message": "message_here",
-  "intent": "less than 5 words reason here"
-}
-`.trim();
-    return prompt;
-  }
-
   async decideNextAction(): Promise<void> {
-    const prompt = this.generatePrompt();
+    const prompt = generatePrompt(this); // Use imported function
     try {
       console.log(`Prompt for ${this.character.name}:\n${prompt}\n\n`);
-      const response = await sendToGemini(prompt);
+      const response = await sendToGemini(prompt); // Use imported function
       if (response) {
         const actionData = JSON.parse(response);
         console.log(
