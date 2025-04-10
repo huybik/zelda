@@ -21,11 +21,14 @@ export class AnimalAIController {
   targetResource: string | null = null; // Target resource for gathering
   targetAction: string | null = null; // Action to perform on target resource
   message: string | null = null; // Message to display
+  persistentAction: { type: string; targetType: string } | null = null;
 
   constructor(animal: Animal) {
     this.animal = animal;
     this.homePosition = animal.mesh!.position.clone();
   }
+
+  async decideNextAction(): Promise<void> {}
 
   computeAIMoveState(deltaTime: number): MoveState {
     const moveState: MoveState = {
