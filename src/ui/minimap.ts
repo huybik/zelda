@@ -61,63 +61,43 @@ export class Minimap {
     this.ctx.fillStyle = this.bgColor;
     this.ctx.fillRect(0, 0, this.mapSize, this.mapSize);
     if (this.player.isDead || !this.player.mesh) return;
-
     this.player.mesh.getWorldPosition(this.playerPosition);
     this.player.mesh.getWorldDirection(this.playerForward);
-
-    // Calculate player's map coordinates
-    const playerMapX = this.worldToMapX(this.playerPosition.x);
-    const playerMapZ = this.worldToMapZ(this.playerPosition.z);
-
-    // Calculate player's rotation angle (North is 0 degrees)
     const playerRotationAngle = Math.atan2(
       this.playerForward.x,
       this.playerForward.z
     );
+    this.ctx.save();
+    this.ctx.translate(this.halfMapSize, this.halfMapSize);
+    this.ctx.rotate(-playerRotationAngle);
+    const playerMapX = this.worldToMapX(this.playerPosition.x);
+    const playerMapZ = this.worldToMapZ(this.playerPosition.z);
+    this.ctx.translate(-playerMapX, -playerMapZ);
 
-    // Draw other entities relative to the player's position
+    // Draw other entities
     this.entities.forEach((entity) => {
       if (
         !entity ||
         entity === this.player ||
         (entity instanceof Character && entity.isDead) ||
         (entity instanceof Animal && entity.isDead) || // Check if animal is dead
-        entity.userData?.isPortal // Skip portals here as they are drawn separately
+        entity.userData?.isPortal // Skip portals here as they are drawn above
       )
         return;
-
       const mesh =
         entity instanceof Character ||
         entity instanceof Animal || // Include Animal
         entity instanceof Object3D
           ? ((entity as any).mesh ?? entity)
           : null;
-
       if (!mesh || !(mesh instanceof Object3D) || !mesh.parent || !mesh.visible)
         return;
-
       mesh.getWorldPosition(this.entityPosition);
       const entityMapX = this.worldToMapX(this.entityPosition.x);
       const entityMapZ = this.worldToMapZ(this.entityPosition.z);
-
-      // Calculate position relative to the center of the minimap
-      const drawX = this.halfMapSize + (playerMapX - entityMapX);
-      const drawZ = this.halfMapSize + (entityMapZ - playerMapZ);
-
-      // Check if the entity is within the minimap bounds before drawing
-      if (
-        drawX < 0 ||
-        drawX > this.mapSize ||
-        drawZ < 0 ||
-        drawZ > this.mapSize
-      ) {
-        return; // Don't draw if outside the minimap view
-      }
-
       let color = "gray";
       let size = this.dotSize;
       let draw = false;
-
       if (entity.userData?.resource) {
         switch (entity.userData.resource) {
           case "wood":
@@ -153,57 +133,40 @@ export class Minimap {
         color = "lightblue";
         draw = true;
       }
-
-      if (draw) this.drawDot(drawX, drawZ, color, size);
+      if (draw) this.drawDot(entityMapX, entityMapZ, color, size);
     });
 
-    // Draw Portals relative to the player's position
+    // Draw Portals First (if they exist)
     const drawPortal = (portal: Group | null) => {
       if (portal && portal.visible && portal.userData?.isPortal) {
         portal.getWorldPosition(this.portalPosition);
         const portalMapX = this.worldToMapX(this.portalPosition.x);
         const portalMapZ = this.worldToMapZ(this.portalPosition.z);
-
-        // Calculate position relative to the center of the minimap
-        const drawX = this.halfMapSize + (portalMapX - playerMapX);
-        const drawZ = this.halfMapSize + (portalMapZ - playerMapZ);
-
-        // Check if the portal is within the minimap bounds before drawing
-        if (
-          drawX >= 0 &&
-          drawX <= this.mapSize &&
-          drawZ >= 0 &&
-          drawZ <= this.mapSize
-        ) {
-          this.drawText(
-            portal.userData.minimapLabel || "Portal",
-            drawX,
-            drawZ,
-            "white" // i want white!
-          );
-        }
+        this.drawText(
+          portal.userData.minimapLabel || "Portal",
+          portalMapX,
+          portalMapZ,
+          "white" // i want white!
+        );
       }
     };
     drawPortal(this.exitPortal);
     drawPortal(this.startPortal);
 
-    // Draw the player triangle at the center, rotated
+    this.ctx.restore();
     this.drawPlayerTriangle(
       this.halfMapSize,
       this.halfMapSize,
       this.playerColor,
-      this.playerTriangleSize,
-      playerRotationAngle
+      this.playerTriangleSize
     );
   }
 
   worldToMapX(worldX: number): number {
-    // Invert X calculation if needed based on your world coordinate system
     return (worldX + this.halfWorldSize) * this.mapScale;
   }
 
   worldToMapZ(worldZ: number): number {
-    // Invert Z calculation to match typical screen coordinates (Y down)
     return (this.halfWorldSize - worldZ) * this.mapScale;
   }
 
@@ -229,25 +192,16 @@ export class Minimap {
     centerX: number,
     centerY: number,
     color: string,
-    size: number,
-    angle: number // Add angle parameter
+    size: number
   ): void {
     const height = size * 1.5;
     const width = size;
-
-    this.ctx.save(); // Save context state
-    this.ctx.translate(centerX, centerY); // Translate to the center point
-    this.ctx.rotate(-angle); // Rotate around the center point
-
     this.ctx.fillStyle = color;
     this.ctx.beginPath();
-    // Draw triangle centered around (0, 0) after translation
-    this.ctx.moveTo(0, -height * 0.6); // Top point
-    this.ctx.lineTo(-width / 2, height * 0.4); // Bottom left
-    this.ctx.lineTo(width / 2, height * 0.4); // Bottom right
+    this.ctx.moveTo(centerX, centerY - height * 0.6);
+    this.ctx.lineTo(centerX - width / 2, centerY + height * 0.4);
+    this.ctx.lineTo(centerX + width / 2, centerY + height * 0.4);
     this.ctx.closePath();
     this.ctx.fill();
-
-    this.ctx.restore(); // Restore context state (removes translation and rotation)
   }
 }
