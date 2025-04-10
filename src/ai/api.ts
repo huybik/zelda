@@ -253,11 +253,10 @@ ${nearbyObjects}
 Here are the recent events you are aware of:
 ${eventLog}
 
-Based on this information, decide your next action. Respond ONLY with a valid JSON object:
+Based on this information, decide your next action. If player told you to do something don't ask for clarification or guidance, just do it. Respond ONLY with a valid JSON object:
 {
-  "action": "gather" | "moveTo" | "attack" | "chat",
-  "object_id": "object_id_here",
-  "target_id": "character_or_animal_id_here",
+  "action": "gather" | "attack" | "chat",
+  "target_id": "target_id_here",
   "message": "message_here",
   "intent": "less than 10 words reason here"
 }

@@ -481,23 +481,22 @@ export class Character extends Entity {
 
   update(deltaTime: number, options: UpdateOptions = {}): void {
     if (this.isDead) {
-      this.updateAnimations(deltaTime); // Still update mixer for death animation
+      this.updateAnimations(deltaTime);
       return;
     }
 
     const { moveState, collidables } = options;
     if (!moveState || !collidables) return;
 
-    this.moveState = moveState; // Update internal move state
+    this.moveState = moveState;
 
     this.handleStamina(deltaTime);
 
-    // Apply movement only if not performing a blocking action (like attack wind-up/swing)
-    // Gathering allows movement cancellation but doesn't block initial movement input handling here.
-    if (!this.isPerformingAction) {
+    // Apply movement unless performing a non-interruptible action
+    if (!this.isPerformingAction || this.actionType === "gather") {
+      // Gathering can be interrupted
       this.handleMovement(deltaTime);
     } else {
-      // If performing an action, usually stop movement
       this.velocity.x = 0;
       this.velocity.z = 0;
     }
@@ -513,14 +512,13 @@ export class Character extends Entity {
         this.mesh!.position.x,
         this.mesh!.position.z
       );
-      this.mesh!.position.y = groundY; // Simple ground clamp
+      this.mesh!.position.y = groundY;
     }
-    this.velocity.y = 0; // Reset vertical velocity after clamping
+    this.velocity.y = 0;
 
-    // Handle attack trigger
+    // Handle attack trigger (unchanged)
     if (moveState.attack && !this.attackTriggered) {
       this.attackTriggered = true;
-      // Only trigger if not already gathering or performing another action
       if (!this.isGathering && !this.isPerformingAction) {
         this.triggerAction("attack");
       }
@@ -529,7 +527,7 @@ export class Character extends Entity {
     }
 
     this.updateAnimations(deltaTime);
-    this.updateBoundingBox(); // Update bounding box after position change
+    this.updateBoundingBox();
   }
 
   die(attacker: Entity | null = null): void {
