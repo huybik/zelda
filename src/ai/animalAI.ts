@@ -29,6 +29,7 @@ export class AnimalAIController {
   }
 
   async decideNextAction(): Promise<void> {}
+  scheduleNextActionDecision(): void {}
 
   computeAIMoveState(deltaTime: number): MoveState {
     const moveState: MoveState = {

@@ -35,6 +35,7 @@ export class AIController {
   private apiCallCooldown: number = 20000;
   lastObservation: Observation | null = null;
   persistentAction: { type: string; targetType: string } | null = null;
+  private chatDecisionTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(character: Character) {
     this.character = character;
@@ -68,7 +69,8 @@ export class AIController {
           break;
         }
         this.actionTimer -= deltaTime;
-        if (this.actionTimer <= 0) {
+        // Only decide next action if no chat timer is active
+        if (this.actionTimer <= 0 && this.chatDecisionTimer === null) {
           this.actionTimer = 5 + Math.random() * 5;
           if (canCallApi && (this.justCompletedAction() || true)) {
             this.decideNextAction();
@@ -293,6 +295,18 @@ export class AIController {
     return moveState;
   }
 
+  scheduleNextActionDecision(): void {
+    // Clear any existing timer
+    if (this.chatDecisionTimer !== null) {
+      clearTimeout(this.chatDecisionTimer);
+    }
+    // Schedule decideNextAction after 5 seconds
+    this.chatDecisionTimer = setTimeout(() => {
+      this.decideNextAction();
+      this.chatDecisionTimer = null;
+    }, 5000);
+  }
+
   private justCompletedAction(): boolean {
     return this.previousAiState !== "idle" && this.aiState === "idle";
   }
@@ -329,6 +343,9 @@ export class AIController {
   async decideNextAction(): Promise<void> {
     const prompt = generatePrompt(this);
     try {
+      console.log(
+        `time since last call in seconds: ${(Date.now() - this.lastApiCallTime) / 1000}`
+      );
       console.log(`Prompt for ${this.character.name}:\n${prompt}\n\n`);
       const response = await sendToGemini(prompt);
       if (response) {

@@ -322,9 +322,13 @@ export async function handleChatResponse(
         target.mesh!.position
       );
     }
-    // Both initiator and recipient replan their actions
-    initiator.aiController?.decideNextAction();
-    target.aiController.decideNextAction();
+    // Schedule next action for both initiator and target
+    if (initiator.aiController) {
+      initiator.aiController.scheduleNextActionDecision();
+    }
+    if (target.aiController) {
+      target.aiController.scheduleNextActionDecision();
+    }
   } catch (error) {
     console.error("Error during chat API call:", error);
     target.showTemporaryMessage("I... don't know what to say.");
@@ -338,8 +342,12 @@ export async function handleChatResponse(
         target.mesh!.position
       );
     }
-    // Replan actions even if there's an error
-    initiator.aiController?.decideNextAction();
-    target.aiController.decideNextAction();
+    // Schedule next action even if there's an error
+    if (initiator.aiController) {
+      initiator.aiController.scheduleNextActionDecision();
+    }
+    if (target.aiController) {
+      target.aiController.scheduleNextActionDecision();
+    }
   }
 }
