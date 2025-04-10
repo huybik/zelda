@@ -9,7 +9,8 @@ import {
   Observation,
   generatePrompt,
   updateObservation,
-} from "./api"; // Import from the new api file
+  handleChatResponse, // Added for chat response generation
+} from "./api";
 
 export class AIController {
   character: Character;
@@ -53,7 +54,8 @@ export class AIController {
       attack: false,
     };
     if (this.character.game)
-      updateObservation(this, this.character.game.entities); // Use imported function
+      updateObservation(this, this.character.game.entities);
+
     switch (this.aiState) {
       case "idle":
         const currentTime = Date.now();
@@ -68,10 +70,7 @@ export class AIController {
         this.actionTimer -= deltaTime;
         if (this.actionTimer <= 0) {
           this.actionTimer = 5 + Math.random() * 5;
-          if (canCallApi && this.justCompletedAction()) {
-            this.decideNextAction();
-            this.lastApiCallTime = currentTime;
-          } else if (canCallApi) {
+          if (canCallApi && (this.justCompletedAction() || true)) {
             this.decideNextAction();
             this.lastApiCallTime = currentTime;
           } else {
@@ -79,6 +78,7 @@ export class AIController {
           }
         }
         break;
+
       case "roaming":
         if (this.destination) {
           const direction = this.destination
@@ -100,6 +100,7 @@ export class AIController {
           this.aiState = "idle";
         }
         break;
+
       case "movingToResource":
         if (
           this.targetResource &&
@@ -127,6 +128,7 @@ export class AIController {
           this.targetResource = null;
         }
         break;
+
       case "gathering":
         this.gatherTimer += deltaTime * 1000;
         if (this.gatherTimer >= this.gatherDuration) {
@@ -176,6 +178,7 @@ export class AIController {
           this.currentIntent = "";
         }
         break;
+
       case "movingToTarget":
         if (
           this.target &&
@@ -218,6 +221,14 @@ export class AIController {
                 }
               }
             } else if (this.targetAction === "chat" && this.message) {
+              // Stop recipient's persistent action and set to idle
+              if (
+                this.target instanceof Character &&
+                this.target.aiController
+              ) {
+                this.target.aiController.aiState = "idle";
+                this.target.aiController.persistentAction = null;
+              }
               this.character.showTemporaryMessage(this.message);
               if (this.character.game) {
                 this.character.game.logEvent(
@@ -229,6 +240,8 @@ export class AIController {
                   this.character.mesh!.position
                 );
               }
+              // Handle chat response and replan actions
+              handleChatResponse(this.target, this.character, this.message);
               this.aiState = "idle";
               this.target = null;
               this.targetAction = null;
@@ -243,6 +256,7 @@ export class AIController {
         }
         break;
     }
+
     if (this.aiState !== this.previousAiState) {
       if (this.character.game) {
         let message = "";
@@ -260,9 +274,7 @@ export class AIController {
             message = `${this.character.name} started gathering.`;
             break;
           case "movingToTarget":
-            message = `${this.character.name} is moving towards ${
-              this.target?.name || "target"
-            } to ${this.targetAction}.`;
+            message = `${this.character.name} is moving towards ${this.target?.name || "target"} to ${this.targetAction}.`;
             break;
         }
         if (message) {
@@ -291,8 +303,8 @@ export class AIController {
     const lastCharacters = this.lastObservation.nearbyCharacters;
     for (const currChar of currentCharacters) {
       const matchingLastChar = lastCharacters.find((c) => c.id === currChar.id);
-      if (!matchingLastChar) return true;
       if (
+        !matchingLastChar ||
         currChar.health < matchingLastChar.health ||
         currChar.isDead !== matchingLastChar.isDead
       )
@@ -304,8 +316,8 @@ export class AIController {
       const matchingLastAnimal = lastAnimals.find(
         (a) => a.id === currAnimal.id
       );
-      if (!matchingLastAnimal) return true;
       if (
+        !matchingLastAnimal ||
         currAnimal.health < matchingLastAnimal.health ||
         currAnimal.isDead !== matchingLastAnimal.isDead
       )
@@ -315,10 +327,10 @@ export class AIController {
   }
 
   async decideNextAction(): Promise<void> {
-    const prompt = generatePrompt(this); // Use imported function
+    const prompt = generatePrompt(this);
     try {
       console.log(`Prompt for ${this.character.name}:\n${prompt}\n\n`);
-      const response = await sendToGemini(prompt); // Use imported function
+      const response = await sendToGemini(prompt);
       if (response) {
         const actionData = JSON.parse(response);
         console.log(

@@ -268,8 +268,8 @@ Based on this information, decide your next action. Respond ONLY with a valid JS
 // --- Chat Prompt Generation ---
 export function generateChatPrompt(
   target: Character,
-  player: Character,
-  playerMessage: string
+  initiator: Character,
+  initiatorMessage: string
 ): string {
   const recentEvents = target.eventLog.entries
     .slice(-5)
@@ -278,11 +278,68 @@ export function generateChatPrompt(
   const persona = target.persona || "a friendly villager";
   return `
 You are an NPC named ${target.name} with the following persona: ${persona}
-The player character is named ${player.name} just said to you: "${playerMessage}"
+The character named ${initiator.name} just said to you: "${initiatorMessage}"
 
 Recent events observed by you:
 ${recentEvents || "Nothing significant recently."}
 
-Respond to the player in brief 1-2 sentences as a JSON object like {"response": "Your response here."}.
+Respond to the character in brief 1-2 sentences as a JSON object like {"response": "Your response here."}.
 `.trim();
+}
+
+export async function handleChatResponse(
+  target: Entity,
+  initiator: Character,
+  message: string
+): Promise<void> {
+  if (!(target instanceof Character) || !target.aiController) return;
+
+  const prompt = generateChatPrompt(target, initiator, message);
+  try {
+    const responseJson = await sendToGemini(prompt);
+    let npcMessage = "Hmm....";
+    if (responseJson) {
+      try {
+        const parsedText = JSON.parse(responseJson);
+        npcMessage =
+          parsedText.response?.trim() || responseJson.trim() || "Hmm....";
+      } catch (parseError) {
+        npcMessage = responseJson.trim() || "Hmm....";
+        console.log(
+          "Chat response was not JSON, treating as string:",
+          responseJson
+        );
+      }
+    }
+    target.showTemporaryMessage(npcMessage);
+    if (target.game) {
+      target.game.logEvent(
+        target,
+        "chat",
+        `${target.name} said "${npcMessage}" to ${initiator.name}.`,
+        initiator,
+        { message: npcMessage },
+        target.mesh!.position
+      );
+    }
+    // Both initiator and recipient replan their actions
+    initiator.aiController?.decideNextAction();
+    target.aiController.decideNextAction();
+  } catch (error) {
+    console.error("Error during chat API call:", error);
+    target.showTemporaryMessage("I... don't know what to say.");
+    if (target.game) {
+      target.game.logEvent(
+        target,
+        "chat_error",
+        `${target.name} failed to respond to ${initiator.name}.`,
+        initiator,
+        { error: (error as Error).message },
+        target.mesh!.position
+      );
+    }
+    // Replan actions even if there's an error
+    initiator.aiController?.decideNextAction();
+    target.aiController.decideNextAction();
+  }
 }

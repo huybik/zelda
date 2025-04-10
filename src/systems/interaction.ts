@@ -16,7 +16,7 @@ import {
 } from "../core/utils";
 import { Controls } from "../controls/controls";
 import { Game } from "../main";
-import { sendToGemini, generateChatPrompt } from "../ai/api"; // Import from api.ts
+import { sendToGemini, generateChatPrompt } from "../ai/api";
 import { INTERACTION_DISTANCE, AIM_TOLERANCE } from "../core/constants";
 
 export class InteractionSystem {
@@ -487,14 +487,12 @@ export class InteractionSystem {
   }
 
   async openChatInterface(target: Character): Promise<void> {
-    // Reset input state first
     if (this.chatInput) {
       this.chatInput.disabled = false;
       this.chatInput.value = "";
     }
 
     if (!this.chatContainer || !this.chatInput || this.isChatOpen) {
-      // If already open, ensure focus
       if (this.isChatOpen && this.chatInput && !this.chatInput.disabled) {
         requestAnimationFrame(() => {
           this.chatInput?.focus();
@@ -508,23 +506,25 @@ export class InteractionSystem {
     this.chatTarget = target;
     this.chatContainer.classList.remove("hidden");
 
-    // Ensure it's focusable *after* being made visible
+    if (this.chatTarget && this.chatTarget.aiController) {
+      this.chatTarget.aiController.aiState = "idle";
+      this.chatTarget.aiController.persistentAction = null;
+    }
+
     requestAnimationFrame(() => {
       this.chatInput?.focus();
     });
 
-    // Define or redefine bound functions if they don't exist
     if (!this.boundSendMessage) {
       this.boundSendMessage = async () => {
         if (!this.chatTarget || !this.chatInput) return;
         const message = this.chatInput.value.trim();
         if (!message) return;
 
-        const targetAtSendStart = this.chatTarget; // Store the target
+        const targetAtSendStart = this.chatTarget;
 
         this.player.showTemporaryMessage(message);
         this.game.logEvent(
-          // Log immediately
           this.player,
           "chat",
           `${this.player.name} said "${message}" to ${targetAtSendStart.name}.`,
@@ -534,15 +534,15 @@ export class InteractionSystem {
         );
 
         this.chatInput.value = "";
-        this.chatInput.disabled = true; // Disable while waiting
+        this.chatInput.disabled = true;
 
         const prompt = generateChatPrompt(
           targetAtSendStart,
           this.player,
           message
-        ); // Use imported function
+        );
         try {
-          const responseJson = await sendToGemini(prompt); // Use imported function
+          const responseJson = await sendToGemini(prompt);
 
           let npcMessage = "Hmm....";
           if (responseJson) {
@@ -556,11 +556,9 @@ export class InteractionSystem {
               ) {
                 npcMessage = parsedText.response.trim() || "Hmm....";
               } else {
-                // Fallback if structure is different
                 npcMessage = responseJson.trim() || "Hmm....";
               }
             } catch (parseError) {
-              // If JSON.parse fails, assume the response is a simple string
               npcMessage = responseJson.trim() || "Hmm....";
               console.log(
                 "Chat response was not JSON, treating as string:",
@@ -569,7 +567,6 @@ export class InteractionSystem {
             }
           }
 
-          // Check if chat is still associated with the original target
           if (this.isChatOpen && this.chatTarget === targetAtSendStart) {
             targetAtSendStart.showTemporaryMessage(npcMessage);
             targetAtSendStart.game?.logEvent(
@@ -586,7 +583,6 @@ export class InteractionSystem {
           }
         } catch (error) {
           console.error("Error during chat API call:", error);
-          // Check if chat is still associated with the original target
           if (this.isChatOpen && this.chatTarget === targetAtSendStart) {
             targetAtSendStart.showTemporaryMessage(
               "I... don't know what to say."
@@ -601,6 +597,9 @@ export class InteractionSystem {
             );
           }
         } finally {
+          if (targetAtSendStart.aiController) {
+            targetAtSendStart.aiController.decideNextAction();
+          }
           this.closeChatInterface();
         }
       };
@@ -624,7 +623,6 @@ export class InteractionSystem {
       };
     }
 
-    // Remove existing listener before adding a new one to prevent duplicates
     this.chatInput.removeEventListener("keydown", this.boundHandleChatKeyDown);
     this.chatInput.addEventListener("keydown", this.boundHandleChatKeyDown);
   }
@@ -635,10 +633,9 @@ export class InteractionSystem {
     this.isChatOpen = false;
     this.chatTarget = null;
     this.chatContainer.classList.add("hidden");
-    this.chatInput.disabled = false; // Ensure enabled
-    this.chatInput.blur(); // Remove focus explicitly
+    this.chatInput.disabled = false;
+    this.chatInput.blur();
 
-    // Remove the keydown listener
     if (this.boundHandleChatKeyDown) {
       this.chatInput.removeEventListener(
         "keydown",
@@ -646,10 +643,8 @@ export class InteractionSystem {
       );
     }
 
-    // Unpause the game *after* UI is hidden and listeners removed
     this.game.setPauseState(false);
 
-    // Attempt to refocus the game element to allow pointer lock re-request later
     requestAnimationFrame(() => {
       this.game.renderer?.domElement.focus();
     });
