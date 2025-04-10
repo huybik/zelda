@@ -136,7 +136,7 @@ export class Entity {
     if (!this.intentCanvas) {
       this.intentCanvas = document.createElement("canvas");
       this.intentCanvas.width = 200;
-      this.intentCanvas.height = 70;
+      this.intentCanvas.height = 75;
       this.intentContext = this.intentCanvas.getContext("2d")!;
       this.intentTexture = new CanvasTexture(this.intentCanvas);
     }
@@ -207,32 +207,6 @@ export class Entity {
     const totalTextHeight = lines.length * lineHeight;
     let startY = (canvas.height - totalTextHeight) / 2 + lineHeight / 2;
     for (let i = 0; i < lines.length; i++) {
-      if (startY + i * lineHeight > canvas.height - lineHeight / 2) {
-        if (i > 0) {
-          const lastLineIndex = i - 1;
-          ctx.clearRect(
-            0,
-            startY + lastLineIndex * lineHeight - lineHeight / 2,
-            canvas.width,
-            lineHeight
-          );
-          ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-          ctx.fillRect(
-            0,
-            startY + lastLineIndex * lineHeight - lineHeight / 2,
-            canvas.width,
-            lineHeight
-          );
-          ctx.fillStyle = "white";
-          ctx.fillText(
-            lines[lastLineIndex].substring(0, lines[lastLineIndex].length - 1) +
-              "...",
-            x,
-            startY + lastLineIndex * lineHeight
-          );
-        }
-        break;
-      }
       ctx.fillText(lines[i], x, startY + i * lineHeight);
     }
     this.intentTexture.needsUpdate = true;

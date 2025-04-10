@@ -62,7 +62,7 @@ export class AIController {
 
     // Check for environmental changes to trigger immediate action decisions
 
-    if (this.isAffectedByEntities()) {
+    if (this.isAffectedByEntities() && this.chatDecisionTimer === null) {
       this.decideNextAction();
       this.actionTimer = 5 + Math.random() * 5; // Reset timer after triggering
     }

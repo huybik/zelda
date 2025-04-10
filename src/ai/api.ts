@@ -282,7 +282,7 @@ The character named ${initiator.name} just said to you: "${initiatorMessage}"
 Recent events observed by you:
 ${recentEvents || "Nothing significant recently."}
 
-Respond to the character in brief 1-2 sentences as a JSON object like {"response": "Your response here."}.
+Respond to the character in brief max 20 words as a JSON object like {"response": "Your response here."}.
 `.trim();
 }
 
