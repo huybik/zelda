@@ -263,7 +263,7 @@ Respond ONLY with a valid JSON object:
   "action": "gather" | "attack" | "chat",
   "target_id": "target_id_here",
   "message": "message_here in ${language}",
-  "intent": "response in ${language} less than 10 words reason"
+  "intent": "less than 10 words reason, response only in ${language} and not dual language"
 }
   
 `.trim();
