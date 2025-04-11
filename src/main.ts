@@ -42,6 +42,7 @@ import {
 import { AIController } from "./ai/npcAI.ts";
 import { AnimalAIController } from "./ai/animalAI.ts"; // Import Animal AI
 import { updateObservation } from "./ai/api.ts";
+
 export class Game {
   scene: Scene | null = null;
   renderer: WebGLRenderer | null = null;
@@ -80,6 +81,8 @@ export class Game {
   boundHandleVisibilityChange: () => void;
   wasPausedBeforeVisibilityChange: boolean = false;
   worldSize: number = WORLD_SIZE; // Make world size accessible
+  language: string = "en"; // Default language
+  isGameStarted: boolean = false; // Flag to control game start after landing page
 
   // AI Throttling
   private lastAiUpdateTime: number = 0;
@@ -96,12 +99,25 @@ export class Game {
     this.initCamera();
     this.initInventory();
     this.initAudio();
+
+    // Load models while landing page might be shown
     const models = await loadModels();
+
+    // Check localStorage for settings
+    const savedName = localStorage.getItem("playerName");
+    const savedLang = localStorage.getItem("selectedLanguage");
+    this.language = savedLang || "en";
+
+    // Setup Landing Page
+    this.setupLandingPage(savedName, savedLang);
+
+    // Initialize game elements in background
     const urlParams = new URLSearchParams(window.location.search);
     this.hasEnteredFromPortal = urlParams.get("portal") === "true";
     this.startPortalRefUrl = urlParams.get("ref");
     this.startPortalOriginalParams = urlParams;
-    this.initPlayer(models);
+
+    this.initPlayer(models, savedName || "Player"); // Use saved name if available
     this.initControls();
     this.initMobileControls();
     this.initPhysics();
@@ -145,12 +161,99 @@ export class Game {
       "visibilitychange",
       this.boundHandleVisibilityChange
     );
+
+    // Start the animation loop, but game logic might be paused initially
+    this.renderer!.setAnimationLoop(this.update.bind(this));
+  }
+
+  setupLandingPage(savedName: string | null, savedLang: string | null): void {
+    const landingPage = document.getElementById("landing-page");
+    const nameInput = document.getElementById(
+      "player-name"
+    ) as HTMLInputElement;
+    const langSelect = document.getElementById(
+      "language-select"
+    ) as HTMLSelectElement;
+    const startButton = document.getElementById("start-game-button");
+    const gameContainer = document.getElementById("game-container");
+    const uiContainer = document.getElementById("ui-container");
+    const loadingText = landingPage?.querySelector(".loading-text");
+
+    if (
+      !landingPage ||
+      !nameInput ||
+      !langSelect ||
+      !startButton ||
+      !gameContainer ||
+      !uiContainer ||
+      !loadingText
+    ) {
+      console.error("Landing page elements not found!");
+      this.isGameStarted = true; // Skip landing page if elements are missing
+      gameContainer?.classList.remove("hidden");
+      uiContainer?.classList.remove("hidden");
+      return;
+    }
+
+    // Pre-fill from localStorage
+    if (savedName) {
+      nameInput.value = savedName;
+    }
+    if (savedLang) {
+      langSelect.value = savedLang;
+    }
+
+    startButton.onclick = () => {
+      const playerName = nameInput.value.trim() || "Player";
+      const selectedLanguage = langSelect.value;
+
+      // Save settings
+      localStorage.setItem("playerName", playerName);
+      localStorage.setItem("selectedLanguage", selectedLanguage);
+      this.language = selectedLanguage;
+
+      // Update player name if already initialized
+      if (this.activeCharacter) {
+        this.activeCharacter.name = playerName;
+        // If name display exists, update it (though it might be hidden initially)
+        this.activeCharacter.updateNameDisplay(playerName);
+      }
+
+      // Hide landing page, show game
+      landingPage.classList.add("hidden");
+      gameContainer.classList.remove("hidden");
+      uiContainer.classList.remove("hidden");
+
+      // Set flag to start game logic updates
+      this.isGameStarted = true;
+      this.setPauseState(false); // Ensure game is not paused
+
+      // Show welcome banner
+      const banner = document.getElementById("welcome-banner");
+      if (banner) {
+        const welcomeText = this.mobileControls?.isActive()
+          ? `Welcome, ${playerName}! Use joysticks to move, drag screen to look, buttons to act.`
+          : `Welcome, ${playerName}! [WASD] Move, Mouse Look, [I] Inv, [J] Journal, [E] Interact, [F] Attack, [C] Switch, [Esc] Unlock/Close`;
+        banner.textContent = welcomeText;
+        banner.classList.remove("hidden");
+        setTimeout(() => banner.classList.add("hidden"), 5000);
+      }
+
+      // Try to play audio on user interaction
+      this.audioElement
+        ?.play()
+        .catch((e) => console.warn("Background music play failed:", e));
+    };
+
+    // Indicate loading is complete (or near complete)
+    loadingText.textContent = "Ready to start!";
   }
 
   handlePointerLockChange(): void {
     if (
       document.pointerLockElement === this.renderer?.domElement &&
-      this.audioElement?.paused
+      this.audioElement?.paused &&
+      this.isGameStarted // Only play if game has started
     ) {
       this.audioElement
         .play()
@@ -175,7 +278,12 @@ export class Game {
       if (!this.wasPausedBeforeVisibilityChange) {
         this.setPauseState(false);
         console.log("Game resumed (mobile) due to visibility change.");
-        if (this.audioElement && this.audioElement.paused && !this.isPaused) {
+        if (
+          this.audioElement &&
+          this.audioElement.paused &&
+          !this.isPaused &&
+          this.isGameStarted // Only resume if game started
+        ) {
           this.audioElement
             .play()
             .catch((e) => console.warn("Audio resume failed", e));
@@ -311,7 +419,8 @@ export class Game {
   }
 
   initPlayer(
-    models: Record<string, { scene: Group; animations: AnimationClip[] }>
+    models: Record<string, { scene: Group; animations: AnimationClip[] }>,
+    playerName: string
   ): void {
     let playerSpawnPos = new Vector3(0, 0, 5);
     if (this.hasEnteredFromPortal) playerSpawnPos = new Vector3(0, 0, 15);
@@ -324,7 +433,7 @@ export class Game {
     this.activeCharacter = new Character(
       this.scene!,
       playerSpawnPos,
-      "Player",
+      playerName, // Use provided name
       playerModel.scene,
       playerModel.animations,
       this.inventory!
@@ -463,6 +572,9 @@ export class Game {
   }
 
   setPauseState(paused: boolean): void {
+    // Don't allow pausing if the game hasn't started from landing page yet
+    if (!this.isGameStarted && paused) return;
+
     if (this.isPaused === paused) return;
     this.isPaused = paused;
     if (!this.mobileControls?.isActive()) {
@@ -483,17 +595,11 @@ export class Game {
   }
 
   start(): void {
-    if (!this.renderer || !this.clock) return;
-    const banner = document.getElementById("welcome-banner");
-    if (banner) {
-      const welcomeText = this.mobileControls?.isActive()
-        ? "Welcome! Use joysticks to move, drag the screen to look, buttons to act."
-        : "Welcome! [WASD] Move, Mouse Look, [I] Inv, [J] Journal, [E] Interact, [F] Attack, [C] Switch, [Esc] Unlock/Close";
-      banner.textContent = welcomeText;
-      banner.classList.remove("hidden");
-      setTimeout(() => banner.classList.add("hidden"), 5000);
-    }
-    this.renderer.setAnimationLoop(this.update.bind(this));
+    // Game loop is started in init(), but actual updates depend on isGameStarted flag
+    console.log(
+      "Game initialized. Waiting for user to start via landing page."
+    );
+    // Welcome banner is now shown after clicking start on landing page
   }
 
   update(): void {
@@ -505,22 +611,26 @@ export class Game {
       !this.activeCharacter
     )
       return;
+
+    // Always update clock
     const deltaTime = Math.min(this.clock.getDelta(), 0.05);
     const elapsedTime = this.clock.elapsedTime;
 
+    // Update controls regardless of pause state
     this.mobileControls?.update(deltaTime);
     this.controls!.update(deltaTime);
 
-    // --- AI Update Throttling ---
-    const currentTime = this.clock.elapsedTime;
-    const timeSinceLastAiUpdate = currentTime - this.lastAiUpdateTime;
-    const shouldUpdateAi = timeSinceLastAiUpdate >= this.aiUpdateInterval;
-    if (shouldUpdateAi) {
-      this.lastAiUpdateTime = currentTime;
-    }
-    // --- End AI Update Throttling ---
+    // Only run game logic if not paused AND game has started
+    if (!this.isPaused && this.isGameStarted) {
+      // --- AI Update Throttling ---
+      const currentTime = this.clock.elapsedTime;
+      const timeSinceLastAiUpdate = currentTime - this.lastAiUpdateTime;
+      const shouldUpdateAi = timeSinceLastAiUpdate >= this.aiUpdateInterval;
+      if (shouldUpdateAi) {
+        this.lastAiUpdateTime = currentTime;
+      }
+      // --- End AI Update Throttling ---
 
-    if (!this.isPaused) {
       // Update Player (always uses controls input)
       this.activeCharacter.update(deltaTime, {
         moveState: this.controls!.moveState,
@@ -582,11 +692,15 @@ export class Game {
       if (this.activeCharacter.isDead) this.respawnPlayer();
       this.animatePortals();
       this.checkPortalCollisions();
+      updateParticleEffects(this, elapsedTime);
+      this.checkDeadEntityRemoval(); // Check for dead entities to remove
     }
-    updateParticleEffects(this, elapsedTime);
-    this.checkDeadEntityRemoval(); // Check for dead entities to remove
+
+    // Update UI elements even if paused (e.g., FPS counter)
     this.hud!.update();
-    this.minimap!.update();
+    this.minimap!.update(); // Minimap should reflect current state
+
+    // Render the scene
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -904,8 +1018,8 @@ if (WebGL.isWebGL2Available()) {
   async function startGame() {
     const gameInstance = new Game();
     window.game = gameInstance;
-    await gameInstance.init();
-    gameInstance.start();
+    await gameInstance.init(); // Init now includes setting up landing page listeners
+    // gameInstance.start(); // Start is now effectively handled by the landing page button
     const onResize = () => gameInstance.onWindowResize();
     window.addEventListener("resize", onResize, false);
     window.addEventListener("beforeunload", () => {

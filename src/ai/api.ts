@@ -233,6 +233,11 @@ export function generatePrompt(controller: AIController): string {
         .join("\n");
     }
   }
+
+  // Get language from localStorage or default to 'en'
+  const language = localStorage.getItem("selectedLanguage") || "en";
+  const languageInstruction = `Respond in ${language}.`;
+
   const prompt = `
 You are controlling an NPC named ${controller.character.id} in a game. Here is your persona:
 ${persona}
@@ -253,7 +258,9 @@ ${nearbyObjects}
 Here are the recent events you are aware of:
 ${eventLog}
 
-Based on this information, decide your next action. If player told you to do something don't ask for clarification or guidance, just do it. Respond ONLY with a valid JSON object:
+Based on this information, decide your next action. If player told you to do something don't ask for clarification or guidance, just do it.
+${languageInstruction}
+Respond ONLY with a valid JSON object:
 {
   "action": "gather" | "attack" | "chat",
   "target_id": "target_id_here",
@@ -275,6 +282,11 @@ export function generateChatPrompt(
     .map((entry) => entry.message)
     .join("\n");
   const persona = target.persona || "a friendly villager";
+
+  // Get language from localStorage or default to 'en'
+  const language = localStorage.getItem("selectedLanguage") || "en";
+  const languageInstruction = `Respond in ${language}.`;
+
   return `
 You are an NPC named ${target.name} with the following persona: ${persona}
 The character named ${initiator.name} just said to you: "${initiatorMessage}"
@@ -282,7 +294,7 @@ The character named ${initiator.name} just said to you: "${initiatorMessage}"
 Recent events observed by you:
 ${recentEvents || "Nothing significant recently."}
 
-Respond to the character in brief max 20 words as a JSON object like {"response": "Your response here."}.
+${languageInstruction} Respond to the character in brief max 20 words as a JSON object like {"response": "Your response here."}.
 `.trim();
 }
 
