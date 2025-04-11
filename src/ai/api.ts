@@ -235,8 +235,7 @@ export function generatePrompt(controller: AIController): string {
   }
 
   // Get language from localStorage or default to 'en'
-  const language = localStorage.getItem("selectedLanguage") || "en";
-  const languageInstruction = `Respond in language: * ${language} *.`;
+  const language = localStorage.getItem("selectedLanguageName") || "English";
 
   const prompt = `
 You are controlling an NPC named ${controller.character.id} in a game. Here is your persona:
@@ -263,11 +262,10 @@ Respond ONLY with a valid JSON object:
 {
   "action": "gather" | "attack" | "chat",
   "target_id": "target_id_here",
-  "message": "message_here",
-  "intent": "less than 10 words reason here"
+  "message": "message_here in ${language}",
+  "intent": "response in ${language} less than 10 words reason"
 }
   
-${languageInstruction}
 `.trim();
   return prompt;
 }
@@ -286,7 +284,6 @@ export function generateChatPrompt(
 
   // Get language from localStorage or default to 'en'
   const language = localStorage.getItem("selectedLanguage") || "en";
-  const languageInstruction = `Respond in language : * ${language} *`;
 
   return `
 You are an NPC named ${target.name} with the following persona: ${persona}
@@ -295,8 +292,8 @@ The character named ${initiator.name} just said to you: "${initiatorMessage}"
 Recent events observed by you:
 ${recentEvents || "Nothing significant recently."}
 
-Respond to the character in brief max 20 words as a JSON object like {"response": "Your response here."}.
-${languageInstruction} 
+Respond to the character in brief max 20 words as a JSON object like {"response": "Your response here in ${language} "}.
+
 `.trim();
 }
 

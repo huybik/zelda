@@ -300,6 +300,7 @@ export class Game {
           e.preventDefault(); // Prevent input from losing focus immediately
           selectedLanguageCode = lang.code;
           langSearchInput.value = lang.name; // Update input field
+          localStorage.setItem("selectedLanguageName", lang.name); // Save selection
           populateLanguageList(); // Refresh list to show selection
           hideLanguageList(true); // Hide immediately after selection
           // Manually trigger blur if needed, though hiding might be enough
