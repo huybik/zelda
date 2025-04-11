@@ -43,6 +43,51 @@ import { AIController } from "./ai/npcAI.ts";
 import { AnimalAIController } from "./ai/animalAI.ts"; // Import Animal AI
 import { updateObservation } from "./ai/api.ts";
 
+// --- Language Data ---
+interface Language {
+  code: string;
+  name: string;
+}
+
+const languages: Language[] = [
+  { code: "en", name: "English" },
+  { code: "es", name: "Español (Spanish)" },
+  { code: "fr", name: "Français (French)" },
+  { code: "de", name: "Deutsch (German)" },
+  { code: "zh", name: "中文 (Chinese)" },
+  { code: "ja", name: "日本語 (Japanese)" },
+  { code: "ko", name: "한국어 (Korean)" },
+  { code: "ru", name: "Русский (Russian)" },
+  { code: "pt", name: "Português (Portuguese)" },
+  { code: "it", name: "Italiano (Italian)" },
+  { code: "ar", name: "العربية (Arabic)" },
+  { code: "hi", name: "हिन्दी (Hindi)" },
+  { code: "bn", name: "বাংলা (Bengali)" },
+  { code: "pa", name: "ਪੰਜਾਬੀ (Punjabi)" },
+  { code: "jv", name: "Basa Jawa (Javanese)" },
+  { code: "ms", name: "Bahasa Melayu (Malay)" },
+  { code: "tr", name: "Türkçe (Turkish)" },
+  { code: "vi", name: "Tiếng Việt (Vietnamese)" },
+  { code: "te", name: "తెలుగు (Telugu)" },
+  { code: "mr", name: "मराठी (Marathi)" },
+  { code: "ta", name: "தமிழ் (Tamil)" },
+  { code: "ur", name: "اردو (Urdu)" },
+  { code: "fa", name: "فارسی (Persian)" },
+  { code: "nl", name: "Nederlands (Dutch)" },
+  { code: "pl", name: "Polski (Polish)" },
+  { code: "uk", name: "Українська (Ukrainian)" },
+  { code: "ro", name: "Română (Romanian)" },
+  { code: "sv", name: "Svenska (Swedish)" },
+  { code: "el", name: "Ελληνικά (Greek)" },
+  { code: "hu", name: "Magyar (Hungarian)" },
+  { code: "cs", name: "Čeština (Czech)" },
+  { code: "fi", name: "Suomi (Finnish)" },
+  { code: "he", name: "עברית (Hebrew)" },
+  { code: "th", name: "ไทย (Thai)" },
+  { code: "id", name: "Bahasa Indonesia (Indonesian)" },
+  // Add more languages as needed
+].sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically by name
+
 export class Game {
   scene: Scene | null = null;
   renderer: WebGLRenderer | null = null;
@@ -87,6 +132,9 @@ export class Game {
   // AI Throttling
   private lastAiUpdateTime: number = 0;
   private aiUpdateInterval: number = 0.2; // Update AI 5 times per second
+
+  // Landing page state
+  private languageListHideTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this.boundHandleVisibilityChange = this.handleVisibilityChange.bind(this);
@@ -171,9 +219,15 @@ export class Game {
     const nameInput = document.getElementById(
       "player-name"
     ) as HTMLInputElement;
-    const langSelect = document.getElementById(
-      "language-select"
-    ) as HTMLSelectElement;
+    const langSearchInput = document.getElementById(
+      "language-search"
+    ) as HTMLInputElement;
+    const langListContainer = document.getElementById(
+      "language-list-container"
+    );
+    const langList = document.getElementById(
+      "language-list"
+    ) as HTMLUListElement;
     const startButton = document.getElementById("start-game-button");
     const gameContainer = document.getElementById("game-container");
     const uiContainer = document.getElementById("ui-container");
@@ -182,7 +236,9 @@ export class Game {
     if (
       !landingPage ||
       !nameInput ||
-      !langSelect ||
+      !langSearchInput ||
+      !langListContainer ||
+      !langList ||
       !startButton ||
       !gameContainer ||
       !uiContainer ||
@@ -195,22 +251,103 @@ export class Game {
       return;
     }
 
-    // Pre-fill from localStorage
+    let selectedLanguageCode = savedLang || "en"; // Initialize with saved or default
+
+    // Function to show/hide language list
+    const showLanguageList = () => {
+      if (this.languageListHideTimeout) {
+        clearTimeout(this.languageListHideTimeout);
+        this.languageListHideTimeout = null;
+      }
+      langListContainer.classList.remove("hidden");
+    };
+
+    const hideLanguageList = (immediate = false) => {
+      if (this.languageListHideTimeout) {
+        clearTimeout(this.languageListHideTimeout);
+        this.languageListHideTimeout = null;
+      }
+      if (immediate) {
+        langListContainer.classList.add("hidden");
+      } else {
+        // Delay hiding to allow clicks on list items
+        this.languageListHideTimeout = setTimeout(() => {
+          langListContainer.classList.add("hidden");
+          this.languageListHideTimeout = null;
+        }, 150); // 150ms delay
+      }
+    };
+
+    // Function to populate the language list
+    const populateLanguageList = (filter: string = "") => {
+      langList.innerHTML = ""; // Clear existing list
+      const filterLower = filter.toLowerCase();
+      const filteredLanguages = languages.filter(
+        (lang) =>
+          lang.name.toLowerCase().includes(filterLower) ||
+          lang.code.toLowerCase().includes(filterLower)
+      );
+
+      filteredLanguages.forEach((lang) => {
+        const li = document.createElement("li");
+        li.textContent = lang.name;
+        li.dataset.langCode = lang.code;
+        if (lang.code === selectedLanguageCode) {
+          li.classList.add("selected");
+        }
+        li.addEventListener("mousedown", (e) => {
+          // Use mousedown to register before blur
+          e.preventDefault(); // Prevent input from losing focus immediately
+          selectedLanguageCode = lang.code;
+          langSearchInput.value = lang.name; // Update input field
+          populateLanguageList(); // Refresh list to show selection
+          hideLanguageList(true); // Hide immediately after selection
+          // Manually trigger blur if needed, though hiding might be enough
+          // langSearchInput.blur();
+        });
+        langList.appendChild(li);
+      });
+    };
+
+    // Initial population and state
+    populateLanguageList();
+    hideLanguageList(true); // Start hidden
+
+    // Pre-fill name input
     if (savedName) {
       nameInput.value = savedName;
     }
-    if (savedLang) {
-      langSelect.value = savedLang;
+
+    // Set initial search input value if language was saved
+    const initialLang = languages.find((l) => l.code === selectedLanguageCode);
+    if (initialLang) {
+      langSearchInput.value = initialLang.name;
     }
 
+    // Event listeners for search input
+    langSearchInput.addEventListener("input", () => {
+      populateLanguageList(langSearchInput.value);
+      showLanguageList(); // Ensure list is shown while typing
+    });
+
+    langSearchInput.addEventListener("focus", () => {
+      showLanguageList();
+      // Optional: Select all text on focus for easier searching
+      langSearchInput.select();
+    });
+
+    langSearchInput.addEventListener("blur", () => {
+      hideLanguageList(); // Hide with delay on blur
+    });
+
+    // Start button logic
     startButton.onclick = () => {
       const playerName = nameInput.value.trim() || "Player";
-      const selectedLanguage = langSelect.value;
 
       // Save settings
       localStorage.setItem("playerName", playerName);
-      localStorage.setItem("selectedLanguage", selectedLanguage);
-      this.language = selectedLanguage;
+      localStorage.setItem("selectedLanguage", selectedLanguageCode);
+      this.language = selectedLanguageCode;
 
       // Update player name if already initialized
       if (this.activeCharacter) {

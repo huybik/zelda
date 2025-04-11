@@ -25,14 +25,19 @@
         <label for="player-name">Player Name:</label>
         <input type="text" id="player-name" value="Player" maxlength="20" />
 
-        <label for="language-select">Language:</label>
-        <select id="language-select">
-          <option value="en">English</option>
-          <option value="es">Español</option>
-          <option value="fr">Français</option>
-          <option value="de">Deutsch</option>
-          <!-- Add more languages as needed -->
-        </select>
+        <label for="language-search">Language:</label>
+        <div class="language-selector">
+          <input
+            type="text"
+            id="language-search"
+            placeholder="Search languages..."
+          />
+          <div id="language-list-container">
+            <ul id="language-list">
+              <!-- Language items will be populated by JS -->
+            </ul>
+          </div>
+        </div>
 
         <button id="start-game-button">Start Game</button>
       </div>
