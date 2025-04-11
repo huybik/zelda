@@ -81,6 +81,10 @@ export class Game {
   wasPausedBeforeVisibilityChange: boolean = false;
   worldSize: number = WORLD_SIZE; // Make world size accessible
 
+  // AI Throttling
+  private lastAiUpdateTime: number = 0;
+  private aiUpdateInterval: number = 0.2; // Update AI 5 times per second
+
   constructor() {
     this.boundHandleVisibilityChange = this.handleVisibilityChange.bind(this);
   }
@@ -503,24 +507,48 @@ export class Game {
       return;
     const deltaTime = Math.min(this.clock.getDelta(), 0.05);
     const elapsedTime = this.clock.elapsedTime;
+
     this.mobileControls?.update(deltaTime);
     this.controls!.update(deltaTime);
+
+    // --- AI Update Throttling ---
+    const currentTime = this.clock.elapsedTime;
+    const timeSinceLastAiUpdate = currentTime - this.lastAiUpdateTime;
+    const shouldUpdateAi = timeSinceLastAiUpdate >= this.aiUpdateInterval;
+    if (shouldUpdateAi) {
+      this.lastAiUpdateTime = currentTime;
+    }
+    // --- End AI Update Throttling ---
+
     if (!this.isPaused) {
+      // Update Player (always uses controls input)
       this.activeCharacter.update(deltaTime, {
         moveState: this.controls!.moveState,
         collidables: this.collidableObjects,
       });
-      this.physics!.update(deltaTime);
+
+      this.physics!.update(deltaTime); // Physics uses player's velocity set by update
+
+      // Update other entities (NPCs and Animals)
       this.entities.forEach((entity) => {
         if (entity === this.activeCharacter) return;
+
         // Handle Character AI
         if (
           entity instanceof Character &&
           entity.aiController instanceof AIController
         ) {
-          const aiMoveState = entity.aiController.computeAIMoveState(deltaTime);
+          if (shouldUpdateAi) {
+            // Update observation only when AI thinks
+            updateObservation(entity.aiController, this.entities);
+            // Compute and store the new move state inside the entity
+            entity.moveState = entity.aiController.computeAIMoveState(
+              timeSinceLastAiUpdate
+            );
+          }
+          // Update the entity using its current (potentially stale) moveState
           entity.update(deltaTime, {
-            moveState: aiMoveState,
+            moveState: entity.moveState, // Pass the entity's internal state
             collidables: this.collidableObjects,
           });
         }
@@ -529,8 +557,14 @@ export class Game {
           entity instanceof Animal &&
           entity.aiController instanceof AnimalAIController
         ) {
-          // Animal AI directly updates its moveState within computeAIMoveState
-          // and the Animal's update method uses that internal state.
+          if (shouldUpdateAi) {
+            // Compute and store the new move state inside the entity
+            entity.moveState = entity.aiController.computeAIMoveState(
+              timeSinceLastAiUpdate
+            );
+          }
+          // Update the animal using its current (potentially stale) moveState
+          // Animal.update already uses this.moveState internally
           entity.update(deltaTime, { collidables: this.collidableObjects });
         }
         // Handle other generic entity updates
@@ -542,14 +576,7 @@ export class Game {
           entity.update(deltaTime);
         }
       });
-      // Update NPC observations after all movements
-      this.entities.forEach((entity) => {
-        if (
-          entity instanceof Character &&
-          entity.aiController instanceof AIController
-        )
-          updateObservation(entity.aiController, this.entities);
-      });
+
       this.interactionSystem!.update(deltaTime);
       this.thirdPersonCamera!.update(deltaTime, this.collidableObjects);
       if (this.activeCharacter.isDead) this.respawnPlayer();

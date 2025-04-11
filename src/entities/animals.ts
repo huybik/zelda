@@ -416,24 +416,11 @@ export class Animal extends Entity {
       return;
     }
 
-    // Get move state from AI Controller
-    if (this.aiController) {
-      this.moveState = this.aiController.computeAIMoveState(deltaTime);
-    } else {
-      // Default to idle if no AI
-      this.moveState = {
-        forward: 0,
-        right: 0,
-        jump: false,
-        sprint: false,
-        interact: false,
-        attack: false,
-      };
-    }
+    // AI Controller should have updated this.moveState externally via main loop throttling
 
-    // Apply movement only if not performing a blocking action
+    // Apply movement based on the current this.moveState
     if (!this.isPerformingAction) {
-      this.handleMovement(deltaTime);
+      this.handleMovement(deltaTime); // Uses this.moveState
     } else {
       this.velocity.x = 0;
       this.velocity.z = 0;
@@ -454,7 +441,7 @@ export class Animal extends Entity {
     }
     this.velocity.y = 0; // Reset vertical velocity
 
-    // Handle attack trigger from AI
+    // Handle attack trigger from the current this.moveState
     if (this.moveState.attack && !this.attackTriggered) {
       this.attackTriggered = true;
       if (!this.isPerformingAction) {
@@ -464,7 +451,7 @@ export class Animal extends Entity {
       this.attackTriggered = false;
     }
 
-    this.updateAnimations(deltaTime);
+    this.updateAnimations(deltaTime); // Uses this.moveState
     this.updateBoundingBox();
   }
 
