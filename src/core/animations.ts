@@ -66,18 +66,14 @@ const boneMappings: BoneRegexMap = {
   Hips: [/hips|pelvis|root|waist/i],
   Head: [/head/i],
   Neck: [/neck/i],
-  LeftForeArm: [/^(left|l)[._\-\s]?forearm/i, /^forearm[._\-\s]?(left|l)/i],
-  RightForeArm: [/^(right|r)[._\-\s]?forearm/i, /^forearm[._\-\s]?(right|r)/i],
 };
 
 // Map common input names (like "LeftLeg") to the more specific keys used in boneMappings
 const categoryNameMapping: { [inputName: string]: string } = {
   leftarm: "LeftArm",
   lefthand: "LeftArm", // Map hand to arm category for general arm swing
-  leftforearm: "LeftForeArm",
   rightarm: "RightArm",
   righthand: "RightArm",
-  rightforearm: "RightForeArm",
   leftupleg: "LeftUpLeg",
   leftthigh: "LeftUpLeg",
   rightupleg: "RightUpLeg",
@@ -104,8 +100,6 @@ const categoryNameMapping: { [inputName: string]: string } = {
 const relatedBoneCategories: { [categoryKey: string]: string[] } = {
   LeftLowLeg: ["LeftFoot"], // If looking for lower leg, foot might be relevant
   RightLowLeg: ["RightFoot"],
-  LeftArm: ["LeftForeArm"], // If looking for arm, forearm might be relevant
-  RightArm: ["RightForeArm"],
   LeftUpLeg: ["LeftLowLeg", "LeftFoot"], // If upper leg fails, try lower leg/foot
   RightUpLeg: ["RightLowLeg", "RightFoot"],
   // Add more relationships if needed
@@ -571,13 +565,11 @@ export function createRunAnimation(
 
   return new AnimationClip("Run_Generated", duration, tracks);
 }
-
 export function createAttackAnimation(
   skeletonRoot: Object3D,
   duration: number = 0.8
 ): AnimationClip {
   const rightArm = findBone(skeletonRoot, "RightArm");
-  const rightForeArm = findBone(skeletonRoot, "RightForeArm");
   const spineBone = findBone(skeletonRoot, "Spine");
 
   const tracks: KeyframeTrack[] = [];
@@ -597,25 +589,6 @@ export function createAttackAnimation(
         ...qInitial.clone().multiply(qSwing).toArray(),
         ...qInitial.toArray(),
       ])
-    );
-  }
-
-  if (rightForeArm) {
-    const qInitial = new Quaternion().copy(rightForeArm.quaternion);
-    const qExtend = new Quaternion().setFromEuler(new THREE.Euler(-0.5, 0, 0));
-
-    const forearmTimes = [0, duration * 0.4, duration * 0.7, duration];
-    tracks.push(
-      new QuaternionKeyframeTrack(
-        `${rightForeArm.name}.quaternion`,
-        forearmTimes,
-        [
-          ...qInitial.toArray(),
-          ...qInitial.toArray(),
-          ...qInitial.clone().multiply(qExtend).toArray(),
-          ...qInitial.toArray(),
-        ]
-      )
     );
   }
 
@@ -653,80 +626,6 @@ export function createAttackAnimation(
   return clip;
 }
 
-export function createGatherAnimation(
-  skeletonRoot: Object3D,
-  duration: number = 1.2
-): AnimationClip {
-  const spineBone = findBone(skeletonRoot, "Spine");
-  const rightArm = findBone(skeletonRoot, "RightArm");
-  const rightForeArm = findBone(skeletonRoot, "RightForeArm");
-
-  const tracks: KeyframeTrack[] = [];
-
-  if (spineBone) {
-    const qInitial = new Quaternion().copy(spineBone.quaternion);
-    const qBend = new Quaternion().setFromEuler(
-      new THREE.Euler(Math.PI / 4, 0, 0)
-    );
-
-    const spineTimes = [0, duration * 0.4, duration * 0.7, duration];
-    tracks.push(
-      new QuaternionKeyframeTrack(`${spineBone.name}.quaternion`, spineTimes, [
-        ...qInitial.toArray(),
-        ...qInitial.clone().multiply(qBend).toArray(),
-        ...qInitial.clone().multiply(qBend).toArray(),
-        ...qInitial.toArray(),
-      ])
-    );
-  }
-
-  if (rightArm) {
-    const qInitial = new Quaternion().copy(rightArm.quaternion);
-    const qReach = new Quaternion().setFromEuler(
-      new THREE.Euler(Math.PI / 3, 0, 0)
-    );
-
-    const armTimes = [0, duration * 0.4, duration * 0.7, duration];
-    tracks.push(
-      new QuaternionKeyframeTrack(`${rightArm.name}.quaternion`, armTimes, [
-        ...qInitial.toArray(),
-        ...qInitial.clone().multiply(qReach).toArray(),
-        ...qInitial.clone().multiply(qReach).toArray(),
-        ...qInitial.toArray(),
-      ])
-    );
-  }
-  if (rightForeArm) {
-    const qInitial = new Quaternion().copy(rightForeArm.quaternion);
-    const qExtend = new Quaternion().setFromEuler(new THREE.Euler(-0.3, 0, 0));
-
-    const forearmTimes = [0, duration * 0.4, duration * 0.7, duration];
-    tracks.push(
-      new QuaternionKeyframeTrack(
-        `${rightForeArm.name}.quaternion`,
-        forearmTimes,
-        [
-          ...qInitial.toArray(),
-          ...qInitial.clone().multiply(qExtend).toArray(),
-          ...qInitial.clone().multiply(qExtend).toArray(),
-          ...qInitial.toArray(),
-        ]
-      )
-    );
-  }
-
-  if (tracks.length === 0) {
-    const dummyTimes = [0, duration];
-    const dummyValues = [0, 0];
-    tracks.push(
-      new NumberKeyframeTrack(".dummy.opacity", dummyTimes, dummyValues)
-    );
-  }
-
-  const clip = new AnimationClip("Gather_Generated", duration, tracks);
-  return clip;
-}
-
 export function createDeadAnimation(
   skeletonRoot: Object3D,
   duration: number = 1.5
@@ -739,8 +638,6 @@ export function createDeadAnimation(
   const rightLeg = findBone(skeletonRoot, "RightLeg");
   const leftArm = findBone(skeletonRoot, "LeftArm");
   const rightArm = findBone(skeletonRoot, "RightArm");
-  const leftForeArm = findBone(skeletonRoot, "LeftForeArm");
-  const rightForeArm = findBone(skeletonRoot, "RightForeArm");
 
   const tracks: KeyframeTrack[] = [];
   const fallEndTime = duration * 0.9;
@@ -813,8 +710,6 @@ export function createDeadAnimation(
   relaxLimb(rightLeg, new THREE.Euler(0.2, 0, 0));
   relaxLimb(leftArm, new THREE.Euler(0.1, 0, 0.4));
   relaxLimb(rightArm, new THREE.Euler(0.1, 0, -0.4));
-  relaxLimb(leftForeArm, new THREE.Euler(0.3, 0, 0));
-  relaxLimb(rightForeArm, new THREE.Euler(0.3, 0, 0));
 
   if (tracks.length === 0) {
     const dummyTimes = [0, duration];
