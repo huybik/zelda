@@ -32,7 +32,6 @@ import {
   createWalkAnimation,
   createRunAnimation,
   createAttackAnimation,
-  createGatherAnimation, // Assuming gather uses attack for now
   createDeadAnimation,
 } from "../core/animations"; // Import animation generation functions
 
@@ -169,7 +168,7 @@ export class Character extends Entity {
     // Helper to find animation or generate fallback
     const getOrCreateAnimation = (
       nameIdentifier: string,
-      generator: (root: Object3D) => AnimationClip
+      generator: ((root: Object3D) => AnimationClip) | null
     ): AnimationClip | null => {
       const foundAnim = animations.find((anim) =>
         anim.name.toLowerCase().includes(nameIdentifier)
@@ -179,7 +178,7 @@ export class Character extends Entity {
           `Using existing "${nameIdentifier}" animation for ${this.name}.`
         );
         return foundAnim;
-      } else if (this.skeletonRoot) {
+      } else if (generator && this.skeletonRoot) {
         console.log(
           `Generating fallback "${nameIdentifier}" animation for ${this.name}.`
         );
