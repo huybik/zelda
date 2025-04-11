@@ -69,24 +69,24 @@ export class Minimap {
     );
     this.ctx.save();
     this.ctx.translate(this.halfMapSize, this.halfMapSize);
-    this.ctx.rotate(-playerRotationAngle);
+    this.ctx.rotate(playerRotationAngle); // Changed from -playerRotationAngle
     const playerMapX = this.worldToMapX(this.playerPosition.x);
     const playerMapZ = this.worldToMapZ(this.playerPosition.z);
     this.ctx.translate(-playerMapX, -playerMapZ);
 
-    // Draw other entities
+    // Draw other entities (unchanged)
     this.entities.forEach((entity) => {
       if (
         !entity ||
         entity === this.player ||
         (entity instanceof Character && entity.isDead) ||
-        (entity instanceof Animal && entity.isDead) || // Check if animal is dead
-        entity.userData?.isPortal // Skip portals here as they are drawn above
+        (entity instanceof Animal && entity.isDead) ||
+        entity.userData?.isPortal
       )
         return;
       const mesh =
         entity instanceof Character ||
-        entity instanceof Animal || // Include Animal
+        entity instanceof Animal ||
         entity instanceof Object3D
           ? ((entity as any).mesh ?? entity)
           : null;
@@ -102,10 +102,10 @@ export class Minimap {
         switch (entity.userData.resource) {
           case "wood":
             color = "saddlebrown";
-            return; // skip drawing wood
+            return;
           case "stone":
             color = "darkgray";
-            return; // skip drawing stone
+            return;
           case "herb":
             color = "limegreen";
             break;
@@ -118,14 +118,12 @@ export class Minimap {
         size += 1;
         draw = true;
       } else if (entity.userData?.isAnimal) {
-        // Draw animals
         color = entity.userData.isAggressive
           ? this.animalAggressiveColor
           : this.animalPassiveColor;
         size += 1;
         draw = true;
       } else if (entity.userData?.isEnemy) {
-        // Keep isEnemy check for potential non-animal enemies
         color = "red";
         size += 1;
         draw = true;
@@ -136,7 +134,7 @@ export class Minimap {
       if (draw) this.drawDot(entityMapX, entityMapZ, color, size);
     });
 
-    // Draw Portals First (if they exist)
+    // Draw Portals (unchanged)
     const drawPortal = (portal: Group | null) => {
       if (portal && portal.visible && portal.userData?.isPortal) {
         portal.getWorldPosition(this.portalPosition);
@@ -146,7 +144,7 @@ export class Minimap {
           portal.userData.minimapLabel || "Portal",
           portalMapX,
           portalMapZ,
-          "white" // i want white!
+          "white"
         );
       }
     };
@@ -163,7 +161,7 @@ export class Minimap {
   }
 
   worldToMapX(worldX: number): number {
-    return (worldX + this.halfWorldSize) * this.mapScale;
+    return (-worldX + this.halfWorldSize) * this.mapScale;
   }
 
   worldToMapZ(worldZ: number): number {
