@@ -6,6 +6,7 @@ import {
   Group,
   AnimationClip,
   MathUtils,
+  Mesh,
 } from "three";
 import { Character } from "../entities/character";
 import { Animal } from "../entities/animals"; // Import Animal
@@ -31,7 +32,14 @@ export function populateEnvironment(
 ): void {
   const halfSize = worldSize / 2;
   const villageCenter = new Vector3(5, 0, 10);
-  const villageRadiusSq = 15 * 15; // Don't spawn decorations too close to village center
+  const villageRadiusSq = 15 * 15;
+
+  // Retrieve the terrain mesh from the scene
+  const terrain = scene.getObjectByName("Terrain") as Mesh;
+  if (!terrain) {
+    console.error("Terrain not found in scene!");
+    return;
+  }
 
   const addCharacter = (
     pos: Vector3,
@@ -180,30 +188,28 @@ export function populateEnvironment(
 
   // Add Decorative Grass and Flowers
   const addDecoration = (
-    creator: (pos: Vector3, ...args: any[]) => Group,
+    creator: (pos: Vector3, terrain: Mesh) => Group,
     count: number,
-    minDistSq: number,
-    ...args: any[]
+    minDistSq: number
   ) => {
     for (let i = 0; i < count; i++) {
       const x = randomFloat(-halfSize * 0.95, halfSize * 0.95);
       const z = randomFloat(-halfSize * 0.95, halfSize * 0.95);
       const distSq = (x - villageCenter.x) ** 2 + (z - villageCenter.z) ** 2;
-      if (distSq < minDistSq) continue; // Avoid spawning too close to village
+      if (distSq < minDistSq) continue;
 
-      const decoration = creator(new Vector3(x, 0, z), ...args);
+      const decoration = creator(new Vector3(x, 0, z), terrain);
       const height = getTerrainHeight(scene, x, z);
       decoration.position.y = height;
 
-      // Add directly to scene, NOT to collidables, interactables, or entities list for game logic
       scene.add(decoration);
     }
   };
 
-  // Add Grass Patches (more numerous)
-  addDecoration(createGrassPatch, worldSize * 0.5, villageRadiusSq);
+  // Add Grass Patches
+  addDecoration(createGrassPatch, Math.floor(worldSize * 0.3), villageRadiusSq);
 
-  // Add Flower Patches (less numerous)
+  // Add Flower Patches
   addDecoration(
     createFlowerPatch,
     Math.floor(worldSize * 0.15),

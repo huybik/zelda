@@ -8,13 +8,15 @@ import {
   BoxGeometry,
   SphereGeometry,
   MeshLambertMaterial,
-  MeshBasicMaterial, // Use Basic for simple grass/flowers if lighting is not critical
+  MeshBasicMaterial,
   PlaneGeometry,
   Scene,
   Box3,
   Color,
   MathUtils,
   DoubleSide,
+  Raycaster,
+  Quaternion,
 } from "three";
 import { Character } from "../entities/character";
 import { Inventory, InteractionResult, randomFloat } from "../core/utils";
@@ -180,7 +182,7 @@ export function createTree(position: Vector3): Group {
   treeGroup.add(foliageMesh);
   treeGroup.position.copy(position).setY(0);
   treeGroup.userData = {
-    isCollidable: true,
+    isCollidable: false,
     isInteractable: true,
     interactionType: "gather",
     resource: "wood",
@@ -250,7 +252,7 @@ export function createHerb(position: Vector3): Group {
 
 // --- Decorative Elements ---
 
-export function createGrassPatch(position: Vector3): Group {
+export function createGrassPatch(position: Vector3, terrain: Mesh): Group {
   const patchGroup = new Group();
   patchGroup.name = "Grass Patch";
   const bladeCount = MathUtils.randInt(50, 150);
@@ -262,16 +264,14 @@ export function createGrassPatch(position: Vector3): Group {
     const bladeGeo = new PlaneGeometry(bladeWidth, bladeHeight);
     const bladeMesh = new Mesh(bladeGeo, grassMat);
 
-    // Position within the patch radius
     const angle = Math.random() * Math.PI * 2;
     const radius = Math.random() * patchRadius;
     bladeMesh.position.set(
       Math.cos(angle) * radius,
-      bladeHeight / 2, // Pivot at base
+      bladeHeight / 2,
       Math.sin(angle) * radius
     );
 
-    // Random rotation and tilt
     bladeMesh.rotation.y = Math.random() * Math.PI * 2;
     bladeMesh.rotation.x = randomFloat(-0.2, 0.2);
     bladeMesh.rotation.z = randomFloat(-0.2, 0.2);
@@ -279,8 +279,26 @@ export function createGrassPatch(position: Vector3): Group {
     patchGroup.add(bladeMesh);
   }
 
-  patchGroup.position.copy(position);
-  patchGroup.userData = { isDecoration: true }; // Mark as decoration
+  const raycaster = new Raycaster();
+  raycaster.set(
+    new Vector3(position.x, 100, position.z),
+    new Vector3(0, -1, 0)
+  );
+  const intersects = raycaster.intersectObject(terrain);
+  if (intersects.length > 0) {
+    const intersect = intersects[0];
+    patchGroup.position.copy(intersect.point);
+    const normal = intersect.normal
+      ? intersect.normal.clone()
+      : new Vector3(0, 1, 0);
+    const up = new Vector3(0, 1, 0);
+    const quaternion = new Quaternion().setFromUnitVectors(up, normal);
+    patchGroup.setRotationFromQuaternion(quaternion);
+  } else {
+    patchGroup.position.copy(position);
+  }
+
+  patchGroup.userData = { isDecoration: true };
   return patchGroup;
 }
 
@@ -313,11 +331,11 @@ function createFlower(colorHex: number): Group {
 
     petalMesh.position.set(
       Math.cos(angle) * petalRadius,
-      stemHeight + petalSize * 0.2, // Slightly above stem top
+      stemHeight + petalSize * 0.2,
       Math.sin(angle) * petalRadius
     );
-    petalMesh.rotation.y = angle + Math.PI / 2; // Face outwards
-    petalMesh.rotation.x = Math.PI / 4; // Angle upwards slightly
+    petalMesh.rotation.y = angle + Math.PI / 2;
+    petalMesh.rotation.x = Math.PI / 4;
 
     flowerGroup.add(petalMesh);
   }
@@ -325,7 +343,7 @@ function createFlower(colorHex: number): Group {
   return flowerGroup;
 }
 
-export function createFlowerPatch(position: Vector3): Group {
+export function createFlowerPatch(position: Vector3, terrain: Mesh): Group {
   const patchGroup = new Group();
   patchGroup.name = "Flower Patch";
   const flowerCount = MathUtils.randInt(30, 70);
@@ -336,20 +354,33 @@ export function createFlowerPatch(position: Vector3): Group {
       flowerColors[MathUtils.randInt(0, flowerColors.length - 1)];
     const flower = createFlower(randomColor);
 
-    // Position within the patch radius
     const angle = Math.random() * Math.PI * 2;
     const radius = Math.random() * patchRadius;
-    flower.position.set(
-      Math.cos(angle) * radius,
-      0, // Base of flower at patch y=0
-      Math.sin(angle) * radius
-    );
-    flower.rotation.y = Math.random() * Math.PI * 2; // Random orientation
+    flower.position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+    flower.rotation.y = Math.random() * Math.PI * 2;
 
     patchGroup.add(flower);
   }
 
-  patchGroup.position.copy(position);
-  patchGroup.userData = { isDecoration: true }; // Mark as decoration
+  const raycaster = new Raycaster();
+  raycaster.set(
+    new Vector3(position.x, 100, position.z),
+    new Vector3(0, -1, 0)
+  );
+  const intersects = raycaster.intersectObject(terrain);
+  if (intersects.length > 0) {
+    const intersect = intersects[0];
+    patchGroup.position.copy(intersect.point);
+    const normal = intersect.normal
+      ? intersect.normal.clone()
+      : new Vector3(0, 1, 0);
+    const up = new Vector3(0, 1, 0);
+    const quaternion = new Quaternion().setFromUnitVectors(up, normal);
+    patchGroup.setRotationFromQuaternion(quaternion);
+  } else {
+    patchGroup.position.copy(position);
+  }
+
+  patchGroup.userData = { isDecoration: true };
   return patchGroup;
 }
