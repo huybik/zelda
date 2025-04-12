@@ -164,6 +164,7 @@ export function createTree(position: Vector3): Group {
     8
   );
   const trunkMesh = new Mesh(trunkGeo, treeTrunkMat);
+  trunkMesh.name = "TreeTrunk";
   trunkMesh.position.y = trunkHeight / 2;
   trunkMesh.castShadow = true;
   trunkMesh.receiveShadow = true;
@@ -173,6 +174,7 @@ export function createTree(position: Vector3): Group {
   foliageMesh.position.y = trunkHeight + foliageHeight / 3;
   foliageMesh.castShadow = true;
   treeGroup.add(foliageMesh);
+
   treeGroup.position.copy(position).setY(0); // Set Y to 0 initially, Environment will adjust
   const maxHealth = BASE_HEALTH.wood;
   treeGroup.userData = {
@@ -191,6 +193,7 @@ export function createTree(position: Vector3): Group {
   };
   // Ensure bounding box is updated after potential position adjustments in environment
   treeGroup.userData.boundingBox.setFromObject(treeGroup);
+
   return treeGroup;
 }
 

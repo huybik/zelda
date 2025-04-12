@@ -131,6 +131,7 @@ export function populateEnvironment(
       if (obj.userData.isInteractable) interactableObjects.push(obj);
       entities.push(obj); // Add to entities for potential minimap display if needed later
       obj.userData.id = `${obj.name}_${obj.uuid.substring(0, 6)}`;
+
       obj.userData.boundingBox.setFromObject(obj);
     }
   };
