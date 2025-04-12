@@ -42,6 +42,52 @@ import {
 import { AIController } from "./ai/npcAI.ts";
 import { AnimalAIController } from "./ai/animalAI.ts"; // Import Animal AI
 import { updateObservation } from "./ai/api.ts";
+
+// --- Language Data ---
+interface Language {
+  code: string;
+  name: string;
+}
+
+const languages: Language[] = [
+  { code: "en", name: "English" },
+  { code: "es", name: "Español (Spanish)" },
+  { code: "fr", name: "Français (French)" },
+  { code: "de", name: "Deutsch (German)" },
+  { code: "zh", name: "中文 (Chinese)" },
+  { code: "ja", name: "日本語 (Japanese)" },
+  { code: "ko", name: "한국어 (Korean)" },
+  { code: "ru", name: "Русский (Russian)" },
+  { code: "pt", name: "Português (Portuguese)" },
+  { code: "it", name: "Italiano (Italian)" },
+  { code: "ar", name: "العربية (Arabic)" },
+  { code: "hi", name: "हिन्दी (Hindi)" },
+  { code: "bn", name: "বাংলা (Bengali)" },
+  { code: "pa", name: "ਪੰਜਾਬੀ (Punjabi)" },
+  { code: "jv", name: "Basa Jawa (Javanese)" },
+  { code: "ms", name: "Bahasa Melayu (Malay)" },
+  { code: "tr", name: "Türkçe (Turkish)" },
+  { code: "vi", name: "Tiếng Việt (Vietnamese)" },
+  { code: "te", name: "తెలుగు (Telugu)" },
+  { code: "mr", name: "मराठी (Marathi)" },
+  { code: "ta", name: "தமிழ் (Tamil)" },
+  { code: "ur", name: "اردو (Urdu)" },
+  { code: "fa", name: "فارسی (Persian)" },
+  { code: "nl", name: "Nederlands (Dutch)" },
+  { code: "pl", name: "Polski (Polish)" },
+  { code: "uk", name: "Українська (Ukrainian)" },
+  { code: "ro", name: "Română (Romanian)" },
+  { code: "sv", name: "Svenska (Swedish)" },
+  { code: "el", name: "Ελληνικά (Greek)" },
+  { code: "hu", name: "Magyar (Hungarian)" },
+  { code: "cs", name: "Čeština (Czech)" },
+  { code: "fi", name: "Suomi (Finnish)" },
+  { code: "he", name: "עברית (Hebrew)" },
+  { code: "th", name: "ไทย (Thai)" },
+  { code: "id", name: "Bahasa Indonesia (Indonesian)" },
+  // Add more languages as needed
+].sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically by name
+
 export class Game {
   scene: Scene | null = null;
   renderer: WebGLRenderer | null = null;
@@ -80,10 +126,15 @@ export class Game {
   boundHandleVisibilityChange: () => void;
   wasPausedBeforeVisibilityChange: boolean = false;
   worldSize: number = WORLD_SIZE; // Make world size accessible
+  language: string = "en"; // Default language
+  isGameStarted: boolean = false; // Flag to control game start after landing page
 
   // AI Throttling
   private lastAiUpdateTime: number = 0;
   private aiUpdateInterval: number = 0.2; // Update AI 5 times per second
+
+  // Landing page state
+  private languageListHideTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this.boundHandleVisibilityChange = this.handleVisibilityChange.bind(this);
@@ -96,12 +147,25 @@ export class Game {
     this.initCamera();
     this.initInventory();
     this.initAudio();
+
+    // Load models while landing page might be shown
     const models = await loadModels();
+
+    // Check localStorage for settings
+    const savedName = localStorage.getItem("playerName");
+    const savedLang = localStorage.getItem("selectedLanguage");
+    this.language = savedLang || "en";
+
+    // Setup Landing Page
+    this.setupLandingPage(savedName, savedLang);
+
+    // Initialize game elements in background
     const urlParams = new URLSearchParams(window.location.search);
     this.hasEnteredFromPortal = urlParams.get("portal") === "true";
     this.startPortalRefUrl = urlParams.get("ref");
     this.startPortalOriginalParams = urlParams;
-    this.initPlayer(models);
+
+    this.initPlayer(models, savedName || "Player"); // Use saved name if available
     this.initControls();
     this.initMobileControls();
     this.initPhysics();
@@ -145,12 +209,189 @@ export class Game {
       "visibilitychange",
       this.boundHandleVisibilityChange
     );
+
+    // Start the animation loop, but game logic might be paused initially
+    this.renderer!.setAnimationLoop(this.update.bind(this));
+  }
+
+  setupLandingPage(savedName: string | null, savedLang: string | null): void {
+    const landingPage = document.getElementById("landing-page");
+    const nameInput = document.getElementById(
+      "player-name"
+    ) as HTMLInputElement;
+    const langSearchInput = document.getElementById(
+      "language-search"
+    ) as HTMLInputElement;
+    const langListContainer = document.getElementById(
+      "language-list-container"
+    );
+    const langList = document.getElementById(
+      "language-list"
+    ) as HTMLUListElement;
+    const startButton = document.getElementById("start-game-button");
+    const gameContainer = document.getElementById("game-container");
+    const uiContainer = document.getElementById("ui-container");
+    const loadingText = landingPage?.querySelector(".loading-text");
+
+    if (
+      !landingPage ||
+      !nameInput ||
+      !langSearchInput ||
+      !langListContainer ||
+      !langList ||
+      !startButton ||
+      !gameContainer ||
+      !uiContainer ||
+      !loadingText
+    ) {
+      console.error("Landing page elements not found!");
+      this.isGameStarted = true; // Skip landing page if elements are missing
+      gameContainer?.classList.remove("hidden");
+      uiContainer?.classList.remove("hidden");
+      return;
+    }
+
+    let selectedLanguageCode = savedLang || "en"; // Initialize with saved or default
+
+    // Function to show/hide language list
+    const showLanguageList = () => {
+      if (this.languageListHideTimeout) {
+        clearTimeout(this.languageListHideTimeout);
+        this.languageListHideTimeout = null;
+      }
+      langListContainer.classList.remove("hidden");
+    };
+
+    const hideLanguageList = (immediate = false) => {
+      if (this.languageListHideTimeout) {
+        clearTimeout(this.languageListHideTimeout);
+        this.languageListHideTimeout = null;
+      }
+      if (immediate) {
+        langListContainer.classList.add("hidden");
+      } else {
+        // Delay hiding to allow clicks on list items
+        this.languageListHideTimeout = setTimeout(() => {
+          langListContainer.classList.add("hidden");
+          this.languageListHideTimeout = null;
+        }, 150); // 150ms delay
+      }
+    };
+
+    // Function to populate the language list
+    const populateLanguageList = (filter: string = "") => {
+      langList.innerHTML = ""; // Clear existing list
+      const filterLower = filter.toLowerCase();
+      const filteredLanguages = languages.filter(
+        (lang) =>
+          lang.name.toLowerCase().includes(filterLower) ||
+          lang.code.toLowerCase().includes(filterLower)
+      );
+
+      filteredLanguages.forEach((lang) => {
+        const li = document.createElement("li");
+        li.textContent = lang.name;
+        li.dataset.langCode = lang.code;
+        if (lang.code === selectedLanguageCode) {
+          li.classList.add("selected");
+        }
+        li.addEventListener("mousedown", (e) => {
+          // Use mousedown to register before blur
+          e.preventDefault(); // Prevent input from losing focus immediately
+          selectedLanguageCode = lang.code;
+          langSearchInput.value = lang.name; // Update input field
+          localStorage.setItem("selectedLanguageName", lang.name); // Save selection
+          populateLanguageList(); // Refresh list to show selection
+          hideLanguageList(true); // Hide immediately after selection
+          // Manually trigger blur if needed, though hiding might be enough
+          // langSearchInput.blur();
+        });
+        langList.appendChild(li);
+      });
+    };
+
+    // Initial population and state
+    populateLanguageList();
+    hideLanguageList(true); // Start hidden
+
+    // Pre-fill name input
+    if (savedName) {
+      nameInput.value = savedName;
+    }
+
+    // Set initial search input value if language was saved
+    const initialLang = languages.find((l) => l.code === selectedLanguageCode);
+    if (initialLang) {
+      langSearchInput.value = initialLang.name;
+    }
+
+    // Event listeners for search input
+    langSearchInput.addEventListener("input", () => {
+      populateLanguageList(langSearchInput.value);
+      showLanguageList(); // Ensure list is shown while typing
+    });
+
+    langSearchInput.addEventListener("focus", () => {
+      showLanguageList();
+      // Optional: Select all text on focus for easier searching
+      langSearchInput.select();
+    });
+
+    langSearchInput.addEventListener("blur", () => {
+      hideLanguageList(); // Hide with delay on blur
+    });
+
+    // Start button logic
+    startButton.onclick = () => {
+      const playerName = nameInput.value.trim() || "Player";
+
+      // Save settings
+      localStorage.setItem("playerName", playerName);
+      localStorage.setItem("selectedLanguage", selectedLanguageCode);
+      this.language = selectedLanguageCode;
+
+      // Update player name if already initialized
+      if (this.activeCharacter) {
+        this.activeCharacter.name = playerName;
+        // If name display exists, update it (though it might be hidden initially)
+        this.activeCharacter.updateNameDisplay(playerName);
+      }
+
+      // Hide landing page, show game
+      landingPage.classList.add("hidden");
+      gameContainer.classList.remove("hidden");
+      uiContainer.classList.remove("hidden");
+
+      // Set flag to start game logic updates
+      this.isGameStarted = true;
+      this.setPauseState(false); // Ensure game is not paused
+
+      // Show welcome banner
+      const banner = document.getElementById("welcome-banner");
+      if (banner) {
+        const welcomeText = this.mobileControls?.isActive()
+          ? `Welcome, ${playerName}! Use joysticks to move, drag screen to look, buttons to act.`
+          : `Welcome, ${playerName}! [WASD] Move, Mouse Look, [I] Inv, [J] Journal, [E] Interact, [F] Attack, [C] Switch, [Esc] Unlock/Close`;
+        banner.textContent = welcomeText;
+        banner.classList.remove("hidden");
+        setTimeout(() => banner.classList.add("hidden"), 5000);
+      }
+
+      // Try to play audio on user interaction
+      this.audioElement
+        ?.play()
+        .catch((e) => console.warn("Background music play failed:", e));
+    };
+
+    // Indicate loading is complete (or near complete)
+    loadingText.textContent = "Ready to start!";
   }
 
   handlePointerLockChange(): void {
     if (
       document.pointerLockElement === this.renderer?.domElement &&
-      this.audioElement?.paused
+      this.audioElement?.paused &&
+      this.isGameStarted // Only play if game has started
     ) {
       this.audioElement
         .play()
@@ -175,7 +416,12 @@ export class Game {
       if (!this.wasPausedBeforeVisibilityChange) {
         this.setPauseState(false);
         console.log("Game resumed (mobile) due to visibility change.");
-        if (this.audioElement && this.audioElement.paused && !this.isPaused) {
+        if (
+          this.audioElement &&
+          this.audioElement.paused &&
+          !this.isPaused &&
+          this.isGameStarted // Only resume if game started
+        ) {
           this.audioElement
             .play()
             .catch((e) => console.warn("Audio resume failed", e));
@@ -311,7 +557,8 @@ export class Game {
   }
 
   initPlayer(
-    models: Record<string, { scene: Group; animations: AnimationClip[] }>
+    models: Record<string, { scene: Group; animations: AnimationClip[] }>,
+    playerName: string
   ): void {
     let playerSpawnPos = new Vector3(0, 0, 5);
     if (this.hasEnteredFromPortal) playerSpawnPos = new Vector3(0, 0, 15);
@@ -324,7 +571,7 @@ export class Game {
     this.activeCharacter = new Character(
       this.scene!,
       playerSpawnPos,
-      "Player",
+      playerName, // Use provided name
       playerModel.scene,
       playerModel.animations,
       this.inventory!
@@ -463,6 +710,9 @@ export class Game {
   }
 
   setPauseState(paused: boolean): void {
+    // Don't allow pausing if the game hasn't started from landing page yet
+    if (!this.isGameStarted && paused) return;
+
     if (this.isPaused === paused) return;
     this.isPaused = paused;
     if (!this.mobileControls?.isActive()) {
@@ -483,17 +733,11 @@ export class Game {
   }
 
   start(): void {
-    if (!this.renderer || !this.clock) return;
-    const banner = document.getElementById("welcome-banner");
-    if (banner) {
-      const welcomeText = this.mobileControls?.isActive()
-        ? "Welcome! Use joysticks to move, drag the screen to look, buttons to act."
-        : "Welcome! [WASD] Move, Mouse Look, [I] Inv, [J] Journal, [E] Interact, [F] Attack, [C] Switch, [Esc] Unlock/Close";
-      banner.textContent = welcomeText;
-      banner.classList.remove("hidden");
-      setTimeout(() => banner.classList.add("hidden"), 5000);
-    }
-    this.renderer.setAnimationLoop(this.update.bind(this));
+    // Game loop is started in init(), but actual updates depend on isGameStarted flag
+    console.log(
+      "Game initialized. Waiting for user to start via landing page."
+    );
+    // Welcome banner is now shown after clicking start on landing page
   }
 
   update(): void {
@@ -505,22 +749,27 @@ export class Game {
       !this.activeCharacter
     )
       return;
-    const deltaTime = Math.min(this.clock.getDelta(), 0.05);
+
+    const deltaTime = Math.min(this.clock.getDelta(), 0.05); // Use clamped delta time
     const elapsedTime = this.clock.elapsedTime;
 
+    // Update controls regardless of pause state
     this.mobileControls?.update(deltaTime);
     this.controls!.update(deltaTime);
 
-    // --- AI Update Throttling ---
-    const currentTime = this.clock.elapsedTime;
-    const timeSinceLastAiUpdate = currentTime - this.lastAiUpdateTime;
-    const shouldUpdateAi = timeSinceLastAiUpdate >= this.aiUpdateInterval;
-    if (shouldUpdateAi) {
-      this.lastAiUpdateTime = currentTime;
-    }
-    // --- End AI Update Throttling ---
+    // Only run game logic if not paused AND game has started
+    if (!this.isPaused && this.isGameStarted) {
+      // --- AI Update Throttling ---
+      const currentTime = this.clock.elapsedTime;
+      const timeSinceLastAiUpdate = currentTime - this.lastAiUpdateTime;
+      const shouldUpdateAiLogic =
+        timeSinceLastAiUpdate >= this.aiUpdateInterval;
 
-    if (!this.isPaused) {
+      if (shouldUpdateAiLogic) {
+        this.lastAiUpdateTime = currentTime;
+      }
+      // --- End AI Update Throttling ---
+
       // Update Player (always uses controls input)
       this.activeCharacter.update(deltaTime, {
         moveState: this.controls!.moveState,
@@ -532,13 +781,12 @@ export class Game {
       // Update other entities (NPCs and Animals)
       this.entities.forEach((entity) => {
         if (entity === this.activeCharacter) return;
-
         // Handle Character AI
         if (
           entity instanceof Character &&
           entity.aiController instanceof AIController
         ) {
-          if (shouldUpdateAi) {
+          if (shouldUpdateAiLogic) {
             // Update observation only when AI thinks
             updateObservation(entity.aiController, this.entities);
             // Compute and store the new move state inside the entity
@@ -557,23 +805,21 @@ export class Game {
           entity instanceof Animal &&
           entity.aiController instanceof AnimalAIController
         ) {
-          if (shouldUpdateAi) {
-            // Compute and store the new move state inside the entity
-            entity.moveState = entity.aiController.computeAIMoveState(
-              timeSinceLastAiUpdate
-            );
+          // Update AI logic (state decisions, target finding) only when throttled interval passes
+          if (shouldUpdateAiLogic) {
+            // Pass the actual time since the last AI update for timers inside the AI
+            entity.aiController.updateLogic(timeSinceLastAiUpdate);
           }
-          // Update the animal using its current (potentially stale) moveState
-          // Animal.update already uses this.moveState internally
+          // Update the animal's movement and animations every frame based on its current state
           entity.update(deltaTime, { collidables: this.collidableObjects });
         }
-        // Handle other generic entity updates
+        // Handle other generic entity updates (if any)
         else if (
           entity.update &&
           !(entity instanceof Character) &&
           !(entity instanceof Animal)
         ) {
-          entity.update(deltaTime);
+          entity.update(deltaTime); // Assuming generic entities don't need complex options
         }
       });
 
@@ -582,11 +828,15 @@ export class Game {
       if (this.activeCharacter.isDead) this.respawnPlayer();
       this.animatePortals();
       this.checkPortalCollisions();
+      updateParticleEffects(this, elapsedTime);
+      this.checkDeadEntityRemoval(); // Check for dead entities to remove
     }
-    updateParticleEffects(this, elapsedTime);
-    this.checkDeadEntityRemoval(); // Check for dead entities to remove
+
+    // Update UI elements even if paused (e.g., FPS counter)
     this.hud!.update();
-    this.minimap!.update();
+    this.minimap!.update(); // Minimap should reflect current state
+
+    // Render the scene
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -734,20 +984,7 @@ export class Game {
       {},
       this.activeCharacter!.mesh!.position
     );
-    const goldCount = this.inventory!.countItem("gold");
-    const goldPenalty = Math.min(10, Math.floor(goldCount * 0.1));
-    if (goldPenalty > 0) {
-      this.inventory!.removeItem("gold", goldPenalty);
-      const penaltyMessage = `Lost ${goldPenalty} gold.`;
-      this.logEvent(
-        this.activeCharacter!,
-        "penalty",
-        penaltyMessage,
-        undefined,
-        { item: "gold", amount: goldPenalty },
-        this.activeCharacter!.mesh!.position
-      );
-    }
+
     const pressurize = new Vector3(0, 0, 10);
     pressurize.y = getTerrainHeight(this.scene!, pressurize.x, pressurize.z);
     this.activeCharacter!.respawn(pressurize);
@@ -904,8 +1141,8 @@ if (WebGL.isWebGL2Available()) {
   async function startGame() {
     const gameInstance = new Game();
     window.game = gameInstance;
-    await gameInstance.init();
-    gameInstance.start();
+    await gameInstance.init(); // Init now includes setting up landing page listeners
+    // gameInstance.start(); // Start is now effectively handled by the landing page button
     const onResize = () => gameInstance.onWindowResize();
     window.addEventListener("resize", onResize, false);
     window.addEventListener("beforeunload", () => {

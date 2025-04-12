@@ -34,6 +34,7 @@ import {
   createAttackAnimation,
   createDeadAnimation,
 } from "../core/animations"; // Import animation generation functions
+import { AnimalAIController } from "../ai/animalAI";
 
 export class Character extends Entity {
   maxStamina: number;
@@ -67,6 +68,7 @@ export class Character extends Entity {
   isPerformingAction: boolean = false;
   skeletonRoot: Object3D | null = null; // Store the root for animation generation
   deathTimestamp: number | null = null;
+  aiController: AIController | null;
 
   constructor(
     scene: Scene,
@@ -103,6 +105,7 @@ export class Character extends Entity {
     this.inventory = inventory;
     this.eventLog = new EventLog(50);
     this.rayCaster = new Raycaster(); // Initialize Raycaster here
+    this.aiController = new AIController(this);
 
     // Find the actual mesh with bones for animation
     let skinnedMesh: SkinnedMesh | null = null;
@@ -245,8 +248,6 @@ export class Character extends Entity {
       // Handle finishing death animation (it clamps, so no transition needed)
       // if (e.action === this.deadAction) { ... }
     });
-
-    if (this.userData.isNPC) this.aiController = new AIController(this);
   }
 
   // Helper to transition from an action back to idle/walk/run
@@ -639,7 +640,7 @@ export class Character extends Entity {
       this.game.logEvent(
         player,
         "interact_start",
-        `Started interacting with ${this.name}.`,
+        `${player.name} started interacting with ${this.name}.`,
         this,
         {},
         player.mesh!.position

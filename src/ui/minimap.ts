@@ -49,7 +49,7 @@ export class Minimap {
     this.mapScale = this.mapSize / this.worldSize;
     this.halfMapSize = this.mapSize / 2;
     this.halfWorldSize = this.worldSize / 2;
-    this.playerTriangleSize = this.playerDotSize * 1.5;
+    this.playerTriangleSize = this.playerDotSize * 2.5;
   }
 
   setPortals(exitPortal: Group | null, startPortal: Group | null): void {
@@ -62,14 +62,11 @@ export class Minimap {
     this.ctx.fillRect(0, 0, this.mapSize, this.mapSize);
     if (this.player.isDead || !this.player.mesh) return;
     this.player.mesh.getWorldPosition(this.playerPosition);
+    // Get the forward direction vector in world space
     this.player.mesh.getWorldDirection(this.playerForward);
-    const playerRotationAngle = Math.atan2(
-      this.playerForward.x,
-      this.playerForward.z
-    );
+
     this.ctx.save();
     this.ctx.translate(this.halfMapSize, this.halfMapSize);
-    this.ctx.rotate(-playerRotationAngle);
     const playerMapX = this.worldToMapX(this.playerPosition.x);
     const playerMapZ = this.worldToMapZ(this.playerPosition.z);
     this.ctx.translate(-playerMapX, -playerMapZ);
@@ -154,11 +151,18 @@ export class Minimap {
     drawPortal(this.startPortal);
 
     this.ctx.restore();
+
+    // Calculate player angle for minimap.
+    // Map X corresponds to World X. Map Y corresponds to World -Z.
+    // Angle is counter-clockwise from positive X-axis in the map coordinate system.
+    const playerAngle = Math.atan2(-this.playerForward.z, this.playerForward.x);
+
     this.drawPlayerTriangle(
       this.halfMapSize,
       this.halfMapSize,
       this.playerColor,
-      this.playerTriangleSize
+      this.playerTriangleSize,
+      playerAngle // Pass the calculated angle
     );
   }
 
@@ -167,7 +171,8 @@ export class Minimap {
   }
 
   worldToMapZ(worldZ: number): number {
-    return (this.halfWorldSize - worldZ) * this.mapScale;
+    // Invert Z axis for map coordinates (map Y increases downwards, world +Z is often 'out' or 'back')
+    return (this.halfWorldSize + worldZ) * this.mapScale;
   }
 
   drawDot(mapX: number, mapY: number, color: string, size: number): void {
@@ -192,16 +197,33 @@ export class Minimap {
     centerX: number,
     centerY: number,
     color: string,
-    size: number
+    size: number,
+    angle: number // Angle in radians relative to positive X-axis (counter-clockwise)
   ): void {
-    const height = size * 1.5;
+    const length = size * 1.5; // Use length for the pointing dimension
     const width = size;
+
+    this.ctx.save(); // Save context state before transformation
+    this.ctx.translate(centerX, centerY); // Move origin to center point
+
+    // Canvas rotation is clockwise for positive angles.
+    // Our angle is calculated counter-clockwise from +X.
+    // To make the triangle point in the CCW direction 'angle',
+    // we need to rotate the canvas clockwise by 'angle'.
+    // However, if the perceived rotation is inverse, it means
+    // the canvas rotation direction needs to be flipped relative to the angle.
+    // Let's try negating the angle passed to rotate.
+    this.ctx.rotate(-angle); // Reverted the negation based on re-evaluation. If this is still wrong, the issue might be elsewhere.
+
     this.ctx.fillStyle = color;
     this.ctx.beginPath();
-    this.ctx.moveTo(centerX, centerY - height * 0.6);
-    this.ctx.lineTo(centerX - width / 2, centerY + height * 0.4);
-    this.ctx.lineTo(centerX + width / 2, centerY + height * 0.4);
+    // Draw triangle pointing towards positive X axis (angle = 0) before rotation
+    this.ctx.moveTo(length * 0.6, 0); // Tip point along positive X
+    this.ctx.lineTo(-length * 0.4, -width / 2); // Back left point
+    this.ctx.lineTo(-length * 0.4, width / 2); // Back right point
     this.ctx.closePath();
     this.ctx.fill();
+
+    this.ctx.restore(); // Restore context state
   }
 }

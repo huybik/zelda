@@ -233,26 +233,29 @@ export class AIController {
                   this.targetAction = null;
                 }
               }
-            } else if (this.targetAction === "chat" && this.message) {
-              if (
-                this.target instanceof Character &&
-                this.target.aiController
-              ) {
-                this.target.aiController.aiState = "idle";
-                this.target.aiController.persistentAction = null;
+            } else if (
+              this.targetAction === "chat" &&
+              this.message &&
+              this.chatDecisionTimer === null
+            ) {
+              if (this.target instanceof Character) {
+                if (this.target.aiController) {
+                  this.target.aiController.aiState = "idle";
+                  this.target.aiController.persistentAction = null;
+                }
+                this.character.updateIntentDisplay(this.message);
+                if (this.character.game) {
+                  this.character.game.logEvent(
+                    this.character,
+                    "chat",
+                    `${this.character.name} said "${this.message}" to ${this.target.name}.`,
+                    this.target,
+                    { message: this.message },
+                    this.character.mesh!.position
+                  );
+                }
+                handleChatResponse(this.target, this.character, this.message);
               }
-              this.character.showTemporaryMessage(this.message);
-              if (this.character.game) {
-                this.character.game.logEvent(
-                  this.character,
-                  "chat",
-                  `${this.character.name} said "${this.message}" to ${this.target.name}.`,
-                  this.target,
-                  { message: this.message },
-                  this.character.mesh!.position
-                );
-              }
-              handleChatResponse(this.target, this.character, this.message);
               this.aiState = "idle";
               this.target = null;
               this.targetAction = null;
@@ -272,43 +275,7 @@ export class AIController {
         break;
     }
 
-    if (this.aiState !== this.previousAiState) {
-      // Log state changes (unchanged from original)
-      if (this.character.game) {
-        let message = "";
-        switch (this.aiState) {
-          case "deciding":
-            message = `${this.character.name} is deciding next action.`;
-            break;
-          case "idle":
-            message = `${this.character.name} is now idle.`;
-            break;
-          case "roaming":
-            message = `${this.character.name} is roaming.`;
-            break;
-          case "movingToResource":
-            message = `${this.character.name} is moving to a resource.`;
-            break;
-          case "gathering":
-            message = `${this.character.name} started gathering.`;
-            break;
-          case "movingToTarget":
-            message = `${this.character.name} is moving towards ${this.target?.name || "target"} to ${this.targetAction}.`;
-            break;
-        }
-        if (message) {
-          this.character.game.logEvent(
-            this.character,
-            this.aiState,
-            message,
-            undefined,
-            {},
-            this.character.mesh!.position
-          );
-        }
-      }
-      this.previousAiState = this.aiState;
-    }
+    this.previousAiState = this.aiState;
 
     return moveState;
   }
@@ -320,7 +287,7 @@ export class AIController {
     this.chatDecisionTimer = setTimeout(() => {
       this.decideNextAction();
       this.chatDecisionTimer = null;
-    }, 5000);
+    }, 7000);
   }
 
   private justCompletedAction(): boolean {

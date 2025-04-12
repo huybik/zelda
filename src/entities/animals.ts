@@ -12,6 +12,7 @@ import {
   LoopRepeat,
   Object3D,
   SkinnedMesh,
+  MathUtils,
 } from "three";
 import {
   EventLog,
@@ -154,10 +155,12 @@ export class Animal extends Entity {
     this.mixer = new AnimationMixer(model); // Mixer targets the main model group
 
     // Generator function now expects the mixer root (model group)
+    // Generator function now expects the mixer root (model group)
     const getOrCreateAnimalAnimation = (
       nameIdentifier: string,
       generator: (mixerRoot: Object3D) => AnimationClip // Changed parameter name/meaning
     ): AnimationClip | null => {
+      // ... (implementation remains the same)
       const foundAnim = animations.find((anim) =>
         anim.name.toLowerCase().includes(nameIdentifier)
       );
@@ -183,11 +186,6 @@ export class Animal extends Entity {
           return null;
         }
       }
-      // Removed the check for this.skeletonRoot here, generation relies on mixerRoot
-      // console.warn(
-      //   `Could not find or generate "${nameIdentifier}" animation for ${this.name}.`
-      // );
-      // return null; // Redundant now
     };
 
     // Call generators (they now receive the 'model' group)
@@ -356,17 +354,24 @@ export class Animal extends Entity {
   }
 
   handleMovement(deltaTime: number): void {
-    if (this.isDead) return;
+    if (this.isDead || !this.mesh) return;
+
+    // Get the move state computed by the AI controller
+    // Note: The AI controller's logic update is throttled,
+    // but movement calculation happens every frame based on the *last computed* state.
+    const currentMoveState =
+      this.aiController?.computeAIMovement() ?? this.moveState;
 
     const forward = new Vector3(0, 0, 1).applyQuaternion(this.mesh!.quaternion);
-    // Animals typically don't strafe, so 'right' might not be needed from AI state
-    // const right = new Vector3(1, 0, 0).applyQuaternion(this.mesh!.quaternion);
-
-    const moveDirection = new Vector3(0, 0, this.moveState.forward).normalize(); // Only forward/backward based on AI
+    const moveDirection = new Vector3(
+      0,
+      0,
+      currentMoveState.forward
+    ).normalize(); // Only forward/backward based on AI
     const moveVelocity = new Vector3();
 
     if (moveDirection.lengthSq() > 0) {
-      const currentSpeed = this.moveState.sprint
+      const currentSpeed = currentMoveState.sprint
         ? this.runSpeed
         : this.walkSpeed;
       moveVelocity.addScaledVector(forward, moveDirection.z * currentSpeed);
@@ -374,6 +379,11 @@ export class Animal extends Entity {
 
     this.velocity.x = moveVelocity.x;
     this.velocity.z = moveVelocity.z;
+
+    // Update the internal moveState for animation purposes if needed,
+    // or rely directly on the computed state for animations.
+    // Let's update the internal state for consistency with animation logic.
+    this.moveState = currentMoveState;
   }
 
   updateAnimations(deltaTime: number): void {
@@ -386,15 +396,21 @@ export class Animal extends Entity {
       return;
     }
 
+    // Check if an attack was triggered in the current move state
     if (
-      this.isPerformingAction &&
-      this.actionType === "attack" &&
+      this.moveState.attack &&
+      !this.isPerformingAction &&
       this.attackAction
     ) {
-      // Attack animation is playing, wait for 'finished' event
-    } else {
-      // Handle locomotion (idle/walk/run)
-      this.transitionToLocomotion();
+      this.triggerAction("attack"); // Trigger the attack animation and logic
+    }
+    // If performing an attack, let the animation play out (handled by 'finished' listener)
+    else if (this.isPerformingAction && this.actionType === "attack") {
+      // Do nothing here, wait for animation to finish
+    }
+    // Otherwise, handle locomotion (idle/walk/run)
+    else {
+      this.transitionToLocomotion(); // Uses this.moveState to decide animation
     }
   }
 
@@ -405,54 +421,58 @@ export class Animal extends Entity {
       this.actionType = actionType;
       this.isPerformingAction = true;
       this.switchAction(this.attackAction);
-      this.performAttack();
+      this.performAttack(); // Execute the attack logic immediately
     }
     // Add other actions like 'flee' or 'graze' if needed
   }
 
+  // Main update loop for the animal
   update(deltaTime: number, options: UpdateOptions = {}): void {
+    // AI Logic update is handled by the main game loop's throttling mechanism
+    // calling aiController.updateLogic()
+
     if (this.isDead) {
       this.updateAnimations(deltaTime); // Update mixer for death animation
+      // No movement or other updates if dead
+      this.velocity.set(0, 0, 0); // Ensure velocity is zero
       return;
     }
 
-    // AI Controller should have updated this.moveState externally via main loop throttling
-
-    // Apply movement based on the current this.moveState
-    if (!this.isPerformingAction) {
-      this.handleMovement(deltaTime); // Uses this.moveState
-    } else {
-      this.velocity.x = 0;
-      this.velocity.z = 0;
-    }
+    // Calculate movement based on the AI's *current* state
+    this.handleMovement(deltaTime); // Sets this.velocity based on AI state
 
     // Apply velocity to position
-    this.mesh!.position.x += this.velocity.x * deltaTime;
-    this.mesh!.position.z += this.velocity.z * deltaTime;
+    if (this.mesh) {
+      this.mesh.position.x += this.velocity.x * deltaTime;
+      this.mesh.position.z += this.velocity.z * deltaTime;
 
-    // Ground clamping
-    if (this.scene) {
-      const groundY = getTerrainHeight(
-        this.scene,
-        this.mesh!.position.x,
-        this.mesh!.position.z
-      );
-      this.mesh!.position.y = groundY; // Simple ground clamp
-    }
-    this.velocity.y = 0; // Reset vertical velocity
-
-    // Handle attack trigger from the current this.moveState
-    if (this.moveState.attack && !this.attackTriggered) {
-      this.attackTriggered = true;
-      if (!this.isPerformingAction) {
-        this.triggerAction("attack");
+      // Ground clamping
+      if (this.scene) {
+        const groundY = getTerrainHeight(
+          this.scene,
+          this.mesh.position.x,
+          this.mesh.position.z
+        );
+        // Smoothly adjust height to avoid jittering on slopes
+        const lerpFactor = 1 - Math.pow(0.1, deltaTime); // Adjust 0.1 for faster/slower smoothing
+        this.mesh.position.y = MathUtils.lerp(
+          this.mesh.position.y,
+          groundY,
+          lerpFactor
+        );
+        // this.mesh.position.y = groundY; // Simple ground clamp
       }
-    } else if (!this.moveState.attack) {
-      this.attackTriggered = false;
     }
+    this.velocity.y = 0; // Reset vertical velocity after clamping/lerping
 
-    this.updateAnimations(deltaTime); // Uses this.moveState
+    // Update animations based on the current move state (set in handleMovement)
+    this.updateAnimations(deltaTime);
+
+    // Update bounding box after position change
     this.updateBoundingBox();
+
+    // Reset attack trigger flag (it's handled within updateAnimations now)
+    // this.attackTriggered = false; // No longer needed here
   }
 
   die(attacker: Entity | null = null): void {
@@ -462,12 +482,12 @@ export class Animal extends Entity {
     this.deathTimestamp = performance.now();
 
     // AI specific state change
-    if (this.aiController) this.aiController.aiState = "dead";
+    if (this.aiController) this.aiController.setState("dead"); // Use setState
 
     // Reset action states
     this.isPerformingAction = false;
     this.actionType = "none";
-    this.attackTriggered = false;
+    // this.attackTriggered = false; // No longer needed
 
     // Play death animation
     if (this.dieAction) {
@@ -492,10 +512,4 @@ export class Animal extends Entity {
       // Could add loot drop logic here
     }
   }
-
-  // Animals typically don't respawn, but method could be added if needed
-  // respawn(position: Vector3): void { ... }
-
-  // Override interact if needed, default is likely fine (non-interactable)
-  // interact(player: Character): InteractionResult | null { ... }
 }

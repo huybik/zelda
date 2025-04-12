@@ -261,7 +261,7 @@ export class InteractionSystem {
       this.startGatherAction(targetInstance);
       result = { type: "gather_start" };
     } else {
-      const message = `Examined ${targetInstance.name || "object"}.`;
+      const message = `${this.player.name} examined ${targetInstance.name || "object"}.`;
       if (this.player.game)
         this.player.game.logEvent(
           this.player,
@@ -343,15 +343,7 @@ export class InteractionSystem {
       resource,
     };
     this.showPrompt(`Gathering ${resource}... (0%)`);
-    if (this.player.game)
-      this.player.game.logEvent(
-        this.player,
-        "gather_start",
-        `Started gathering ${resource}...`,
-        targetInstance.name || targetInstance.id,
-        { resource },
-        this.player.mesh!.position
-      );
+
     this.player.velocity.x = 0;
     this.player.velocity.z = 0;
     this.player.isGathering = true;
@@ -381,7 +373,7 @@ export class InteractionSystem {
         this.player.game.logEvent(
           this.player,
           "gather_complete",
-          `Gathered 1 ${resource}.`,
+          `${this.player.name} gathered 1 ${resource}.`,
           targetName,
           { resource },
           targetPosition
@@ -408,7 +400,7 @@ export class InteractionSystem {
         this.player.game.logEvent(
           this.player,
           "gather_fail",
-          `Inventory full, could not gather ${resource}.`,
+          `${this.player.name}'s inventory full, could not gather ${resource}.`,
           targetName,
           { resource },
           targetPosition
@@ -523,7 +515,7 @@ export class InteractionSystem {
 
         const targetAtSendStart = this.chatTarget;
 
-        this.player.showTemporaryMessage(message);
+        this.player.updateIntentDisplay(message);
         this.game.logEvent(
           this.player,
           "chat",
@@ -568,7 +560,7 @@ export class InteractionSystem {
           }
 
           if (this.isChatOpen && this.chatTarget === targetAtSendStart) {
-            targetAtSendStart.showTemporaryMessage(npcMessage);
+            targetAtSendStart.updateIntentDisplay(npcMessage);
             targetAtSendStart.game?.logEvent(
               targetAtSendStart,
               "chat",
@@ -584,7 +576,7 @@ export class InteractionSystem {
         } catch (error) {
           console.error("Error during chat API call:", error);
           if (this.isChatOpen && this.chatTarget === targetAtSendStart) {
-            targetAtSendStart.showTemporaryMessage(
+            targetAtSendStart.updateIntentDisplay(
               "I... don't know what to say."
             );
             this.game.logEvent(
@@ -597,9 +589,7 @@ export class InteractionSystem {
             );
           }
         } finally {
-          if (targetAtSendStart.aiController) {
-            targetAtSendStart.aiController.scheduleNextActionDecision();
-          }
+          targetAtSendStart.aiController?.scheduleNextActionDecision();
           this.closeChatInterface();
         }
       };

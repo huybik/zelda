@@ -176,7 +176,7 @@ export function generatePrompt(controller: AIController): string {
   const persona = controller.persona;
   const observation = controller.observation;
   const eventLog = controller.character.eventLog.entries
-    .slice(-7)
+    .slice(-10)
     .map((entry) => `[${entry.timestamp}] ${entry.message}`)
     .join("\n");
   const selfState = observation?.self
@@ -233,6 +233,10 @@ export function generatePrompt(controller: AIController): string {
         .join("\n");
     }
   }
+
+  // Get language from localStorage or default to 'en'
+  const language = localStorage.getItem("selectedLanguageName") || "English";
+
   const prompt = `
 You are controlling an NPC named ${controller.character.id} in a game. Here is your persona:
 ${persona}
@@ -253,13 +257,15 @@ ${nearbyObjects}
 Here are the recent events you are aware of:
 ${eventLog}
 
-Based on this information, decide your next action. If player told you to do something don't ask for clarification or guidance, just do it. Respond ONLY with a valid JSON object:
+Based on this information, decide your next action. If player told you to do something don't ask for clarification or guidance, just do it.
+Respond ONLY with a valid JSON object:
 {
   "action": "gather" | "attack" | "chat",
   "target_id": "target_id_here",
-  "message": "message_here",
-  "intent": "less than 10 words reason here"
+  "message": "message_here in ${language}",
+  "intent": "less than 10 words reason, response only in ${language} and not dual language"
 }
+  
 `.trim();
   return prompt;
 }
@@ -275,6 +281,10 @@ export function generateChatPrompt(
     .map((entry) => entry.message)
     .join("\n");
   const persona = target.persona || "a friendly villager";
+
+  // Get language from localStorage or default to 'en'
+  const language = localStorage.getItem("selectedLanguage") || "en";
+
   return `
 You are an NPC named ${target.name} with the following persona: ${persona}
 The character named ${initiator.name} just said to you: "${initiatorMessage}"
@@ -282,12 +292,13 @@ The character named ${initiator.name} just said to you: "${initiatorMessage}"
 Recent events observed by you:
 ${recentEvents || "Nothing significant recently."}
 
-Respond to the character in brief max 20 words as a JSON object like {"response": "Your response here."}.
+Respond to the character in brief max 20 words as a JSON object like {"response": "Your response here in ${language} "}.
+
 `.trim();
 }
 
 export async function handleChatResponse(
-  target: Entity,
+  target: Character,
   initiator: Character,
   message: string
 ): Promise<void> {
@@ -310,7 +321,7 @@ export async function handleChatResponse(
         );
       }
     }
-    target.showTemporaryMessage(npcMessage);
+    target.updateIntentDisplay(npcMessage);
     if (target.game) {
       target.game.logEvent(
         target,
@@ -321,15 +332,13 @@ export async function handleChatResponse(
         target.mesh!.position
       );
     }
-    if (initiator.aiController) {
-      initiator.aiController.scheduleNextActionDecision();
-    }
+
     if (target.aiController) {
       target.aiController.scheduleNextActionDecision();
     }
   } catch (error) {
     console.error("Error during chat API call:", error);
-    target.showTemporaryMessage("I... don't know what to say.");
+    target.updateIntentDisplay("I... don't know what to say.");
     if (target.game) {
       target.game.logEvent(
         target,
@@ -340,9 +349,7 @@ export async function handleChatResponse(
         target.mesh!.position
       );
     }
-    if (initiator.aiController) {
-      initiator.aiController.scheduleNextActionDecision();
-    }
+
     if (target.aiController) {
       target.aiController.scheduleNextActionDecision();
     }

@@ -212,25 +212,6 @@ export class Entity {
     this.intentTexture.needsUpdate = true;
   }
 
-  showTemporaryMessage(message: string, duration: number = 10000): void {
-    // Only show for NPCs with AIController
-    if (!(this.aiController instanceof AIController) || !this.intentSprite)
-      return;
-
-    const originalText = this.aiController
-      ? `${this.name}: ${this.aiController.currentIntent}`
-      : "";
-    this.updateIntentDisplay(message);
-    setTimeout(() => {
-      if (this.aiController instanceof AIController) {
-        const currentIntentText = `${this.aiController.currentIntent}`;
-        this.updateIntentDisplay(currentIntentText || originalText);
-      } else if (!this.isDead) {
-        this.updateIntentDisplay(originalText);
-      }
-    }, duration);
-  }
-
   updateBoundingBox(): void {
     if (!this.mesh) return;
     // Use specific height/radius if available, otherwise fallback

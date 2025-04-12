@@ -18,14 +18,39 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
   </head>
   <body>
+    <!-- Landing Page Overlay -->
+    <div id="landing-page">
+      <h1>Welcome to the Wilderness!</h1>
+      <div class="settings-form">
+        <label for="player-name">Player Name:</label>
+        <input type="text" id="player-name" value="Player" maxlength="20" />
+
+        <label for="language-search">Language:</label>
+        <div class="language-selector">
+          <input
+            type="text"
+            id="language-search"
+            placeholder="Search languages..."
+          />
+          <div id="language-list-container">
+            <ul id="language-list">
+              <!-- Language items will be populated by JS -->
+            </ul>
+          </div>
+        </div>
+
+        <button id="start-game-button">Start Game</button>
+      </div>
+      <p class="loading-text">Loading game assets...</p>
+    </div>
+
     <!-- Game Container: Touch events for camera will be attached here -->
-    <div id="game-container">
-      <div id="intent-container"></div>
+    <div id="game-container" class="hidden">
       <!-- Canvas will be appended here by main.ts -->
     </div>
 
     <!-- UI Layer -->
-    <div id="ui-container">
+    <div id="ui-container" class="hidden">
       <!-- HUD -->
       <div id="hud">
         <div class="stat-bars">
