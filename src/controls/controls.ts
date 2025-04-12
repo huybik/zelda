@@ -157,7 +157,7 @@ export class Controls {
     this.keys[keyCode] = true;
     this.keyDownListeners[keyCode]?.forEach((cb) => cb());
     if (keyCode === "KeyE") this.moveState.interact = true;
-    if (keyCode === "KeyF") this.moveState.attack = true;
+    if (keyCode === "KeyF") this.moveState.attack = true; // Attack key
     if (keyCode === "Escape") this.handleEscapeKey();
     this.updateContinuousMoveState();
   }
@@ -167,7 +167,7 @@ export class Controls {
     const keyCode = event.code;
     this.keys[keyCode] = false;
     if (keyCode === "KeyE") this.moveState.interact = false;
-    if (keyCode === "KeyF") this.moveState.attack = false;
+    if (keyCode === "KeyF") this.moveState.attack = false; // Attack key
     this.updateContinuousMoveState();
   }
 
@@ -190,11 +190,19 @@ export class Controls {
     if (this.game?.interactionSystem?.isChatOpen) return;
     this.mouse.buttons[event.button] = true;
     this.mouseClickListeners[event.button]?.forEach((cb) => cb(event));
+    if (event.button === 0) {
+      // Left mouse button for attack
+      this.moveState.attack = true;
+    }
   }
 
   onMouseUp(event: MouseEvent): void {
     if (this.game?.mobileControls?.isActive()) return;
     this.mouse.buttons[event.button] = false;
+    if (event.button === 0) {
+      // Left mouse button release
+      this.moveState.attack = false;
+    }
   }
 
   onMouseMove(event: MouseEvent): void {
@@ -236,6 +244,7 @@ export class Controls {
       this.moveState.forward = (W ? 1 : 0) - (S ? 1 : 0);
       this.moveState.right = (A ? 1 : 0) - (D ? 1 : 0);
       this.moveState.sprint = Sprint ?? false;
+      // Attack state is now handled by KeyF and MouseButton 0 in onKeyDown/Up/MouseDown/Up
     }
   }
 
@@ -257,7 +266,7 @@ export class Controls {
     }
     this.mouse.dx = 0;
     this.mouse.dy = 0;
-    this.updateContinuousMoveState();
+    this.updateContinuousMoveState(); // Ensure continuous state is updated even if no keys pressed this frame
   }
 
   dispose(): void {

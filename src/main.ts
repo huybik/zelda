@@ -198,6 +198,8 @@ export class Game {
         if (entity instanceof Character) {
           entity.initIntentDisplay();
           entity.initNameDisplay();
+        } else if (entity instanceof Animal) {
+          entity.initNameDisplay(); // Animals also get name display
         }
       }
     });
@@ -790,8 +792,9 @@ export class Game {
             // Update observation only when AI thinks
             updateObservation(entity.aiController, this.entities);
             // Compute and store the new move state inside the entity
+            // AI decision making (API call) happens within computeAIMoveState if needed
             entity.moveState = entity.aiController.computeAIMoveState(
-              timeSinceLastAiUpdate
+              timeSinceLastAiUpdate // Pass time since last AI update
             );
           }
           // Update the entity using its current (potentially stale) moveState
@@ -811,6 +814,7 @@ export class Game {
             entity.aiController.updateLogic(timeSinceLastAiUpdate);
           }
           // Update the animal's movement and animations every frame based on its current state
+          // Animal.update now internally calls aiController.computeAIMovement()
           entity.update(deltaTime, { collidables: this.collidableObjects });
         }
         // Handle other generic entity updates (if any)
@@ -989,7 +993,7 @@ export class Game {
     pressurize.y = getTerrainHeight(this.scene!, pressurize.x, pressurize.z);
     this.activeCharacter!.respawn(pressurize);
     this.setPauseState(false);
-    this.interactionSystem!.cancelGatherAction();
+    // this.interactionSystem!.cancelGatherAction(); // Removed gather
   }
 
   switchControlTo(targetCharacter: Character): void {

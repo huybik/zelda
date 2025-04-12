@@ -67,7 +67,7 @@ export class Entity {
       isPlayer: false,
       isNPC: false,
       isCollidable: true,
-      isInteractable: false,
+      isInteractable: false, // Default to false, set by subclasses
       id: this.id,
     };
     if (this.mesh) {

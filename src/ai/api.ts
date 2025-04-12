@@ -91,6 +91,7 @@ export interface Observation {
     position: Vector3;
     isInteractable: boolean;
     resource?: string;
+    health?: number; // Add health for resources
   }>;
 }
 
@@ -153,12 +154,14 @@ export function updateObservation(
         currentAction: entity.aiController?.aiState || "unknown",
       });
     } else if (entity.userData?.isInteractable && entity.visible) {
+      // Include resource objects
       nearbyObjects.push({
         id: entity.userData.id || entity.uuid,
         type: entity.name || "unknown",
         position: entityPosition.clone(),
         isInteractable: entity.userData.isInteractable,
         resource: entity.userData.resource,
+        health: entity.userData.health, // Include health if available
       });
     }
   }
@@ -228,6 +231,8 @@ export function generatePrompt(controller: AIController): string {
               1
             )}, ${o.position.y.toFixed(1)}, ${o.position.z.toFixed(1)}${
               o.resource ? ", resource: " + o.resource : ""
+            }${
+              o.health !== undefined ? ", health: " + o.health : "" // Show resource health
             }`
         )
         .join("\n");
@@ -258,14 +263,15 @@ Here are the recent events you are aware of:
 ${eventLog}
 
 Based on this information, decide your next action. If player told you to do something don't ask for clarification or guidance, just do it.
+Attack target to gather resource.
 Respond ONLY with a valid JSON object:
 {
-  "action": "gather" | "attack" | "chat",
+  "action": "attack" | "chat",
   "target_id": "target_id_here",
   "message": "message_here in ${language}",
   "intent": "less than 10 words reason, response only in ${language} and not dual language"
 }
-  
+
 `.trim();
   return prompt;
 }

@@ -53,19 +53,19 @@ export class Character extends Entity {
   walkAction?: AnimationAction;
   runAction?: AnimationAction;
   attackAction?: AnimationAction;
-  gatherAction?: AnimationAction; // Can reuse attack or be specific
+  // gatherAction?: AnimationAction; // Removed, use attackAction
   deadAction?: AnimationAction;
-  isGathering: boolean = false;
-  gatherAttackTimer: number = 0;
-  gatherAttackInterval: number = 1.0;
+  // isGathering: boolean = false; // Removed
+  // gatherAttackTimer: number = 0; // Removed
+  // gatherAttackInterval: number = 1.0; // Removed
   searchRadius: number = 30;
   roamRadius: number = 10;
-  attackTriggered: boolean = false;
+  attackTriggered: boolean = false; // Still needed for player input debounce
   inventory: Inventory | null;
   persona: string = "";
   currentAction?: AnimationAction;
-  actionType: string = "none";
-  isPerformingAction: boolean = false;
+  actionType: string = "none"; // "attack", "chat", "none"
+  isPerformingAction: boolean = false; // Primarily for one-shot actions like attack
   skeletonRoot: Object3D | null = null; // Store the root for animation generation
   deathTimestamp: number | null = null;
   aiController: AIController | null;
@@ -80,8 +80,8 @@ export class Character extends Entity {
   ) {
     super(scene, position, name);
     this.userData.isCollidable = true;
-    this.userData.isInteractable = true;
-    this.userData.interactionType = "talk";
+    this.userData.isInteractable = true; // Can be targeted for chat or attack
+    this.userData.interactionType = "talk"; // Default interaction is talk
     this.userData.isNPC = true;
     this.maxHealth = 100;
     this.health = this.maxHealth;
@@ -99,8 +99,8 @@ export class Character extends Entity {
       right: 0,
       jump: false,
       sprint: false,
-      interact: false,
-      attack: false,
+      interact: false, // 'E' key for chat
+      attack: false, // 'F' key / mouse for attack/gather
     };
     this.inventory = inventory;
     this.eventLog = new EventLog(50);
@@ -200,8 +200,6 @@ export class Character extends Entity {
     const walkAnim = getOrCreateAnimation("walk", createWalkAnimation);
     const runAnim = getOrCreateAnimation("run", createRunAnimation);
     const attackAnim = getOrCreateAnimation("attack", createAttackAnimation);
-    // For now, gather uses attack animation logic, but we could generate a specific one:
-    // const gatherAnim = getOrCreateAnimation('gather', createGatherAnimation);
     const deadAnim = getOrCreateAnimation("dead", createDeadAnimation); // Or 'death'
 
     if (idleAnim) this.idleAction = this.mixer.clipAction(idleAnim);
@@ -211,8 +209,7 @@ export class Character extends Entity {
       this.attackAction = this.mixer.clipAction(attackAnim);
       this.attackAction.setLoop(LoopOnce, 1);
       this.attackAction.clampWhenFinished = true;
-      // Use attack animation for gather as well for now
-      this.gatherAction = this.attackAction;
+      // this.gatherAction = this.attackAction; // Removed
     }
     if (deadAnim) {
       this.deadAction = this.mixer.clipAction(deadAnim);
@@ -231,19 +228,22 @@ export class Character extends Entity {
     this.updateBoundingBox();
 
     this.mixer.addEventListener("finished", (e) => {
-      // Handle finishing attack/gather actions
-      if (e.action === this.attackAction || e.action === this.gatherAction) {
-        if (this.moveState.attack && e.action === this.attackAction) {
-          // Chain attacks if button held (only for attack, not gather)
-          this.performAttack();
-          this.attackAction?.reset().play();
-        } else if (!this.isGathering) {
-          // If not gathering or chaining attacks, transition back to idle/move
+      // Handle finishing attack actions
+      if (e.action === this.attackAction) {
+        // Check if attack button is still held (for player chaining)
+        const isPlayerHoldingAttack =
+          this.userData.isPlayer && this.moveState.attack;
+
+        if (isPlayerHoldingAttack) {
+          // Chain attacks if button held
+          this.performAttack(); // Perform next attack logic
+          this.attackAction?.reset().play(); // Replay animation
+        } else {
+          // If not chaining, transition back to idle/move
           this.isPerformingAction = false;
           this.actionType = "none";
           this.transitionToLocomotion();
         }
-        // If gathering, the gathering logic handles the state transition
       }
       // Handle finishing death animation (it clamps, so no transition needed)
       // if (e.action === this.deadAction) { ... }
@@ -298,8 +298,8 @@ export class Character extends Entity {
   }
 
   performAttack(): void {
-    const range = 2.5;
-    const damage = this.name === "Player" ? 40 : 10;
+    const range = 3;
+    const damage = this.userData.isPlayer ? 40 : 10; // Player deals more damage
     if (!this.mesh || !this.scene || !this.game || this.isDead) return;
 
     const rayOrigin = this.mesh.position
@@ -314,41 +314,110 @@ export class Character extends Entity {
     }
     this.rayCaster.set(rayOrigin, rayDirection);
 
-    const potentialTargets = this.game.entities.filter(
-      (
-        entity
-      ): entity is Entity => // Check against Entity base class
-        entity instanceof Entity && // Ensure it's an Entity
-        entity !== this &&
-        !entity.isDead &&
-        entity.mesh !== null
-    );
+    // Check against interactable objects (includes Entities and Resources)
+    const potentialTargets = this.game.interactableObjects.filter((item) => {
+      if (item === this || item === this.mesh) return false; // Don't target self
+      const targetMesh = (item as any).mesh ?? item;
+      if (!(targetMesh instanceof Object3D) || !targetMesh.visible)
+        return false;
+      // Check if entity is dead
+      if (item instanceof Entity && item.isDead) return false;
+      // Check if resource is depleted (using health)
+      if (
+        targetMesh.userData.resource &&
+        targetMesh.userData.health !== undefined &&
+        targetMesh.userData.health <= 0
+      )
+        return false;
+      return true;
+    });
 
-    let closestTarget: Entity | null = null; // Target can be Character or Animal
+    let closestTarget: any | null = null; // Can be Entity or resource Object3D
     let closestDistance = Infinity;
     let closestPoint: Vector3 | null = null;
 
     for (const target of potentialTargets) {
-      const box = target.boundingBox;
-      if (!box || box.isEmpty()) continue; // Skip targets without valid bounding boxes
+      const targetMesh = (target as any).mesh ?? target;
+      const box = targetMesh.userData.boundingBox as Box3 | undefined;
+      if (!box || box.isEmpty()) {
+        // Attempt to compute bounding box if missing
+        const tempBox = new Box3().setFromObject(targetMesh);
+        if (tempBox.isEmpty()) continue; // Skip if still empty
+        targetMesh.userData.boundingBox = tempBox; // Cache it
+      }
 
       const intersectionPoint = this.rayCaster.ray.intersectBox(
-        box,
+        targetMesh.userData.boundingBox,
         new Vector3()
       );
+
       if (intersectionPoint) {
         const distance = rayOrigin.distanceTo(intersectionPoint);
         if (distance < closestDistance && distance <= range) {
           closestDistance = distance;
-          closestTarget = target;
+          closestTarget = target; // Store the instance (Entity or Object3D)
           closestPoint = intersectionPoint;
         }
       }
     }
 
     if (closestTarget && closestPoint) {
-      closestTarget.takeDamage(damage, this);
-      this.game.spawnParticleEffect(closestPoint, "red");
+      const targetMesh = (closestTarget as any).mesh ?? closestTarget;
+
+      // Check if the target is a resource
+      if (targetMesh.userData.resource) {
+        const resource = targetMesh.userData.resource as string;
+        const currentHealth = targetMesh.userData.health as number;
+        const maxHealth = targetMesh.userData.maxHealth as number;
+
+        if (currentHealth > 0) {
+          const newHealth = Math.max(0, currentHealth - damage);
+          targetMesh.userData.health = newHealth;
+          this.game.spawnParticleEffect(closestPoint, "red"); // Hit particle
+
+          if (newHealth <= 0) {
+            // Resource depleted
+            if (this.inventory?.addItem(resource, 1)) {
+              this.game.logEvent(
+                this,
+                "gather_complete", // Log as gather_complete for consistency
+                `${this.name} gathered 1 ${resource}.`,
+                targetMesh.name || targetMesh.id,
+                { resource },
+                closestPoint
+              );
+              this.game.spawnParticleEffect(closestPoint, "green"); // Success particle
+            } else {
+              this.game.logEvent(
+                this,
+                "gather_fail",
+                `${this.name}'s inventory full, could not gather ${resource}.`,
+                targetMesh.name || targetMesh.id,
+                { resource },
+                closestPoint
+              );
+            }
+
+            // Handle depletion
+            if (targetMesh.userData.isDepletable) {
+              targetMesh.userData.isInteractable = false; // Make non-targetable
+              targetMesh.visible = false;
+              const respawnTime = targetMesh.userData.respawnTime || 15000;
+              setTimeout(() => {
+                if (targetMesh.userData) {
+                  targetMesh.userData.isInteractable = true;
+                  targetMesh.userData.health = maxHealth; // Reset health
+                  targetMesh.visible = true;
+                }
+              }, respawnTime);
+            }
+          }
+        }
+      } else if (closestTarget instanceof Entity) {
+        // Target is another entity (Character or Animal)
+        closestTarget.takeDamage(damage, this);
+        this.game.spawnParticleEffect(closestPoint, "red"); // Combat hit particle
+      }
     }
   }
 
@@ -430,24 +499,8 @@ export class Character extends Entity {
       return; // Don't update locomotion/action animations if dead
     }
 
-    // Handle gathering animation loop (using attack/gather action)
-    if (this.isGathering && this.gatherAction) {
-      this.gatherAttackTimer += deltaTime;
-      this.switchAction(this.gatherAction); // Will reset and play if not already playing
-
-      if (this.gatherAttackTimer >= this.gatherAttackInterval) {
-        // Play the gather/attack animation
-        this.gatherAttackTimer = 0; // Reset timer for next swing
-      } else if (
-        !this.gatherAction.isRunning() && // If the action finished before interval
-        this.currentAction !== this.idleAction // And we are not already idle
-      ) {
-        // Switch back to idle between gather swings
-        this.switchAction(this.idleAction);
-      }
-    }
-    // Handle one-shot actions like attack (if not gathering)
-    else if (
+    // Handle one-shot actions like attack
+    if (
       this.isPerformingAction &&
       this.actionType === "attack" &&
       this.attackAction
@@ -456,27 +509,21 @@ export class Character extends Entity {
       // No need to switch here, the listener handles it.
     }
     // Handle locomotion (idle/walk/run) if not doing a specific action
-    else if (!this.isPerformingAction && !this.isGathering) {
+    else if (!this.isPerformingAction) {
       this.transitionToLocomotion();
     }
   }
 
   triggerAction(actionType: string): void {
-    if (this.isDead || this.isPerformingAction || this.isGathering) return; // Prevent actions if dead or already busy
+    if (this.isDead || this.isPerformingAction) return; // Prevent actions if dead or already busy
 
     if (actionType === "attack" && this.attackAction) {
       this.actionType = actionType;
       this.isPerformingAction = true;
       this.switchAction(this.attackAction); // SwitchAction handles reset and play
       this.performAttack(); // Perform the actual attack logic
-    } else if (actionType === "gather" && this.gatherAction) {
-      // Note: 'gather' state is primarily managed by InteractionSystem's activeGather
-      // This trigger is mainly for the animation aspect within Character
-      this.actionType = actionType;
-      // isGathering flag is set by InteractionSystem
-      this.switchAction(this.gatherAction); // Start the animation
-      this.gatherAttackTimer = 0; // Reset timer for the first swing
     }
+    // Removed 'gather' case
   }
 
   update(deltaTime: number, options: UpdateOptions = {}): void {
@@ -493,10 +540,10 @@ export class Character extends Entity {
     this.handleStamina(deltaTime);
 
     // Apply movement unless performing a non-interruptible action
-    if (!this.isPerformingAction || this.actionType === "gather") {
-      // Gathering can be interrupted
+    if (!this.isPerformingAction) {
       this.handleMovement(deltaTime);
     } else {
+      // Allow slight movement adjustment during attack? Or freeze? Freeze for now.
       this.velocity.x = 0;
       this.velocity.z = 0;
     }
@@ -516,14 +563,15 @@ export class Character extends Entity {
     }
     this.velocity.y = 0;
 
-    // Handle attack trigger (unchanged)
+    // Handle attack trigger from player input
     if (moveState.attack && !this.attackTriggered) {
-      this.attackTriggered = true;
-      if (!this.isGathering && !this.isPerformingAction) {
+      this.attackTriggered = true; // Debounce flag for player input
+      if (!this.isPerformingAction) {
+        // Only trigger if not already attacking
         this.triggerAction("attack");
       }
     } else if (!moveState.attack) {
-      this.attackTriggered = false;
+      this.attackTriggered = false; // Reset debounce flag when input stops
     }
 
     this.updateAnimations(deltaTime);
@@ -541,7 +589,7 @@ export class Character extends Entity {
     if (this.aiController) this.aiController.aiState = "dead";
 
     // Reset action states
-    this.isGathering = false;
+    // this.isGathering = false; // Removed
     this.isPerformingAction = false;
     this.actionType = "none";
     this.attackTriggered = false; // Ensure attack can't be triggered
@@ -588,8 +636,8 @@ export class Character extends Entity {
     this.isDead = false; // Critical: Set isDead back to false
     this.deathTimestamp = null; // Reset death timestamp
     this.isExhausted = false;
-    this.isGathering = false;
-    this.gatherAttackTimer = 0;
+    // this.isGathering = false; // Removed
+    // this.gatherAttackTimer = 0; // Removed
     this.isPerformingAction = false;
     this.actionType = "none";
     this.attackTriggered = false;
@@ -604,7 +652,7 @@ export class Character extends Entity {
       this.aiController.aiState = "idle";
       this.aiController.previousAiState = "idle";
       this.aiController.destination = null;
-      this.aiController.targetResource = null;
+      // this.aiController.targetResource = null; // Removed
       this.aiController.target = null;
       this.aiController.targetAction = null;
       this.aiController.message = null;
@@ -645,6 +693,7 @@ export class Character extends Entity {
         {},
         player.mesh!.position
       );
+    // Only allow chat interaction via 'E' key
     return { type: "chat" };
   }
 }

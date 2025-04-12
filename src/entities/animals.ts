@@ -24,6 +24,7 @@ import {
 } from "../core/utils";
 import { AnimalAIController } from "../ai/animalAI";
 import { Entity } from "../entities/entitiy";
+import { Character } from "./character";
 import { CHARACTER_HEIGHT, CHARACTER_RADIUS } from "../core/constants"; // Use character constants for now
 import {
   createAnimalIdleAnimation,
@@ -63,7 +64,8 @@ export class Animal extends Entity {
     super(scene, position, name);
     this.animalType = animalType;
     this.userData.isCollidable = true;
-    this.userData.isInteractable = false; // Animals usually aren't interacted with directly
+    this.userData.isInteractable = true; // Animals can be targeted for attack
+    this.userData.interactionType = "attack"; // Primary interaction is attack
     this.userData.isAnimal = true;
     this.userData.animalType = animalType;
     this.userData.isAggressive = animalType === "Wolf"; // Example property
@@ -154,7 +156,6 @@ export class Animal extends Entity {
     // --- Animation Setup ---
     this.mixer = new AnimationMixer(model); // Mixer targets the main model group
 
-    // Generator function now expects the mixer root (model group)
     // Generator function now expects the mixer root (model group)
     const getOrCreateAnimalAnimation = (
       nameIdentifier: string,
@@ -303,7 +304,7 @@ export class Animal extends Entity {
 
   performAttack(): void {
     const range = 2.5; // Shorter range for animals?
-    const damage = this.animalType === "Wolf" ? 5 : 2; // Example damage
+    const damage = this.animalType === "Wolf" ? 15 : 5; // Example damage
     if (!this.mesh || !this.scene || !this.game || this.isDead) return;
 
     const attackOrigin = this.mesh.position
@@ -510,6 +511,11 @@ export class Animal extends Entity {
         this.mesh!.position.clone()
       );
       // Could add loot drop logic here
+      if (this.animalType === "Wolf" && attacker instanceof Character) {
+        attacker.inventory?.addItem("feather", MathUtils.randInt(1, 3));
+      } else if (this.animalType === "Deer" && attacker instanceof Character) {
+        attacker.inventory?.addItem("feather", MathUtils.randInt(2, 5));
+      }
     }
   }
 }

@@ -288,7 +288,7 @@ export class MobileControls {
     );
     this.controls.moveState.sprint = false;
     this.controls.moveState.interact = this.interactHeld;
-    this.controls.moveState.attack = this.attackHeld;
+    this.controls.moveState.attack = this.attackHeld; // Attack state from button
     this.controls.moveState.jump = false;
     const touchCameraSensitivity = 0.3;
     const touchPlayerRotationSensitivity = 0.2;
@@ -336,5 +336,6 @@ export class MobileControls {
         this.boundHandleCameraTouchEnd
       );
     }
+    // Remove button listeners if needed, though usually handled by element removal
   }
 }

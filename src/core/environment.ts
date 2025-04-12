@@ -123,10 +123,11 @@ export function populateEnvironment(
       const obj = creator(new Vector3(x, 0, z), ...args);
       const height = getTerrainHeight(scene, x, z);
       obj.position.y = height;
-      if (obj.name === "Herb Plant") obj.position.y = height + 0.1; // Adjust herb height slightly
+      if (obj.name === "Herb Plant") obj.position.y = height + 0.5; // Adjust herb height slightly
 
       scene.add(obj);
       if (obj.userData.isCollidable) collidableObjects.push(obj);
+      // Resources are interactable in the sense that they can be targeted for attack
       if (obj.userData.isInteractable) interactableObjects.push(obj);
       entities.push(obj); // Add to entities for potential minimap display if needed later
       obj.userData.id = `${obj.name}_${obj.uuid.substring(0, 6)}`;
@@ -177,8 +178,8 @@ export function populateEnvironment(
 
       entities.push(animal);
       collidableObjects.push(animal.mesh!);
-      // Animals are not typically interactable directly
-      // interactableObjects.push(animal);
+      // Animals are interactable (can be targeted for attack)
+      interactableObjects.push(animal);
     }
   };
 

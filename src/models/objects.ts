@@ -1,4 +1,4 @@
-// File: /src/objects/objects.ts
+// File: /src/models/objects.ts
 import {
   Vector3,
   Mesh,
@@ -30,6 +30,13 @@ const grassMat = new MeshBasicMaterial({
   color: 0x558b2f,
   side: DoubleSide,
 }); // Darker green for grass
+
+// Base health values for resources (adjust as needed)
+const BASE_HEALTH = {
+  wood: 100,
+  stone: 150,
+  herb: 30,
+};
 
 export class InteractableObject {
   id: string;
@@ -84,7 +91,7 @@ export class InteractableObject {
     if (!inventory || !game)
       return { type: "error", message: "Internal error." };
     switch (this.interactionType) {
-      case "retrieve":
+      case "retrieve": // Kept for potential simple pickup items
         const itemName = this.data as string;
         if (inventory.addItem(itemName, 1)) {
           message = `Picked up: ${itemName}`;
@@ -117,7 +124,7 @@ export class InteractableObject {
           );
           return { type: "error", message: "Inventory full" };
         }
-
+      // Removed "gather" case, handled by attacking now
       default:
         message = `${player.name} looked at ${this.name}.`;
         action = "examine";
@@ -166,26 +173,31 @@ export function createTree(position: Vector3): Group {
   foliageMesh.position.y = trunkHeight + foliageHeight / 3;
   foliageMesh.castShadow = true;
   treeGroup.add(foliageMesh);
-  treeGroup.position.copy(position).setY(0);
+  treeGroup.position.copy(position).setY(0); // Set Y to 0 initially, Environment will adjust
+  const maxHealth = BASE_HEALTH.wood;
   treeGroup.userData = {
     isCollidable: true,
-    isInteractable: true,
-    interactionType: "gather",
+    isInteractable: true, // Can be targeted for attack
+    interactionType: "attack", // Interaction is attacking
     resource: "wood",
-    gatherTime: 3000,
-    prompt: "Hold E/Interact E to gather Wood",
+    health: maxHealth, // Current health
+    maxHealth: maxHealth, // Max health
+    // gatherTime: 3000, // Removed
+    // prompt: "Hold E/Interact E to gather Wood", // Removed (interaction is via attack)
     isDepletable: true,
     respawnTime: 20000,
-    entityReference: treeGroup,
-    boundingBox: new Box3().setFromObject(treeGroup),
+    entityReference: treeGroup, // Reference to the Group itself
+    boundingBox: new Box3().setFromObject(treeGroup), // Compute initial bounding box
   };
+  // Ensure bounding box is updated after potential position adjustments in environment
+  treeGroup.userData.boundingBox.setFromObject(treeGroup);
   return treeGroup;
 }
 
 export function createRock(position: Vector3, size: number): Group {
   const rockGroup = new Group();
   rockGroup.name = "Rock";
-  const height = size * randomFloat(0.5, 1.0);
+  const height = size * randomFloat(2, 3);
   const geo = new BoxGeometry(size, height, size * randomFloat(0.8, 1.2));
   const mesh = new Mesh(geo, rockMat);
   mesh.castShadow = true;
@@ -196,43 +208,51 @@ export function createRock(position: Vector3, size: number): Group {
     randomFloat(-0.1, 0.1) * Math.PI
   );
   rockGroup.add(mesh);
-  rockGroup.position.copy(position).setY(0);
+  rockGroup.position.copy(position).setY(0); // Set Y to 0 initially
+  const maxHealth = BASE_HEALTH.stone;
   rockGroup.userData = {
     isCollidable: true,
-    isInteractable: true,
-    interactionType: "gather",
+    isInteractable: true, // Can be targeted for attack
+    interactionType: "attack", // Interaction is attacking
     resource: "stone",
-    gatherTime: 4000,
-    prompt: "Hold E/Interact to gather Stone",
+    health: maxHealth,
+    maxHealth: maxHealth,
+    // gatherTime: 4000, // Removed
+    // prompt: "Hold E/Interact to gather Stone", // Removed
     isDepletable: true,
     respawnTime: 30000,
     entityReference: rockGroup,
     boundingBox: new Box3().setFromObject(rockGroup),
   };
+  rockGroup.userData.boundingBox.setFromObject(rockGroup);
   return rockGroup;
 }
 
 export function createHerb(position: Vector3): Group {
   const herbGroup = new Group();
   herbGroup.name = "Herb Plant";
-  const size = 0.25;
-  const geo = new SphereGeometry(size, 5, 4);
+  const size = 1;
+  const geo = new SphereGeometry(size, 10, 20);
   const mesh = new Mesh(geo, herbMat);
   mesh.castShadow = true;
   herbGroup.add(mesh);
-  herbGroup.position.copy(position).setY(size);
+  herbGroup.position.copy(position).setY(size); // Set Y based on size
+  const maxHealth = BASE_HEALTH.herb;
   herbGroup.userData = {
-    isCollidable: false,
-    isInteractable: true,
-    interactionType: "gather",
+    isCollidable: true, // Herbs usually aren't collidable
+    isInteractable: true, // Can be targeted for attack
+    interactionType: "attack", // Interaction is attacking
     resource: "herb",
-    gatherTime: 1500,
-    prompt: "Hold E/Interact to gather Herb",
+    health: maxHealth,
+    maxHealth: maxHealth,
+    // gatherTime: 1500, // Removed
+    // prompt: "Hold E/Interact to gather Herb", // Removed
     isDepletable: true,
     respawnTime: 15000,
     entityReference: herbGroup,
     boundingBox: new Box3().setFromObject(herbGroup),
   };
+  herbGroup.userData.boundingBox.setFromObject(herbGroup);
   return herbGroup;
 }
 

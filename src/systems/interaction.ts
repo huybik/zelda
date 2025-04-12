@@ -12,7 +12,7 @@ import {
   EventLog,
   InteractionResult,
   TargetInfo,
-  ActiveGather,
+  // ActiveGather, // Removed
 } from "../core/utils";
 import { Controls } from "../controls/controls";
 import { Game } from "../main";
@@ -22,17 +22,17 @@ import { INTERACTION_DISTANCE, AIM_TOLERANCE } from "../core/constants";
 export class InteractionSystem {
   player: Character;
   camera: PerspectiveCamera;
-  interactableEntities: Array<any>;
+  interactableEntities: Array<any>; // Includes Characters, Animals, Resources
   controls: Controls;
   inventory: Inventory;
   eventLog: EventLog;
   raycaster: Raycaster;
-  interactionDistance: number = INTERACTION_DISTANCE;
+  interactionDistance: number = INTERACTION_DISTANCE; // For 'E' key interactions (chat)
   aimTolerance: number = AIM_TOLERANCE;
-  currentTarget: any | null = null;
+  currentTarget: any | null = null; // Can be Character, Animal, Resource Object3D
   currentTargetMesh: Object3D | null = null;
   interactionPromptElement: HTMLElement | null;
-  activeGather: ActiveGather | null = null;
+  // activeGather: ActiveGather | null = null; // Removed
   promptTimeout: ReturnType<typeof setTimeout> | null = null;
   game: Game;
   chatContainer: HTMLElement | null;
@@ -78,19 +78,16 @@ export class InteractionSystem {
       }
       return;
     }
-    if (this.activeGather) {
-      const moved = this.player.velocity.lengthSq() * deltaTime > 0.001;
-      if (!this.controls.moveState.interact || moved) {
-        this.cancelGatherAction();
-        return;
-      }
-      this.updateGatherAction(deltaTime);
-      return;
-    }
+    // Removed activeGather check
+
+    // Find target for 'E' interaction (chat)
     const targetInfo = this.findInteractableTarget();
+
+    // Only show prompt for things that can be interacted with via 'E' (currently only Characters for chat)
     if (
-      targetInfo?.instance?.userData?.isInteractable &&
-      targetInfo.instance !== this.player
+      targetInfo?.instance instanceof Character && // Check if it's a Character
+      targetInfo.instance !== this.player &&
+      !targetInfo.instance.isDead // Check if alive
     ) {
       if (this.currentTarget !== targetInfo.instance) {
         this.currentTarget = targetInfo.instance;
@@ -99,80 +96,86 @@ export class InteractionSystem {
           targetInfo.instance.userData.prompt ||
             (this.game.mobileControls?.isActive()
               ? "Tap Interact"
-              : "Press E to interact")
+              : "Press E to talk") // Changed prompt
         );
       }
-      if (this.controls.moveState.interact && !this.activeGather)
+      // Check for 'E' key press (interact)
+      if (this.controls.moveState.interact) {
         this.tryInteract(this.currentTarget);
+      }
     } else if (this.currentTarget) {
+      // Clear target if it's no longer valid for 'E' interaction
       this.currentTarget = null;
       this.currentTargetMesh = null;
       this.hidePrompt();
     }
+
+    // Attack logic is handled by Character.update based on moveState.attack
   }
 
   findInteractableTarget(): TargetInfo | null {
     this.raycaster.setFromCamera(new Vector2(0, 0), this.camera);
-    this.raycaster.far = this.interactionDistance;
+    this.raycaster.far = this.interactionDistance; // Use interactionDistance for 'E' key targeting
     const playerPosition = this.player.mesh!.position;
+
+    // Filter potential targets for 'E' interaction (currently only living Characters)
     const meshesToCheck = this.interactableEntities
       .map((item) => (item as any).mesh ?? item)
       .filter((mesh): mesh is Object3D => {
         if (
           !(mesh instanceof Object3D) ||
-          !mesh.userData?.isInteractable ||
+          !mesh.userData?.isInteractable || // Must be interactable
           !mesh.visible ||
           mesh === this.player.mesh
         )
           return false;
+
         const entityRef = mesh.userData?.entityReference;
-        if (entityRef instanceof Character && entityRef.isDead) return false;
+        // Only consider living Characters for 'E' interaction
+        if (!(entityRef instanceof Character) || entityRef.isDead) return false;
+
+        // Basic distance check (optional optimization)
         const distSq = playerPosition.distanceToSquared(mesh.position);
-        return distSq < 100;
+        return distSq < this.interactionDistance * this.interactionDistance * 4; // Check slightly larger radius
       });
+
     let closestHit: TargetInfo | null = null;
     const intersects = this.raycaster.intersectObjects(meshesToCheck, true);
+
     if (intersects.length > 0) {
       for (const intersect of intersects) {
         let hitObject: Object3D | null = intersect.object;
         let rootInstance: any | null = null;
         let rootMesh: Object3D | null = null;
+
+        // Traverse up to find the root interactable object/entity
         while (hitObject) {
           if (
             hitObject.userData?.isInteractable &&
-            hitObject.userData?.entityReference
+            hitObject.userData?.entityReference instanceof Character // Ensure it's a Character
           ) {
             rootInstance = hitObject.userData.entityReference;
             rootMesh = hitObject;
             break;
           }
-          if (
-            hitObject.userData?.isInteractable &&
-            hitObject.userData?.isSimpleObject
-          ) {
-            rootInstance =
-              this.interactableEntities.find(
-                (e) => (e as any).mesh === hitObject
-              ) || hitObject.userData?.entityReference;
-            rootMesh = hitObject;
-            break;
-          }
           hitObject = hitObject.parent;
         }
+
+        // Validate the found instance
         if (
-          rootInstance &&
+          rootInstance instanceof Character && // Must be a Character
           rootMesh &&
-          rootInstance.userData?.isInteractable &&
+          !rootInstance.isDead && // Must be alive
           rootInstance !== this.player
         ) {
-          if (rootInstance instanceof Character && rootInstance.isDead)
-            continue;
+          // Check aiming angle
           this.objectDirection
             .copy(intersect.point)
             .sub(this.camera.position)
             .normalize();
           this.camera.getWorldDirection(this.cameraDirection);
           const angle = this.cameraDirection.angleTo(this.objectDirection);
+
           if (angle < this.aimTolerance) {
             closestHit = {
               mesh: rootMesh,
@@ -180,31 +183,36 @@ export class InteractionSystem {
               point: intersect.point,
               distance: intersect.distance,
             };
-            break;
+            break; // Found the closest valid target in the aim cone
           }
         }
       }
     }
-    return closestHit || this.findNearbyInteractable();
+
+    // If raycast fails, check nearby Characters (for proximity interaction)
+    return closestHit || this.findNearbyCharacter();
   }
 
-  findNearbyInteractable(): TargetInfo | null {
+  // Simplified nearby check specifically for Characters (for 'E' interaction)
+  findNearbyCharacter(): TargetInfo | null {
     const playerPosition = this.player.mesh!.getWorldPosition(new Vector3());
     let closestDistSq = this.interactionDistance * this.interactionDistance;
-    let closestInstance: any | null = null;
+    let closestInstance: Character | null = null;
+
     this.interactableEntities.forEach((item) => {
+      // Only consider living Characters
       if (
-        !item?.userData?.isInteractable ||
+        !(item instanceof Character) ||
         item === this.player ||
-        item === this.player.mesh
+        item.isDead ||
+        !item.mesh ||
+        !item.mesh.visible
       )
         return;
-      if (item instanceof Character && item.isDead) return;
-      if (item.userData?.isSimpleObject && !(item as any).isActive) return;
-      const objMesh = (item as any).mesh ?? item;
-      if (!objMesh || !objMesh.visible) return;
-      this.objectPosition.copy(objMesh.getWorldPosition(new Vector3()));
+
+      this.objectPosition.copy(item.mesh.getWorldPosition(new Vector3()));
       const distSq = playerPosition.distanceToSquared(this.objectPosition);
+
       if (distSq < closestDistSq) {
         this.player.mesh!.getWorldDirection(this.playerDirection);
         this.objectDirection
@@ -212,15 +220,18 @@ export class InteractionSystem {
           .sub(playerPosition)
           .normalize();
         const angle = this.playerDirection.angleTo(this.objectDirection);
+
+        // Check if roughly in front
         if (angle < Math.PI / 2.5) {
           closestDistSq = distSq;
           closestInstance = item;
         }
       }
     });
+
     if (closestInstance) {
       const mesh = (closestInstance as any).mesh ?? closestInstance;
-      this.objectPosition.copy(mesh.getWorldPosition(new Vector3()));
+      this.objectPosition.copy(mesh!.getWorldPosition(new Vector3()));
       return {
         mesh,
         instance: closestInstance,
@@ -232,55 +243,33 @@ export class InteractionSystem {
   }
 
   tryInteract(targetInstance: any): void {
-    if (!targetInstance || !targetInstance.userData?.isInteractable) return;
-    if (targetInstance instanceof Character && targetInstance.isDead) {
-      this.showPrompt("Cannot interact with the deceased.", 2000);
+    // This function is now primarily for 'E' key interactions (chat)
+    if (!(targetInstance instanceof Character) || targetInstance.isDead) {
+      this.showPrompt("Cannot interact with this.", 2000);
       return;
     }
-    let targetPosition: Vector3;
-    const targetMesh = (targetInstance as any).mesh ?? targetInstance;
-    if (targetMesh instanceof Object3D) {
-      targetPosition = targetMesh.position;
-    } else {
-      return;
-    }
+
+    const targetPosition = targetInstance.mesh!.position;
     const distance = this.player.mesh!.position.distanceTo(targetPosition);
+
     if (distance > this.interactionDistance * 1.1) {
       this.currentTarget = null;
       this.currentTargetMesh = null;
       this.hidePrompt();
       return;
     }
-    let result: InteractionResult | null = null;
-    if (typeof targetInstance.interact === "function") {
-      result = targetInstance.interact(this.player);
-    } else if (
-      targetInstance.userData.interactionType === "gather" &&
-      targetInstance.userData.resource
-    ) {
-      this.startGatherAction(targetInstance);
-      result = { type: "gather_start" };
-    } else {
-      const message = `${this.player.name} examined ${targetInstance.name || "object"}.`;
-      if (this.player.game)
-        this.player.game.logEvent(
-          this.player,
-          "examine",
-          message,
-          targetInstance.name || targetInstance.id,
-          {},
-          targetPosition
-        );
-      result = { type: "message", message: "You look at the object." };
-    }
+
+    // Call the Character's interact method (which should handle chat)
+    const result = targetInstance.interact(this.player);
+
     if (result) this.handleInteractionResult(result, targetInstance);
-    if (
-      result?.type !== "gather_start" &&
-      !targetInstance.userData?.isInteractable
-    ) {
-      this.currentTarget = null;
-      this.currentTargetMesh = null;
-    }
+
+    // Clear target if interaction makes it invalid (e.g., quest completion changes state)
+    // For chat, we usually keep the target until chat closes.
+    // if (!targetInstance.userData?.isInteractable) {
+    //     this.currentTarget = null;
+    //     this.currentTargetMesh = null;
+    // }
   }
 
   handleInteractionResult(
@@ -313,169 +302,60 @@ export class InteractionSystem {
       case "chat":
         if (targetInstance instanceof Character) {
           this.openChatInterface(targetInstance);
-          promptDuration = null;
+          promptDuration = null; // Chat interface handles display
         } else {
           promptText = "Cannot chat with this.";
         }
         break;
       case "item_retrieved":
-        promptDuration = null;
+        promptDuration = null; // No prompt needed for simple pickup
         break;
       case "error":
         if (result.message) promptText = result.message;
         break;
-      case "gather_start":
-        promptDuration = null;
-        break;
+      // case "gather_start": // Removed
+      //   promptDuration = null;
+      //   break;
     }
     if (promptText && promptDuration !== null)
       this.showPrompt(promptText, promptDuration);
   }
 
-  startGatherAction(targetInstance: any): void {
-    if (this.activeGather) return;
-    const resource = targetInstance.userData.resource as string;
-    const gatherTime = (targetInstance.userData.gatherTime as number) || 2000;
-    this.activeGather = {
-      targetInstance,
-      startTime: performance.now(),
-      duration: gatherTime,
-      resource,
-    };
-    this.showPrompt(`Gathering ${resource}... (0%)`);
-
-    this.player.velocity.x = 0;
-    this.player.velocity.z = 0;
-    this.player.isGathering = true;
-    this.player.gatherAttackTimer = 0;
-    this.player.triggerAction("gather");
-  }
-
-  updateGatherAction(deltaTime: number): void {
-    if (!this.activeGather) return;
-    const elapsedTime = performance.now() - this.activeGather.startTime;
-    const progress = Math.min(1, elapsedTime / this.activeGather.duration);
-    this.showPrompt(
-      `Gathering ${this.activeGather.resource}... (${Math.round(
-        progress * 100
-      )}%)`
-    );
-    if (progress >= 1) this.completeGatherAction();
-  }
-
-  completeGatherAction(): void {
-    if (!this.activeGather) return;
-    const { resource, targetInstance } = this.activeGather;
-    const targetName = targetInstance.name || targetInstance.id;
-    const targetPosition = (targetInstance.mesh ?? targetInstance).position;
-    if (this.inventory.addItem(resource, 1)) {
-      if (this.player.game)
-        this.player.game.logEvent(
-          this.player,
-          "gather_complete",
-          `${this.player.name} gathered 1 ${resource}.`,
-          targetName,
-          { resource },
-          targetPosition
-        );
-      if (targetInstance.userData.isDepletable) {
-        targetInstance.userData.isInteractable = false;
-        const meshToHide = targetInstance.mesh ?? targetInstance;
-        if (meshToHide instanceof Object3D) meshToHide.visible = false;
-        const respawnTime = targetInstance.userData.respawnTime || 15000;
-        setTimeout(() => {
-          if (targetInstance.userData) {
-            targetInstance.userData.isInteractable = true;
-            if (meshToHide instanceof Object3D) meshToHide.visible = true;
-          }
-        }, respawnTime);
-      } else if (
-        targetInstance.userData.isSimpleObject &&
-        typeof (targetInstance as any).removeFromWorld === "function"
-      ) {
-        (targetInstance as any).removeFromWorld();
-      }
-    } else {
-      if (this.player.game)
-        this.player.game.logEvent(
-          this.player,
-          "gather_fail",
-          `${this.player.name}'s inventory full, could not gather ${resource}.`,
-          targetName,
-          { resource },
-          targetPosition
-        );
-    }
-    this.player.isGathering = false;
-    this.player.gatherAttackTimer = 0;
-    this.player.isPerformingAction = false;
-    this.player.actionType = "none";
-    if (this.player.attackAction && this.player.attackAction.isRunning()) {
-      this.player.attackAction.stop();
-      if (this.player.idleAction) this.player.idleAction.reset().play();
-    }
-    this.activeGather = null;
-    this.hidePrompt();
-    this.currentTarget = null;
-    this.currentTargetMesh = null;
-  }
-
-  cancelGatherAction(): void {
-    if (!this.activeGather) return;
-    const targetName =
-      this.activeGather.targetInstance.name ||
-      this.activeGather.targetInstance.id;
-    const targetPosition = (
-      this.activeGather.targetInstance.mesh ?? this.activeGather.targetInstance
-    ).position;
-    if (this.player.game)
-      this.player.game.logEvent(
-        this.player,
-        "gather_cancel",
-        `Gathering ${this.activeGather.resource} cancelled.`,
-        targetName,
-        { resource: this.activeGather.resource },
-        targetPosition
-      );
-    this.player.isGathering = false;
-    this.player.gatherAttackTimer = 0;
-    this.player.isPerformingAction = false;
-    this.player.actionType = "none";
-    if (this.player.attackAction && this.player.attackAction.isRunning()) {
-      this.player.attackAction.stop();
-      if (this.player.idleAction) this.player.idleAction.reset().play();
-    }
-    this.activeGather = null;
-    this.hidePrompt();
-  }
+  // Removed startGatherAction, updateGatherAction, completeGatherAction, cancelGatherAction
 
   showPrompt(text: string, duration: number | null = null): void {
-    if (
-      !this.interactionPromptElement ||
-      (this.activeGather && duration === null)
-    )
-      return;
+    if (!this.interactionPromptElement) return;
+    // Removed activeGather check
+
     this.interactionPromptElement.textContent = text;
     this.interactionPromptElement.style.display = "block";
+
+    // Clear any existing timeout
     clearTimeout(this.promptTimeout ?? undefined);
     this.promptTimeout = null;
+
+    // Set new timeout if duration is provided
     if (duration && duration > 0) {
       this.promptTimeout = setTimeout(() => {
-        if (this.interactionPromptElement?.textContent === text)
+        // Only hide if the text hasn't changed (prevents hiding a new prompt)
+        if (this.interactionPromptElement?.textContent === text) {
           this.hidePrompt();
+        }
       }, duration);
     }
   }
 
   hidePrompt(): void {
-    if (
-      !this.interactionPromptElement ||
-      this.activeGather ||
-      this.promptTimeout
-    )
-      return;
+    if (!this.interactionPromptElement) return;
+    // Removed activeGather check
+    // Don't hide if there's an active timeout (meaning a timed prompt is still showing)
+    // if (this.promptTimeout) return;
+
     this.interactionPromptElement.style.display = "none";
     this.interactionPromptElement.textContent = "";
+    // It's okay to clear timeout here, as hiding means the timed prompt is done or irrelevant
+    clearTimeout(this.promptTimeout ?? undefined);
+    this.promptTimeout = null;
   }
 
   async openChatInterface(target: Character): Promise<void> {

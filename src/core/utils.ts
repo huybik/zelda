@@ -16,13 +16,25 @@ export interface EntityUserData {
   isPlayer: boolean;
   isNPC: boolean;
   isCollidable: boolean;
-  isInteractable: boolean;
-  interactionType?: string;
-  prompt?: string;
+  isInteractable: boolean; // Can be targeted (for chat, attack, etc.)
+  interactionType?: string; // e.g., "talk", "attack" (for resources)
+  prompt?: string; // Prompt for 'E' interaction (chat)
   id: string;
   boundingBox?: Box3;
   height?: number;
   radius?: number;
+  // Resource specific
+  resource?: string;
+  health?: number;
+  maxHealth?: number;
+  isDepletable?: boolean;
+  respawnTime?: number;
+  // Animal specific
+  isAnimal?: boolean;
+  animalType?: string;
+  isAggressive?: boolean;
+  // Simple Object flag
+  isSimpleObject?: boolean;
   [key: string]: unknown;
 }
 
@@ -33,7 +45,7 @@ export interface InteractionResult {
     | "dialogue"
     | "item_retrieved"
     | "error"
-    | "gather_start"
+    // | "gather_start" // Removed
     | "chat";
   item?: { name: string; amount: number };
   message?: string;
@@ -44,17 +56,12 @@ export interface InteractionResult {
 
 export interface TargetInfo {
   mesh: Object3D;
-  instance: any;
+  instance: any; // Can be Character, Animal, or resource Object3D
   point: Vector3;
   distance: number;
 }
 
-export interface ActiveGather {
-  targetInstance: any;
-  startTime: number;
-  duration: number;
-  resource: string;
-}
+// Removed ActiveGather interface
 
 export interface InventoryItem {
   name: string;
@@ -109,8 +116,8 @@ export interface MoveState {
   right: number;
   jump: boolean;
   sprint: boolean;
-  interact: boolean;
-  attack: boolean;
+  interact: boolean; // For 'E' key interactions (like chat)
+  attack: boolean; // For 'F' key / mouse click attacks (combat & resources)
 }
 
 export interface UpdateOptions {
