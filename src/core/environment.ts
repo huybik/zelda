@@ -187,7 +187,7 @@ export function populateEnvironment(
 
   // Spawn some deer and wolves
   addAnimal("Deer", "deer_procedural", 5, 20 * 20); // Spawn 5 deer, further out
-  addAnimal("Wolf", "wolf_procedural", 3, 40 * 40); // Spawn 3 wolves, even further out
+  addAnimal("Wolf", "wolf_procedural", 5, 35 * 35); // Spawn 3 wolves, even further out
 
   // Add Decorative Grass and Flowers
   const addDecoration = (

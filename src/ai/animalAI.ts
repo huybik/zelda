@@ -15,7 +15,7 @@ export class AnimalAIController {
   attackCooldown: number = 2.0;
   lastAttackTime: number = 0;
   target: Character | null = null; // Target for attacking
-  attackRange: number = 2.0;
+  attackRange: number = 2;
   detectionRange: number = 15.0;
   detectionRangeSq: number; // Store squared value
   roamRadius: number = 20.0;

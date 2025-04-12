@@ -95,7 +95,14 @@ export class Minimap {
       let color = "gray";
       let size = this.dotSize;
       let draw = false;
-      if (entity.userData?.resource) {
+      if (entity.userData.isAnimal) {
+        // Draw animals
+        color = entity.userData.isAggressive
+          ? this.animalAggressiveColor
+          : this.animalPassiveColor;
+        size += 1;
+        draw = true;
+      } else if (entity.userData?.resource) {
         switch (entity.userData.resource) {
           case "wood":
             color = "saddlebrown";
@@ -113,21 +120,6 @@ export class Minimap {
       } else if (entity.userData?.isNPC) {
         color = this.npcColor;
         size += 1;
-        draw = true;
-      } else if (entity.userData?.isAnimal) {
-        // Draw animals
-        color = entity.userData.isAggressive
-          ? this.animalAggressiveColor
-          : this.animalPassiveColor;
-        size += 1;
-        draw = true;
-      } else if (entity.userData?.isEnemy) {
-        // Keep isEnemy check for potential non-animal enemies
-        color = "red";
-        size += 1;
-        draw = true;
-      } else if (entity.userData?.isInteractable) {
-        color = "lightblue";
         draw = true;
       }
       if (draw) this.drawDot(entityMapX, entityMapZ, color, size);

@@ -100,7 +100,7 @@ export function updateObservation(
   controller: AIController,
   allEntities: Array<any>
 ): void {
-  controller.lastObservation = controller.observation
+  controller.lastObservation = structuredClone(controller.observation)
     ? JSON.parse(JSON.stringify(controller.observation))
     : null;
   const nearbyCharacters: Observation["nearbyCharacters"] = [];

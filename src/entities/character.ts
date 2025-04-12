@@ -54,11 +54,7 @@ export class Character extends Entity {
   walkAction?: AnimationAction;
   runAction?: AnimationAction;
   attackAction?: AnimationAction;
-  // gatherAction?: AnimationAction; // Removed, use attackAction
   deadAction?: AnimationAction;
-  // isGathering: boolean = false; // Removed
-  // gatherAttackTimer: number = 0; // Removed
-  // gatherAttackInterval: number = 1.0; // Removed
   searchRadius: number = 30;
   roamRadius: number = 10;
   attackTriggered: boolean = false; // Still needed for player input debounce
@@ -210,7 +206,6 @@ export class Character extends Entity {
       this.attackAction = this.mixer.clipAction(attackAnim);
       this.attackAction.setLoop(LoopOnce, 1);
       this.attackAction.clampWhenFinished = true;
-      // this.gatherAction = this.attackAction; // Removed
     }
     if (deadAnim) {
       this.deadAction = this.mixer.clipAction(deadAnim);
@@ -239,8 +234,12 @@ export class Character extends Entity {
           // Chain attacks if button held
           this.performAttack(); // Perform next attack logic
           this.attackAction?.reset().play(); // Replay animation
+        } else if (!this.userData.isPlayer && this.moveState.attack) {
+          // NPC continuous attack: If AI still wants to attack, just allow the next update loop to trigger it
+          this.isPerformingAction = false; // Allow next trigger
+          // No need to replay animation here, update loop will handle it
         } else {
-          // If not chaining, transition back to idle/move
+          // If not chaining (player) or AI stopped attacking, transition back to idle/move
           this.isPerformingAction = false;
           this.actionType = "none";
           this.transitionToLocomotion();
@@ -282,9 +281,8 @@ export class Character extends Entity {
       if (this.currentAction.loop === LoopRepeat) {
         this.currentAction.fadeOut(fadeDuration);
       } else {
-        // If it's a one-shot action that might still be playing, stop it abruptly before fading? Or let fadeOut handle it.
-        this.currentAction.fadeOut(fadeDuration); // Fade out might be smoother
-        // this.currentAction.stop(); // Alternative: Stop immediately
+        // If it's a one-shot action that might still be playing, fade it out.
+        this.currentAction.fadeOut(fadeDuration);
       }
     }
 
@@ -526,7 +524,6 @@ export class Character extends Entity {
       this.switchAction(this.attackAction); // SwitchAction handles reset and play
       this.performAttack(); // Perform the actual attack logic
     }
-    // Removed 'gather' case
   }
 
   update(deltaTime: number, options: UpdateOptions = {}): void {
@@ -538,6 +535,7 @@ export class Character extends Entity {
     const { moveState, collidables } = options;
     if (!moveState || !collidables) return;
 
+    // Update internal moveState based on input (player) or AI calculation (NPC)
     this.moveState = moveState;
 
     this.handleStamina(deltaTime);
@@ -566,15 +564,22 @@ export class Character extends Entity {
     }
     this.velocity.y = 0;
 
-    // Handle attack trigger from player input
-    if (moveState.attack && !this.attackTriggered) {
-      this.attackTriggered = true; // Debounce flag for player input
-      if (!this.isPerformingAction) {
-        // Only trigger if not already attacking
+    // Handle attack trigger from player input OR AI command
+    if (moveState.attack && !this.isPerformingAction) {
+      // If attack is commanded and we are not already performing the attack animation
+      if (this.userData.isPlayer) {
+        // Player attack debounce
+        if (!this.attackTriggered) {
+          this.attackTriggered = true;
+          this.triggerAction("attack");
+        }
+      } else {
+        // NPC attack - trigger directly if not already performing
         this.triggerAction("attack");
       }
-    } else if (!moveState.attack) {
-      this.attackTriggered = false; // Reset debounce flag when input stops
+    } else if (!moveState.attack && this.userData.isPlayer) {
+      // Reset player debounce flag when input stops
+      this.attackTriggered = false;
     }
 
     this.updateAnimations(deltaTime);
@@ -592,7 +597,6 @@ export class Character extends Entity {
     if (this.aiController) this.aiController.aiState = "dead";
 
     // Reset action states
-    // this.isGathering = false; // Removed
     this.isPerformingAction = false;
     this.actionType = "none";
     this.attackTriggered = false; // Ensure attack can't be triggered
@@ -639,8 +643,6 @@ export class Character extends Entity {
     this.isDead = false; // Critical: Set isDead back to false
     this.deathTimestamp = null; // Reset death timestamp
     this.isExhausted = false;
-    // this.isGathering = false; // Removed
-    // this.gatherAttackTimer = 0; // Removed
     this.isPerformingAction = false;
     this.actionType = "none";
     this.attackTriggered = false;
@@ -655,7 +657,6 @@ export class Character extends Entity {
       this.aiController.aiState = "idle";
       this.aiController.previousAiState = "idle";
       this.aiController.destination = null;
-      // this.aiController.targetResource = null; // Removed
       this.aiController.target = null;
       this.aiController.targetAction = null;
       this.aiController.message = null;

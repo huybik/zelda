@@ -1,4 +1,4 @@
-// File: /src/ai/npcAI.ts
+/* File: /src/ai/npcAI.ts */
 import { Vector3, Object3D } from "three";
 import { Entity } from "../entities/entitiy";
 import { Character } from "../entities/character";
@@ -18,12 +18,9 @@ export class AIController {
   previousAiState: string = "idle";
   homePosition: Vector3;
   destination: Vector3 | null = null;
-  // targetResource: Object3D | null = null; // Removed, resources are handled via 'target'
-  // gatherTimer: number = 0; // Removed
-  // gatherDuration: number = 0; // Removed
   actionTimer: number = 5;
   interactionDistance: number = 3; // Distance for chat
-  attackDistance: number = 2.5; // Distance for attacking entities/resources
+  attackDistance: number = 2; // Distance for attacking entities/resources
   searchRadius: number;
   roamRadius: number;
   target: Entity | Object3D | null = null; // Target can be Entity or resource Object3D
@@ -63,7 +60,7 @@ export class AIController {
     }
 
     // Check for environmental changes to trigger immediate action decisions
-    if (this.isAffectedByEntities() && this.chatDecisionTimer === null) {
+    if (this.isAffectedByEntities()) {
       this.decideNextAction();
       this.actionTimer = 5 + Math.random() * 5; // Reset timer after triggering
     }
@@ -116,8 +113,6 @@ export class AIController {
         }
         break;
 
-      // Removed movingToResource and gathering states
-
       case "movingToTarget":
         if (this.target && this.targetAction) {
           const targetPosition =
@@ -156,16 +151,15 @@ export class AIController {
               this.character.mesh!.position.clone().add(direction)
             );
             moveState.forward = 1;
+            moveState.attack = false; // Ensure not attacking while moving
           } else {
             // Within range, perform action
             this.character.lookAt(targetPosition);
             moveState.forward = 0; // Stop moving
 
             if (this.targetAction === "attack") {
-              // Trigger attack animation/logic (Character.performAttack handles damage/resource collection)
-              moveState.attack = true; // Signal Character to perform attack logic
-              // The Character's update loop will call performAttack if moveState.attack is true.
-              // We don't need to call triggerAction directly here, let the moveState handle it.
+              // Keep signaling attack as long as in range and target is valid
+              moveState.attack = true;
 
               // Check if target is depleted/dead *after* the attack might have happened
               // (This check might be slightly delayed, Character.performAttack handles immediate depletion)
@@ -175,8 +169,10 @@ export class AIController {
                   ? !this.target.isDead
                   : this.target.visible && this.target.userData.isInteractable;
 
+              // If target becomes invalid OR moves out of search radius, handle it
               if (!targetStillValid || distance > this.searchRadius) {
                 this.handleTargetLostOrDepleted();
+                moveState.attack = false; // Stop attacking if target lost
               }
               // Note: Persistent action logic moved to handleTargetLostOrDepleted
             } else if (
@@ -277,11 +273,11 @@ export class AIController {
 
   private isAffectedByEntities(): boolean {
     const currentTime = Date.now();
-    const affectedCooldown = 5000; // Reduced from 10000ms to 5000ms for faster reaction
+    // const affectedCooldown = 3000; // Reduced from 10000ms to 5000ms for faster reaction
 
-    if (currentTime < this.lastAffectedTime + affectedCooldown) {
-      return false;
-    }
+    // if (currentTime < this.lastAffectedTime + affectedCooldown) {
+    //   return false;
+    // }
 
     if (!this.observation || !this.lastObservation) return false;
 
@@ -322,27 +318,6 @@ export class AIController {
         ) {
           affected = true;
           break;
-        }
-      }
-    }
-
-    // Check nearby resource objects health change (if applicable)
-    if (!affected) {
-      const currentObjects = this.observation.nearbyObjects;
-      const lastObjects = this.lastObservation.nearbyObjects;
-      for (const currObj of currentObjects) {
-        if (currObj.resource) {
-          // Only check resources
-          const matchingLastObj = lastObjects.find((o) => o.id === currObj.id);
-          if (
-            matchingLastObj &&
-            currObj.health !== undefined &&
-            matchingLastObj.health !== undefined &&
-            currObj.health < matchingLastObj.health
-          ) {
-            affected = true;
-            break;
-          }
         }
       }
     }
@@ -417,7 +392,6 @@ export class AIController {
     this.currentIntent = intent || "Thinking...";
     this.character.updateIntentDisplay(`${this.currentIntent}`);
     this.destination = null;
-    // this.targetResource = null; // Removed
     this.target = null;
     this.targetAction = null;
     this.message = null;
@@ -425,8 +399,6 @@ export class AIController {
 
     // Reset actionTimer to prevent immediate re-triggering
     this.actionTimer = 5 + Math.random() * 5;
-
-    // Removed 'gather' action case
 
     if (action === "attack" && target_id) {
       // Target can be an Entity (Character/Animal) or a resource Object3D
