@@ -234,25 +234,24 @@ export class AIController {
                 }
               }
             } else if (this.targetAction === "chat" && this.message) {
-              if (
-                this.target instanceof Character &&
-                this.target.aiController
-              ) {
-                this.target.aiController.aiState = "idle";
-                this.target.aiController.persistentAction = null;
+              if (this.target instanceof Character) {
+                if (this.target.aiController) {
+                  this.target.aiController.aiState = "idle";
+                  this.target.aiController.persistentAction = null;
+                }
+                this.character.showTemporaryMessage(this.message);
+                if (this.character.game) {
+                  this.character.game.logEvent(
+                    this.character,
+                    "chat",
+                    `${this.character.name} said "${this.message}" to ${this.target.name}.`,
+                    this.target,
+                    { message: this.message },
+                    this.character.mesh!.position
+                  );
+                }
+                handleChatResponse(this.target, this.character, this.message);
               }
-              this.character.showTemporaryMessage(this.message);
-              if (this.character.game) {
-                this.character.game.logEvent(
-                  this.character,
-                  "chat",
-                  `${this.character.name} said "${this.message}" to ${this.target.name}.`,
-                  this.target,
-                  { message: this.message },
-                  this.character.mesh!.position
-                );
-              }
-              handleChatResponse(this.target, this.character, this.message);
               this.aiState = "idle";
               this.target = null;
               this.targetAction = null;

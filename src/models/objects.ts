@@ -182,7 +182,7 @@ export function createTree(position: Vector3): Group {
   treeGroup.add(foliageMesh);
   treeGroup.position.copy(position).setY(0);
   treeGroup.userData = {
-    isCollidable: false,
+    isCollidable: true,
     isInteractable: true,
     interactionType: "gather",
     resource: "wood",

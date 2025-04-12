@@ -750,8 +750,7 @@ export class Game {
     )
       return;
 
-    // Always update clock
-    const deltaTime = Math.min(this.clock.getDelta(), 0.05);
+    const deltaTime = Math.min(this.clock.getDelta(), 0.05); // Use clamped delta time
     const elapsedTime = this.clock.elapsedTime;
 
     // Update controls regardless of pause state
@@ -763,8 +762,10 @@ export class Game {
       // --- AI Update Throttling ---
       const currentTime = this.clock.elapsedTime;
       const timeSinceLastAiUpdate = currentTime - this.lastAiUpdateTime;
-      const shouldUpdateAi = timeSinceLastAiUpdate >= this.aiUpdateInterval;
-      if (shouldUpdateAi) {
+      const shouldUpdateAiLogic =
+        timeSinceLastAiUpdate >= this.aiUpdateInterval;
+
+      if (shouldUpdateAiLogic) {
         this.lastAiUpdateTime = currentTime;
       }
       // --- End AI Update Throttling ---
@@ -780,13 +781,12 @@ export class Game {
       // Update other entities (NPCs and Animals)
       this.entities.forEach((entity) => {
         if (entity === this.activeCharacter) return;
-
         // Handle Character AI
         if (
           entity instanceof Character &&
           entity.aiController instanceof AIController
         ) {
-          if (shouldUpdateAi) {
+          if (shouldUpdateAiLogic) {
             // Update observation only when AI thinks
             updateObservation(entity.aiController, this.entities);
             // Compute and store the new move state inside the entity
@@ -805,23 +805,21 @@ export class Game {
           entity instanceof Animal &&
           entity.aiController instanceof AnimalAIController
         ) {
-          if (shouldUpdateAi) {
-            // Compute and store the new move state inside the entity
-            entity.moveState = entity.aiController.computeAIMoveState(
-              timeSinceLastAiUpdate
-            );
+          // Update AI logic (state decisions, target finding) only when throttled interval passes
+          if (shouldUpdateAiLogic) {
+            // Pass the actual time since the last AI update for timers inside the AI
+            entity.aiController.updateLogic(timeSinceLastAiUpdate);
           }
-          // Update the animal using its current (potentially stale) moveState
-          // Animal.update already uses this.moveState internally
+          // Update the animal's movement and animations every frame based on its current state
           entity.update(deltaTime, { collidables: this.collidableObjects });
         }
-        // Handle other generic entity updates
+        // Handle other generic entity updates (if any)
         else if (
           entity.update &&
           !(entity instanceof Character) &&
           !(entity instanceof Animal)
         ) {
-          entity.update(deltaTime);
+          entity.update(deltaTime); // Assuming generic entities don't need complex options
         }
       });
 

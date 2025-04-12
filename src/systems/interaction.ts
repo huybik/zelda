@@ -597,9 +597,7 @@ export class InteractionSystem {
             );
           }
         } finally {
-          if (targetAtSendStart.aiController) {
-            targetAtSendStart.aiController.scheduleNextActionDecision();
-          }
+          targetAtSendStart.aiController?.scheduleNextActionDecision();
           this.closeChatInterface();
         }
       };

@@ -3,6 +3,7 @@ import { Vector3 } from "three";
 import { Animal } from "../entities/animals";
 import { MoveState, getTerrainHeight } from "../core/utils";
 import { Character } from "../entities/character";
+import { Entity } from "../entities/entitiy"; // Import Entity
 
 export class AnimalAIController {
   animal: Animal;
@@ -16,57 +17,107 @@ export class AnimalAIController {
   target: Character | null = null; // Target for attacking
   attackRange: number = 2.0;
   detectionRange: number = 15.0;
+  detectionRangeSq: number; // Store squared value
   roamRadius: number = 20.0;
-  persona: string = ""; // Default persona
-  targetResource: string | null = null; // Target resource for gathering
-  targetAction: string | null = null; // Action to perform on target resource
-  message: string | null = null; // Message to display
-  persistentAction: { type: string; targetType: string } | null = null;
+  persistentAction: string | null = null;
+  // Removed persona, targetResource, targetAction, message, persistentAction as they are not used here
+
+  // Throttling for expensive operations like finding targets
+  private findTargetTimer: number = 0;
+  private findTargetInterval: number = 0.5 + Math.random() * 0.5; // Check for targets every 0.5-1s
 
   constructor(animal: Animal) {
     this.animal = animal;
     this.homePosition = animal.mesh!.position.clone();
+    this.detectionRangeSq = this.detectionRange * this.detectionRange; // Pre-calculate squared range
   }
 
-  async decideNextAction(): Promise<void> {}
-  scheduleNextActionDecision(): void {}
+  // New method to handle throttled logic updates
+  updateLogic(deltaTime: number): void {
+    if (this.animal.isDead) {
+      this.aiState = "dead";
+      return; // No decisions if dead
+    }
 
-  computeAIMoveState(deltaTime: number): MoveState {
+    // Throttle target finding
+    this.findTargetTimer -= deltaTime;
+    if (this.findTargetTimer <= 0) {
+      this.findTarget();
+      this.findTargetTimer = this.findTargetInterval;
+    }
+
+    // Update state timers
+    switch (this.aiState) {
+      case "idle":
+        this.actionTimer -= deltaTime;
+        if (this.target && this.animal.userData.isAggressive) {
+          this.setState("attacking");
+        } else if (this.actionTimer <= 0) {
+          this.setState("roaming");
+        }
+        break;
+      case "roaming":
+        if (this.target && this.animal.userData.isAggressive) {
+          this.setState("attacking");
+          this.destination = null; // Stop roaming
+        } else if (!this.destination) {
+          // If somehow lost destination while roaming, go idle
+          this.setState("idle");
+        } else {
+          // Check if reached destination (moved to computeAIMovement)
+        }
+        break;
+      case "attacking":
+        if (!this.target || this.target.isDead) {
+          this.setState("idle");
+          this.target = null;
+          this.actionTimer = 3 + Math.random() * 3; // Cooldown after losing target
+          break;
+        }
+        const distanceToTargetSq = this.animal.mesh!.position.distanceToSquared(
+          this.target.mesh!.position
+        );
+        // Check if target moved too far away
+        if (distanceToTargetSq > this.detectionRangeSq * 2.25) {
+          // Use 1.5 * range squared
+          this.setState("idle"); // Lose target if too far
+          this.target = null;
+          this.actionTimer = 5 + Math.random() * 5;
+        }
+        break;
+      case "dead":
+        // No logic updates needed
+        break;
+    }
+
+    // Log state changes (optional, for debugging)
+    if (this.aiState !== this.previousAiState) {
+      // console.log(`${this.animal.name} state changed to: ${this.aiState}`);
+      this.previousAiState = this.aiState;
+    }
+  }
+
+  // Renamed from computeAIMoveState to focus only on movement calculation
+  computeAIMovement(): MoveState {
     const moveState: MoveState = {
       forward: 0,
-      right: 0,
+      right: 0, // Animals typically don't strafe
       jump: false,
       sprint: false, // Animals might always "run" or have different speeds
       interact: false,
       attack: false,
     };
 
-    if (this.animal.isDead) {
-      this.aiState = "dead";
+    if (this.aiState === "dead") {
       return moveState; // No actions if dead
     }
 
-    // Simple target detection (player or other characters)
-    this.findTarget();
-
     switch (this.aiState) {
       case "idle":
-        this.actionTimer -= deltaTime;
-        if (this.target && this.animal.userData.isAggressive) {
-          this.aiState = "attacking";
-        } else if (this.actionTimer <= 0) {
-          this.aiState = "roaming";
-          this.actionTimer = 5 + Math.random() * 10; // Reset timer for next roam
-          this.setNewRoamDestination();
-        }
+        // No movement
         break;
 
       case "roaming":
-        if (this.target && this.animal.userData.isAggressive) {
-          this.aiState = "attacking";
-          this.destination = null; // Stop roaming
-          break;
-        }
         if (this.destination) {
           const direction = this.destination
             .clone()
@@ -81,55 +132,41 @@ export class AnimalAIController {
               this.animal.mesh!.position.clone().add(direction)
             );
             moveState.forward = 1; // Move forward
-            // Potentially set sprint based on animal type or state
             moveState.sprint = true; // Example: Animals usually run when moving
           } else {
             // Reached destination
-            this.aiState = "idle";
+            this.setState("idle"); // Transition state here
             this.destination = null;
-            this.actionTimer = 2 + Math.random() * 4; // Idle for a bit
           }
-        } else {
-          // No destination, go back to idle
-          this.aiState = "idle";
         }
         break;
 
       case "attacking":
-        if (!this.target || this.target.isDead) {
-          this.aiState = "idle";
-          this.target = null;
-          this.actionTimer = 3 + Math.random() * 3; // Cooldown after losing target
-          break;
-        }
+        if (this.target && this.target.mesh) {
+          const targetPosition = this.target.mesh!.position;
+          const directionToTarget = targetPosition
+            .clone()
+            .sub(this.animal.mesh!.position);
+          directionToTarget.y = 0;
+          const distanceToTarget = directionToTarget.length();
 
-        const targetPosition = this.target.mesh!.position;
-        const directionToTarget = targetPosition
-          .clone()
-          .sub(this.animal.mesh!.position);
-        directionToTarget.y = 0;
-        const distanceToTarget = directionToTarget.length();
+          this.animal.lookAt(targetPosition); // Always face the target
 
-        this.animal.lookAt(targetPosition); // Always face the target
-
-        if (distanceToTarget > this.attackRange) {
-          // Move towards target
-          moveState.forward = 1;
-          moveState.sprint = true; // Run towards target
-        } else {
-          // Within attack range
-          moveState.forward = 0; // Stop moving
-          const now = performance.now();
-          if (now - this.lastAttackTime > this.attackCooldown * 1000) {
-            moveState.attack = true; // Trigger attack animation/logic
-            this.lastAttackTime = now;
+          if (distanceToTarget > this.attackRange) {
+            // Move towards target
+            moveState.forward = 1;
+            moveState.sprint = true; // Run towards target
+          } else {
+            // Within attack range
+            moveState.forward = 0; // Stop moving
+            const now = performance.now();
+            if (now - this.lastAttackTime > this.attackCooldown * 1000) {
+              moveState.attack = true; // Trigger attack animation/logic in Animal class
+              this.lastAttackTime = now;
+              // Note: The actual attack execution happens in Animal.performAttack()
+              // triggered by Animal.update() when moveState.attack is true.
+            }
           }
-        }
-        // Check if target moved too far away
-        if (distanceToTarget > this.detectionRange * 1.5) {
-          this.aiState = "idle"; // Lose target if too far
-          this.target = null;
-          this.actionTimer = 5 + Math.random() * 5;
         }
         break;
 
@@ -138,41 +175,84 @@ export class AnimalAIController {
         break;
     }
 
-    // Log state changes (optional, for debugging)
-    if (this.aiState !== this.previousAiState) {
-      // console.log(`${this.animal.name} state changed to: ${this.aiState}`);
-      this.previousAiState = this.aiState;
-    }
-
     return moveState;
+  }
+
+  // Helper to set state and reset timers/destinations appropriately
+  setState(newState: string): void {
+    if (this.aiState === newState) return;
+
+    this.previousAiState = this.aiState;
+    this.aiState = newState;
+
+    // Reset things based on entering the new state
+    switch (newState) {
+      case "idle":
+        this.actionTimer = 2 + Math.random() * 4; // Idle for a bit
+        this.destination = null;
+        this.target = null; // Clear target when going idle
+        break;
+      case "roaming":
+        this.actionTimer = 5 + Math.random() * 10; // Reset timer for next roam decision *after* this roam finishes
+        this.setNewRoamDestination();
+        break;
+      case "attacking":
+        this.destination = null; // Stop roaming if switching to attack
+        // Target should already be set before switching to this state
+        break;
+      case "dead":
+        this.destination = null;
+        this.target = null;
+        break;
+    }
   }
 
   findTarget(): void {
     if (!this.animal.game || !this.animal.mesh) return;
 
     let closestTarget: Character | null = null;
-    let minDistanceSq = this.detectionRange * this.detectionRange;
+    // Use squared distance for efficiency
+    let minDistanceSq = this.detectionRangeSq;
     const currentPosition = this.animal.mesh.position;
 
+    // OPTIMIZATION: Iterate only through potential targets (Characters)
     for (const entity of this.animal.game.entities) {
-      if (entity instanceof Character && !entity.isDead && entity.mesh) {
-        // Basic check: target player or NPCs, could add faction logic later
-        const distanceSq = currentPosition.distanceToSquared(
-          entity.mesh.position
-        );
-        if (distanceSq < minDistanceSq) {
-          minDistanceSq = distanceSq;
-          closestTarget = entity;
-        }
+      // Early exit if not a character or dead or no mesh
+      if (!(entity instanceof Character) || entity.isDead || !entity.mesh) {
+        continue;
+      }
+
+      // OPTIMIZATION: Check distance squared first
+      const distanceSq = currentPosition.distanceToSquared(
+        entity.mesh.position
+      );
+      if (distanceSq < minDistanceSq) {
+        // Could add Line-of-Sight check here if needed
+        // const hasLOS = checkLineOfSight(this.animal.mesh.position, entity.mesh.position, this.animal.game.collidableObjects);
+        // if (hasLOS) {
+        minDistanceSq = distanceSq;
+        closestTarget = entity;
+        // }
       }
     }
-    this.target = closestTarget;
+    // Only update target if a new one is found or the current one is lost/invalid
+    if (this.target !== closestTarget) {
+      this.target = closestTarget;
+      // If a target is acquired while idle/roaming, potentially switch state immediately
+      if (
+        this.target &&
+        this.animal.userData.isAggressive &&
+        (this.aiState === "idle" || this.aiState === "roaming")
+      ) {
+        this.setState("attacking");
+      }
+    }
   }
 
   setNewRoamDestination(): void {
     const angle = Math.random() * Math.PI * 2;
     const distance = Math.random() * this.roamRadius;
-    this.destination = this.homePosition
+    const newDest = this.homePosition
       .clone()
       .add(
         new Vector3(Math.cos(angle) * distance, 0, Math.sin(angle) * distance)
@@ -182,22 +262,13 @@ export class AnimalAIController {
     const worldHalfSize = this.animal.game?.worldSize
       ? this.animal.game.worldSize / 2 - 2
       : 48; // Fallback
-    this.destination.x = Math.max(
-      -worldHalfSize,
-      Math.min(worldHalfSize, this.destination.x)
-    );
-    this.destination.z = Math.max(
-      -worldHalfSize,
-      Math.min(worldHalfSize, this.destination.z)
-    );
+    newDest.x = Math.max(-worldHalfSize, Math.min(worldHalfSize, newDest.x));
+    newDest.z = Math.max(-worldHalfSize, Math.min(worldHalfSize, newDest.z));
 
     // Set Y based on terrain height
     if (this.animal.scene) {
-      this.destination.y = getTerrainHeight(
-        this.animal.scene,
-        this.destination.x,
-        this.destination.z
-      );
+      newDest.y = getTerrainHeight(this.animal.scene, newDest.x, newDest.z);
     }
+    this.destination = newDest; // Set the destination
   }
 }

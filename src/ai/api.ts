@@ -298,7 +298,7 @@ Respond to the character in brief max 20 words as a JSON object like {"response"
 }
 
 export async function handleChatResponse(
-  target: Entity,
+  target: Character,
   initiator: Character,
   message: string
 ): Promise<void> {
@@ -332,9 +332,7 @@ export async function handleChatResponse(
         target.mesh!.position
       );
     }
-    if (initiator.aiController) {
-      initiator.aiController.scheduleNextActionDecision();
-    }
+
     if (target.aiController) {
       target.aiController.scheduleNextActionDecision();
     }
@@ -351,9 +349,7 @@ export async function handleChatResponse(
         target.mesh!.position
       );
     }
-    if (initiator.aiController) {
-      initiator.aiController.scheduleNextActionDecision();
-    }
+
     if (target.aiController) {
       target.aiController.scheduleNextActionDecision();
     }
