@@ -789,8 +789,6 @@ export class Game {
           entity.aiController instanceof AIController
         ) {
           if (shouldUpdateAiLogic) {
-            // Update observation only when AI thinks
-            updateObservation(entity.aiController, this.entities);
             // Compute and store the new move state inside the entity
             // AI decision making (API call) happens within computeAIMoveState if needed
             entity.moveState = entity.aiController.computeAIMoveState(

@@ -273,19 +273,18 @@ export class AIController {
 
   private isAffectedByEntities(): boolean {
     const currentTime = Date.now();
-    // const affectedCooldown = 3000; // Reduced from 10000ms to 5000ms for faster reaction
+    const affectedCooldown = 5000; // Reduced from 10000ms to 5000ms for faster reaction
 
-    // if (currentTime < this.lastAffectedTime + affectedCooldown) {
-    //   return false;
-    // }
+    if (currentTime < this.lastAffectedTime + affectedCooldown) {
+      return false;
+    }
 
     if (!this.observation || !this.lastObservation) return false;
 
-    let affected = false;
-
     // Check self health change
     if (this.observation.self.health < this.lastObservation.self.health) {
-      affected = true;
+      this.lastAffectedTime = currentTime;
+      return true;
     }
 
     // Check nearby characters
@@ -298,33 +297,9 @@ export class AIController {
         currChar.health < matchingLastChar.health ||
         currChar.isDead !== matchingLastChar.isDead
       ) {
-        affected = true;
-        break;
+        this.lastAffectedTime = currentTime;
+        return true;
       }
-    }
-
-    // Check nearby animals
-    if (!affected) {
-      const currentAnimals = this.observation.nearbyAnimals;
-      const lastAnimals = this.lastObservation.nearbyAnimals;
-      for (const currAnimal of currentAnimals) {
-        const matchingLastAnimal = lastAnimals.find(
-          (a) => a.id === currAnimal.id
-        );
-        if (
-          !matchingLastAnimal ||
-          currAnimal.health < matchingLastAnimal.health ||
-          currAnimal.isDead !== matchingLastAnimal.isDead
-        ) {
-          affected = true;
-          break;
-        }
-      }
-    }
-
-    if (affected) {
-      this.lastAffectedTime = currentTime;
-      return true;
     }
 
     return false;
