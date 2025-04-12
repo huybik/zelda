@@ -383,6 +383,7 @@ export class AIController {
       foundTarget =
         this.character.game?.entities.find((e) => e.id === target_id) ?? null;
 
+      if (foundTarget) console.log(`found target ${foundTarget.id}`);
       // If not found in entities, check scene children (for resources)
       if (!foundTarget) {
         foundTarget =
@@ -401,7 +402,7 @@ export class AIController {
           if (foundTarget instanceof Animal) {
             targetType = foundTarget.animalType; // e.g., "Wolf"
           } else if (foundTarget instanceof Character) {
-            targetType = "Character"; // Or use specific name/ID if needed
+            targetType = null; // just attack the specific target
           }
         } else if (
           foundTarget instanceof Object3D &&
@@ -451,6 +452,7 @@ export class AIController {
         this.targetAction = "chat";
         this.message = message || "...";
         this.aiState = "movingToTarget";
+        console.log(`found chat target ${targetEntity.id}`);
       } else {
         this.aiState = "idle";
       }
