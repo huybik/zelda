@@ -12,7 +12,6 @@ import {
   EventLog,
   InteractionResult,
   TargetInfo,
-  // ActiveGather, // Removed
 } from "../core/utils";
 import { Controls } from "../controls/controls";
 import { Game } from "../main";
@@ -32,7 +31,6 @@ export class InteractionSystem {
   currentTarget: any | null = null; // Can be Character, Animal, Resource Object3D
   currentTargetMesh: Object3D | null = null;
   interactionPromptElement: HTMLElement | null;
-  // activeGather: ActiveGather | null = null; // Removed
   promptTimeout: ReturnType<typeof setTimeout> | null = null;
   game: Game;
   chatContainer: HTMLElement | null;
@@ -78,7 +76,6 @@ export class InteractionSystem {
       }
       return;
     }
-    // Removed activeGather check
 
     // Find target for 'E' interaction (chat)
     const targetInfo = this.findInteractableTarget();
@@ -102,6 +99,8 @@ export class InteractionSystem {
       // Check for 'E' key press (interact)
       if (this.controls.moveState.interact) {
         this.tryInteract(this.currentTarget);
+        // Reset interact state immediately after trying to prevent repeated interactions per press
+        this.controls.moveState.interact = false;
       }
     } else if (this.currentTarget) {
       // Clear target if it's no longer valid for 'E' interaction
@@ -263,13 +262,6 @@ export class InteractionSystem {
     const result = targetInstance.interact(this.player);
 
     if (result) this.handleInteractionResult(result, targetInstance);
-
-    // Clear target if interaction makes it invalid (e.g., quest completion changes state)
-    // For chat, we usually keep the target until chat closes.
-    // if (!targetInstance.userData?.isInteractable) {
-    //     this.currentTarget = null;
-    //     this.currentTargetMesh = null;
-    // }
   }
 
   handleInteractionResult(
@@ -313,19 +305,13 @@ export class InteractionSystem {
       case "error":
         if (result.message) promptText = result.message;
         break;
-      // case "gather_start": // Removed
-      //   promptDuration = null;
-      //   break;
     }
     if (promptText && promptDuration !== null)
       this.showPrompt(promptText, promptDuration);
   }
 
-  // Removed startGatherAction, updateGatherAction, completeGatherAction, cancelGatherAction
-
   showPrompt(text: string, duration: number | null = null): void {
     if (!this.interactionPromptElement) return;
-    // Removed activeGather check
 
     this.interactionPromptElement.textContent = text;
     this.interactionPromptElement.style.display = "block";
@@ -347,10 +333,6 @@ export class InteractionSystem {
 
   hidePrompt(): void {
     if (!this.interactionPromptElement) return;
-    // Removed activeGather check
-    // Don't hide if there's an active timeout (meaning a timed prompt is still showing)
-    // if (this.promptTimeout) return;
-
     this.interactionPromptElement.style.display = "none";
     this.interactionPromptElement.textContent = "";
     // It's okay to clear timeout here, as hiding means the timed prompt is done or irrelevant

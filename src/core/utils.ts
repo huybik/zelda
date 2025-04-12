@@ -39,14 +39,7 @@ export interface EntityUserData {
 }
 
 export interface InteractionResult {
-  type:
-    | "reward"
-    | "message"
-    | "dialogue"
-    | "item_retrieved"
-    | "error"
-    // | "gather_start" // Removed
-    | "chat";
+  type: "reward" | "message" | "dialogue" | "item_retrieved" | "error" | "chat";
   item?: { name: string; amount: number };
   message?: string;
   text?: string;
@@ -60,8 +53,6 @@ export interface TargetInfo {
   point: Vector3;
   distance: number;
 }
-
-// Removed ActiveGather interface
 
 export interface InventoryItem {
   name: string;

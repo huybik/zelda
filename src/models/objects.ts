@@ -124,7 +124,7 @@ export class InteractableObject {
           );
           return { type: "error", message: "Inventory full" };
         }
-      // Removed "gather" case, handled by attacking now
+      // "attack" interaction is handled by Character.performAttack, not here
       default:
         message = `${player.name} looked at ${this.name}.`;
         action = "examine";
@@ -184,8 +184,6 @@ export function createTree(position: Vector3): Group {
     resource: "wood",
     health: maxHealth, // Current health
     maxHealth: maxHealth, // Max health
-    // gatherTime: 3000, // Removed
-    // prompt: "Hold E/Interact E to gather Wood", // Removed (interaction is via attack)
     isDepletable: true,
     respawnTime: 20000,
     entityReference: treeGroup, // Reference to the Group itself
@@ -220,8 +218,6 @@ export function createRock(position: Vector3, size: number): Group {
     resource: "stone",
     health: maxHealth,
     maxHealth: maxHealth,
-    // gatherTime: 4000, // Removed
-    // prompt: "Hold E/Interact to gather Stone", // Removed
     isDepletable: true,
     respawnTime: 30000,
     entityReference: rockGroup,
@@ -248,8 +244,6 @@ export function createHerb(position: Vector3): Group {
     resource: "herb",
     health: maxHealth,
     maxHealth: maxHealth,
-    // gatherTime: 1500, // Removed
-    // prompt: "Hold E/Interact to gather Herb", // Removed
     isDepletable: true,
     respawnTime: 15000,
     entityReference: herbGroup,

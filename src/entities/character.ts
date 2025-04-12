@@ -15,6 +15,7 @@ import {
   SkinnedMesh,
   Object3D,
   Raycaster, // Import Raycaster
+  Sprite, // Import Sprite for filtering
 } from "three";
 import {
   EventLog,
@@ -299,19 +300,29 @@ export class Character extends Entity {
   performAttack(): void {
     const range = 2.5;
     const damage = this.userData.isPlayer ? 40 : 10; // Player deals more damage
-    if (!this.mesh || !this.scene || !this.game || this.isDead) return;
+    if (
+      !this.mesh ||
+      !this.scene ||
+      !this.game ||
+      this.isDead ||
+      !this.rayCaster
+    )
+      return;
 
     const rayOrigin = this.mesh.position
       .clone()
       .add(new Vector3(0, CHARACTER_HEIGHT / 2, 0));
-    const rayDirection = this.mesh.getWorldDirection(new Vector3());
+    let rayDirection = new Vector3();
 
-    // Ensure rayCaster is initialized
-    if (!this.rayCaster) {
-      console.error("Raycaster not initialized for attack!");
-      return;
+    // Use camera direction for player, mesh direction for NPC
+    if (this.userData.isPlayer && this.game.camera) {
+      this.game.camera.getWorldDirection(rayDirection);
+    } else {
+      this.mesh.getWorldDirection(rayDirection);
     }
+
     this.rayCaster.set(rayOrigin, rayDirection);
+    this.rayCaster.far = range;
 
     // Check against interactable objects (includes Entities and Resources)
     const potentialTargets = this.game.interactableObjects.filter((item) => {
@@ -331,31 +342,62 @@ export class Character extends Entity {
       return true;
     });
 
+    // Map to meshes, BUT filter out Sprites and ensure they are Object3D
+    const meshesToCheck = potentialTargets
+      .map((item) => (item as any).mesh ?? item)
+      .filter(
+        (mesh): mesh is Object3D =>
+          mesh instanceof Object3D && !(mesh instanceof Sprite) // Exclude Sprites
+      );
+
+    this.rayCaster.camera = this.game.camera!;
+    // Now intersect only with valid meshes
+    const intersects = this.rayCaster.intersectObjects(meshesToCheck, true);
+
     let closestTarget: any | null = null; // Can be Entity or resource Object3D
     let closestDistance = Infinity;
     let closestPoint: Vector3 | null = null;
 
-    for (const target of potentialTargets) {
-      const targetMesh = (target as any).mesh ?? target;
-      const box = targetMesh.userData.boundingBox as Box3 | undefined;
-      if (!box || box.isEmpty()) {
-        // Attempt to compute bounding box if missing
-        const tempBox = new Box3().setFromObject(targetMesh);
-        if (tempBox.isEmpty()) continue; // Skip if still empty
-        targetMesh.userData.boundingBox = tempBox; // Cache it
-      }
+    if (intersects.length > 0) {
+      // Find the closest valid intersected object/entity
+      for (const intersect of intersects) {
+        let hitObject: Object3D | null = intersect.object;
+        let rootInstance: any | null = null;
+        let rootMesh: Object3D | null = null;
 
-      const intersectionPoint = this.rayCaster.ray.intersectBox(
-        targetMesh.userData.boundingBox,
-        new Vector3()
-      );
+        // Traverse up to find the root interactable object/entity
+        while (hitObject) {
+          if (
+            hitObject.userData?.isInteractable &&
+            potentialTargets.some((p) => ((p as any).mesh ?? p) === hitObject) // Check if this object is in our potential targets list
+          ) {
+            // Find the corresponding instance from potentialTargets
+            rootInstance = potentialTargets.find(
+              (p) => ((p as any).mesh ?? p) === hitObject
+            );
+            rootMesh = hitObject;
+            break;
+          }
+          hitObject = hitObject.parent;
+        }
 
-      if (intersectionPoint) {
-        const distance = rayOrigin.distanceTo(intersectionPoint);
-        if (distance < closestDistance && distance <= range) {
-          closestDistance = distance;
-          closestTarget = target; // Store the instance (Entity or Object3D)
-          closestPoint = intersectionPoint;
+        // Validate the found instance
+        if (rootInstance && rootMesh) {
+          // Check if entity is dead (double check)
+          if (rootInstance instanceof Entity && rootInstance.isDead) continue;
+          // Check if resource is depleted (double check)
+          if (
+            rootMesh.userData.resource &&
+            rootMesh.userData.health !== undefined &&
+            rootMesh.userData.health <= 0
+          )
+            continue;
+
+          // Found the closest valid target
+          closestDistance = intersect.distance;
+          closestTarget = rootInstance;
+          closestPoint = intersect.point;
+          break; // Process the first valid hit
         }
       }
     }

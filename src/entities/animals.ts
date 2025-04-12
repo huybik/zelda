@@ -13,6 +13,7 @@ import {
   Object3D,
   SkinnedMesh,
   MathUtils,
+  Raycaster, // Import Raycaster
 } from "three";
 import {
   EventLog,
@@ -234,13 +235,20 @@ export class Animal extends Entity {
       if (e.action === this.attackAction) {
         this.isPerformingAction = false;
         this.actionType = "none";
-        this.transitionToLocomotion();
+        // If AI still wants to attack, allow next update loop to trigger it
+        if (this.moveState.attack) {
+          // No need to replay animation here, update loop will handle it
+        } else {
+          // If AI stopped attacking, transition back to idle/move
+          this.transitionToLocomotion();
+        }
       }
       // Death animation clamps, no transition needed
     });
 
     // Initialize AI
     this.aiController = new AnimalAIController(this);
+    this.rayCaster = new Raycaster(); // Initialize Raycaster
 
     // Initialize name display for the animal
     this.initNameDisplay();
@@ -303,55 +311,95 @@ export class Animal extends Entity {
   }
 
   performAttack(): void {
-    const range = 2.5; // Shorter range for animals?
+    const range = 2.5; // Attack range
     const damage = this.animalType === "Wolf" ? 15 : 5; // Example damage
-    if (!this.mesh || !this.scene || !this.game || this.isDead) return;
+    if (
+      !this.mesh ||
+      !this.scene ||
+      !this.game ||
+      this.isDead ||
+      !this.rayCaster
+    )
+      return;
 
     const attackOrigin = this.mesh.position
       .clone()
       .add(new Vector3(0, (this.userData.height ?? 0.8) * 0.5, 0)); // Mid-body approx
     const attackDirection = this.mesh.getWorldDirection(new Vector3());
 
-    // Simple sphere overlap check for nearby targets
+    this.rayCaster.set(attackOrigin, attackDirection);
+    this.rayCaster.far = range;
+
+    // Check against interactable objects (only Entities for animals)
     const potentialTargets = this.game.entities.filter(
-      (
-        entity
-      ): entity is Entity => // Target Characters or other Entities
-        entity instanceof Entity &&
-        entity !== this &&
-        !entity.isDead &&
-        entity.mesh !== null &&
-        entity.mesh.position.distanceToSquared(attackOrigin) < range * range
+      (item): item is Entity =>
+        item instanceof Entity && // Must be an entity
+        item !== this && // Not self
+        !item.isDead && // Must be alive
+        item.mesh !== null && // Must have a mesh
+        item.mesh.visible // Must be visible
     );
 
+    const meshesToCheck = potentialTargets.map((e) => e.mesh!);
+    if (this.game.camera) {
+      this.rayCaster.camera = this.game.camera;
+    } else {
+      console.warn("game.camera is null, cannot set rayCaster.camera");
+    }
+    const intersects = this.rayCaster.intersectObjects(meshesToCheck, true);
+
     let targetHit = false;
-    for (const target of potentialTargets) {
-      // Check if target is roughly in front
-      const directionToTarget = target
-        .mesh!.position.clone()
-        .sub(attackOrigin)
-        .normalize();
-      const dot = attackDirection.dot(directionToTarget);
-      if (dot > 0.7) {
-        // Target is roughly in front (adjust dot product threshold as needed)
-        target.takeDamage(damage, this);
-        this.game.spawnParticleEffect(target.mesh!.position, "red");
-        targetHit = true;
-        // Hit one target, could break or continue to hit multiple
-        break;
+    if (intersects.length > 0) {
+      // Find the closest valid intersected entity
+      for (const intersect of intersects) {
+        let hitObject: Object3D | null = intersect.object;
+        let rootInstance: Entity | null = null;
+
+        // Traverse up to find the root entity
+        while (hitObject) {
+          if (
+            hitObject.userData?.isEntity &&
+            hitObject.userData?.entityReference instanceof Entity
+          ) {
+            rootInstance = hitObject.userData.entityReference;
+            break;
+          }
+          hitObject = hitObject.parent;
+        }
+
+        // Check if the found instance is a valid target
+        if (
+          rootInstance &&
+          rootInstance !== this &&
+          !rootInstance.isDead &&
+          potentialTargets.includes(rootInstance) // Ensure it was in our initial filter
+        ) {
+          // Apply damage
+          rootInstance.takeDamage(damage, this);
+          this.game.spawnParticleEffect(intersect.point, "red");
+          targetHit = true;
+
+          // Log the hit
+          if (this.game) {
+            this.game.logEvent(
+              this,
+              "attack_hit",
+              `${this.name} attacked ${rootInstance.name}.`,
+              rootInstance,
+              { damage: damage },
+              this.mesh.position
+            );
+          }
+          // Hit the first valid target in the raycast
+          break;
+        }
       }
     }
 
-    if (targetHit && this.game) {
-      this.game.logEvent(
-        this,
-        "attack_hit",
-        `${this.name} attacked.`,
-        undefined, // Target info is in takeDamage log
-        { damage: damage },
-        this.mesh.position
-      );
-    }
+    // Log a miss if no target was hit (optional)
+    // if (!targetHit && this.game) {
+    //     this.game.logEvent(this, "attack_miss", `${this.name} attacked but missed.`, undefined, {}, this.mesh.position);
+    // }
   }
 
   handleMovement(deltaTime: number): void {
@@ -471,9 +519,6 @@ export class Animal extends Entity {
 
     // Update bounding box after position change
     this.updateBoundingBox();
-
-    // Reset attack trigger flag (it's handled within updateAnimations now)
-    // this.attackTriggered = false; // No longer needed here
   }
 
   die(attacker: Entity | null = null): void {
@@ -488,7 +533,6 @@ export class Animal extends Entity {
     // Reset action states
     this.isPerformingAction = false;
     this.actionType = "none";
-    // this.attackTriggered = false; // No longer needed
 
     // Play death animation
     if (this.dieAction) {
