@@ -255,7 +255,7 @@ export function createDeerModel(): Group {
     isAnimal: true,
     animalType: "Deer",
     isCollidable: true, // Example
-    isInteractable: false, // Example
+    isInteractable: true, // Example
     skeletonRoot: skeletonRoot, // Reference for animation system
   };
 
@@ -336,7 +336,7 @@ export function createWolfModel(): Group {
     isAnimal: true,
     animalType: "Wolf",
     isCollidable: true, // Example
-    isInteractable: false, // Example
+    isInteractable: true, // Example
     isEnemy: true, // Example
     skeletonRoot: skeletonRoot, // Reference for animation system
   };
