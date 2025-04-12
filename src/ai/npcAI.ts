@@ -129,7 +129,9 @@ export class AIController {
             this.target instanceof Entity && this.target.isDead;
           const isTargetResourceDepleted =
             isTargetResource &&
-            (!this.target.visible || !this.target.userData.isInteractable);
+            (this.target instanceof Object3D
+              ? !this.target.visible || !this.target.userData.isInteractable
+              : false);
 
           // Check if target is invalid (dead entity or depleted resource)
           if (isTargetEntityDead || isTargetResourceDepleted) {

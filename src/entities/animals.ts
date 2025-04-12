@@ -303,7 +303,7 @@ export class Animal extends Entity {
   }
 
   performAttack(): void {
-    const range = 2.5; // Shorter range for animals?
+    const range = 4; // Shorter range for animals?
     const damage = this.animalType === "Wolf" ? 15 : 5; // Example damage
     if (!this.mesh || !this.scene || !this.game || this.isDead) return;
 

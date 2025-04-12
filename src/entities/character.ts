@@ -1,4 +1,4 @@
-// File: /src/entities/character.ts
+/* File: /src/entities/character.ts */
 import {
   Scene,
   Vector3,
@@ -35,6 +35,7 @@ import {
   createDeadAnimation,
 } from "../core/animations"; // Import animation generation functions
 import { AnimalAIController } from "../ai/animalAI";
+import { Animal } from "./animals"; // Import Animal for type checking
 
 export class Character extends Entity {
   maxStamina: number;
@@ -298,7 +299,7 @@ export class Character extends Entity {
   }
 
   performAttack(): void {
-    const range = 3;
+    const range = 4;
     const damage = this.userData.isPlayer ? 40 : 10; // Player deals more damage
     if (!this.mesh || !this.scene || !this.game || this.isDead) return;
 
@@ -401,11 +402,13 @@ export class Character extends Entity {
             // Handle depletion
             if (targetMesh.userData.isDepletable) {
               targetMesh.userData.isInteractable = false; // Make non-targetable
+              targetMesh.userData.isCollidable = false; // Make non-collidable
               targetMesh.visible = false;
               const respawnTime = targetMesh.userData.respawnTime || 15000;
               setTimeout(() => {
                 if (targetMesh.userData) {
                   targetMesh.userData.isInteractable = true;
+                  targetMesh.userData.isCollidable = true; // Make collidable again
                   targetMesh.userData.health = maxHealth; // Reset health
                   targetMesh.visible = true;
                 }
