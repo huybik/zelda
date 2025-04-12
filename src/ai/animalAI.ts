@@ -30,6 +30,7 @@ export class AnimalAIController {
     this.animal = animal;
     this.homePosition = animal.mesh!.position.clone();
     this.detectionRangeSq = this.detectionRange * this.detectionRange; // Pre-calculate squared range
+    this.animal.userData.resource = "meat";
   }
 
   // New method to handle throttled logic updates
