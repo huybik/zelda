@@ -321,7 +321,7 @@ export async function handleChatResponse(
         );
       }
     }
-    target.showTemporaryMessage(npcMessage);
+    target.updateIntentDisplay(npcMessage);
     if (target.game) {
       target.game.logEvent(
         target,
@@ -338,7 +338,7 @@ export async function handleChatResponse(
     }
   } catch (error) {
     console.error("Error during chat API call:", error);
-    target.showTemporaryMessage("I... don't know what to say.");
+    target.updateIntentDisplay("I... don't know what to say.");
     if (target.game) {
       target.game.logEvent(
         target,

@@ -233,13 +233,17 @@ export class AIController {
                   this.targetAction = null;
                 }
               }
-            } else if (this.targetAction === "chat" && this.message) {
+            } else if (
+              this.targetAction === "chat" &&
+              this.message &&
+              this.chatDecisionTimer === null
+            ) {
               if (this.target instanceof Character) {
                 if (this.target.aiController) {
                   this.target.aiController.aiState = "idle";
                   this.target.aiController.persistentAction = null;
                 }
-                this.character.showTemporaryMessage(this.message);
+                this.character.updateIntentDisplay(this.message);
                 if (this.character.game) {
                   this.character.game.logEvent(
                     this.character,
@@ -283,7 +287,7 @@ export class AIController {
     this.chatDecisionTimer = setTimeout(() => {
       this.decideNextAction();
       this.chatDecisionTimer = null;
-    }, 5000);
+    }, 7000);
   }
 
   private justCompletedAction(): boolean {

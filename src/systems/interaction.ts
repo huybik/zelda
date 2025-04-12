@@ -515,7 +515,7 @@ export class InteractionSystem {
 
         const targetAtSendStart = this.chatTarget;
 
-        this.player.showTemporaryMessage(message);
+        this.player.updateIntentDisplay(message);
         this.game.logEvent(
           this.player,
           "chat",
@@ -560,7 +560,7 @@ export class InteractionSystem {
           }
 
           if (this.isChatOpen && this.chatTarget === targetAtSendStart) {
-            targetAtSendStart.showTemporaryMessage(npcMessage);
+            targetAtSendStart.updateIntentDisplay(npcMessage);
             targetAtSendStart.game?.logEvent(
               targetAtSendStart,
               "chat",
@@ -576,7 +576,7 @@ export class InteractionSystem {
         } catch (error) {
           console.error("Error during chat API call:", error);
           if (this.isChatOpen && this.chatTarget === targetAtSendStart) {
-            targetAtSendStart.showTemporaryMessage(
+            targetAtSendStart.updateIntentDisplay(
               "I... don't know what to say."
             );
             this.game.logEvent(
