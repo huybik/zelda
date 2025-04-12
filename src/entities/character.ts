@@ -640,7 +640,7 @@ export class Character extends Entity {
       this.game.logEvent(
         player,
         "interact_start",
-        `Started interacting with ${this.name}.`,
+        `${player.name} started interacting with ${this.name}.`,
         this,
         {},
         player.mesh!.position

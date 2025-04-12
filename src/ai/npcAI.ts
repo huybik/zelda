@@ -271,43 +271,7 @@ export class AIController {
         break;
     }
 
-    if (this.aiState !== this.previousAiState) {
-      // Log state changes (unchanged from original)
-      if (this.character.game) {
-        let message = "";
-        switch (this.aiState) {
-          case "deciding":
-            message = `${this.character.name} is deciding next action.`;
-            break;
-          case "idle":
-            message = `${this.character.name} is now idle.`;
-            break;
-          case "roaming":
-            message = `${this.character.name} is roaming.`;
-            break;
-          case "movingToResource":
-            message = `${this.character.name} is moving to a resource.`;
-            break;
-          case "gathering":
-            message = `${this.character.name} started gathering.`;
-            break;
-          case "movingToTarget":
-            message = `${this.character.name} is moving towards ${this.target?.name || "target"} to ${this.targetAction}.`;
-            break;
-        }
-        if (message) {
-          this.character.game.logEvent(
-            this.character,
-            this.aiState,
-            message,
-            undefined,
-            {},
-            this.character.mesh!.position
-          );
-        }
-      }
-      this.previousAiState = this.aiState;
-    }
+    this.previousAiState = this.aiState;
 
     return moveState;
   }

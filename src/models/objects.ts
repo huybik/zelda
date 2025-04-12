@@ -120,7 +120,7 @@ export class InteractableObject {
       case "read_sign":
         const signText =
           (this.data as string) || "The sign is worn and illegible.";
-        message = `Read sign: "${signText}"`;
+        message = `${player.name} read sign: "${signText}"`;
         action = "read";
         details = { text: signText };
         game.logEvent(
@@ -133,7 +133,7 @@ export class InteractableObject {
         );
         return { type: "message", message: signText };
       default:
-        message = `Looked at ${this.name}.`;
+        message = `${player.name} looked at ${this.name}.`;
         action = "examine";
         game.logEvent(
           player,

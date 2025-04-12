@@ -984,20 +984,7 @@ export class Game {
       {},
       this.activeCharacter!.mesh!.position
     );
-    const goldCount = this.inventory!.countItem("gold");
-    const goldPenalty = Math.min(10, Math.floor(goldCount * 0.1));
-    if (goldPenalty > 0) {
-      this.inventory!.removeItem("gold", goldPenalty);
-      const penaltyMessage = `Lost ${goldPenalty} gold.`;
-      this.logEvent(
-        this.activeCharacter!,
-        "penalty",
-        penaltyMessage,
-        undefined,
-        { item: "gold", amount: goldPenalty },
-        this.activeCharacter!.mesh!.position
-      );
-    }
+
     const pressurize = new Vector3(0, 0, 10);
     pressurize.y = getTerrainHeight(this.scene!, pressurize.x, pressurize.z);
     this.activeCharacter!.respawn(pressurize);

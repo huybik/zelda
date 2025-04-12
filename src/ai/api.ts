@@ -176,7 +176,7 @@ export function generatePrompt(controller: AIController): string {
   const persona = controller.persona;
   const observation = controller.observation;
   const eventLog = controller.character.eventLog.entries
-    .slice(-7)
+    .slice(-10)
     .map((entry) => `[${entry.timestamp}] ${entry.message}`)
     .join("\n");
   const selfState = observation?.self
