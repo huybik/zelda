@@ -1,4 +1,3 @@
-/* File: /src/ai/npcAI.ts */
 import { Vector3, Object3D } from "three";
 import { Entity } from "../entities/entitiy";
 import { Character } from "../entities/character";
@@ -20,7 +19,7 @@ export class AIController {
   destination: Vector3 | null = null;
   actionTimer: number = 5;
   interactionDistance: number = 3; // Distance for chat
-  attackDistance: number = 2.5; // Distance for attacking entities/resources
+  attackDistance: number = 2; // Distance for attacking entities/resources
   searchRadius: number;
   roamRadius: number;
   target: Entity | Object3D | null = null; // Target can be Entity or resource Object3D
