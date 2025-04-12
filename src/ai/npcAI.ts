@@ -20,7 +20,7 @@ export class AIController {
   destination: Vector3 | null = null;
   actionTimer: number = 5;
   interactionDistance: number = 3; // Distance for chat
-  attackDistance: number = 2; // Distance for attacking entities/resources
+  attackDistance: number = 2.5; // Distance for attacking entities/resources
   searchRadius: number;
   roamRadius: number;
   target: Entity | Object3D | null = null; // Target can be Entity or resource Object3D
@@ -32,7 +32,12 @@ export class AIController {
   private lastApiCallTime: number = 0;
   private apiCallCooldown: number = 20000;
   lastObservation: Observation | null = null;
-  persistentAction: { type: string; targetType: string } | null = null; // e.g., { type: "attack", targetType: "wood" } or { type: "attack", targetType: "Wolf" }
+  // Updated persistentAction to support both targetType and targetId
+  persistentAction: {
+    type: string;
+    targetType?: string;
+    targetId?: string;
+  } | null = null;
   private chatDecisionTimer: ReturnType<typeof setTimeout> | null = null;
   private lastAffectedTime: number = 0;
   private affectedCooldown: number = 10000;
@@ -51,18 +56,17 @@ export class AIController {
       right: 0,
       jump: false,
       sprint: false,
-      interact: false, // Interact (E key) is only for chat now
-      attack: false, // Attack (F key / AI) is for combat and resources
+      interact: false,
+      attack: false,
     };
 
     if (this.character.game) {
       updateObservation(this, this.character.game.entities);
     }
 
-    // Check for environmental changes to trigger immediate action decisions
     if (this.isAffectedByEntities()) {
       this.decideNextAction();
-      this.actionTimer = 5 + Math.random() * 5; // Reset timer after triggering
+      this.actionTimer = 5 + Math.random() * 5;
     }
 
     const currentTime = Date.now();
@@ -85,12 +89,9 @@ export class AIController {
 
     switch (this.aiState) {
       case "deciding":
-        // While waiting for API response, stop movement but keep the character responsive
-        // No moveState changes needed; character idles until new action is set
         break;
 
       case "idle":
-      // If the character is idle, do nothing
       case "roaming":
         if (this.destination) {
           const direction = this.destination
@@ -118,7 +119,7 @@ export class AIController {
           const targetPosition =
             this.target instanceof Entity
               ? this.target.mesh!.position
-              : this.target.position; // Object3D position
+              : this.target.position;
           const isTargetResource = !(this.target instanceof Entity);
           const isTargetEntityDead =
             this.target instanceof Entity && this.target.isDead;
@@ -128,10 +129,9 @@ export class AIController {
               ? !this.target.visible || !this.target.userData.isInteractable
               : false);
 
-          // Check if target is invalid (dead entity or depleted resource)
           if (isTargetEntityDead || isTargetResourceDepleted) {
             this.handleTargetLostOrDepleted();
-            break; // Exit switch case for this frame
+            break;
           }
 
           const direction = targetPosition
@@ -145,43 +145,34 @@ export class AIController {
               : this.interactionDistance;
 
           if (distance > requiredDistance) {
-            // Move towards target
             direction.normalize();
             this.character.lookAt(
               this.character.mesh!.position.clone().add(direction)
             );
             moveState.forward = 1;
-            moveState.attack = false; // Ensure not attacking while moving
+            moveState.attack = false;
           } else {
-            // Within range, perform action
             this.character.lookAt(targetPosition);
-            moveState.forward = 0; // Stop moving
+            moveState.forward = 0;
 
             if (this.targetAction === "attack") {
-              // Keep signaling attack as long as in range and target is valid
               moveState.attack = true;
 
-              // Check if target is depleted/dead *after* the attack might have happened
-              // (This check might be slightly delayed, Character.performAttack handles immediate depletion)
-              // Re-check target validity after potential attack
               const targetStillValid =
                 this.target instanceof Entity
                   ? !this.target.isDead
                   : this.target.visible && this.target.userData.isInteractable;
 
-              // If target becomes invalid OR moves out of search radius, handle it
               if (!targetStillValid || distance > this.searchRadius) {
                 this.handleTargetLostOrDepleted();
-                moveState.attack = false; // Stop attacking if target lost
+                moveState.attack = false;
               }
-              // Note: Persistent action logic moved to handleTargetLostOrDepleted
             } else if (
               this.targetAction === "chat" &&
               this.message &&
               this.chatDecisionTimer === null &&
-              this.target instanceof Character // Ensure target is a Character for chat
+              this.target instanceof Character
             ) {
-              // Handle chat initiation
               if (this.target.aiController) {
                 this.target.aiController.aiState = "idle";
                 this.target.aiController.persistentAction = null;
@@ -199,7 +190,6 @@ export class AIController {
               }
               handleChatResponse(this.target, this.character, this.message);
 
-              // Reset state after initiating chat
               this.aiState = "idle";
               this.target = null;
               this.targetAction = null;
@@ -207,7 +197,6 @@ export class AIController {
             }
           }
         } else {
-          // Target became null or action became null unexpectedly
           this.aiState = "idle";
           this.target = null;
           this.targetAction = null;
@@ -225,35 +214,58 @@ export class AIController {
     return moveState;
   }
 
-  // Helper function to handle target loss or depletion
   private handleTargetLostOrDepleted(): void {
     if (this.persistentAction?.type === "attack") {
-      const targetType = this.persistentAction.targetType;
-      let nextTarget: Entity | Object3D | null = null;
+      if (this.persistentAction.targetId) {
+        // Handle specific character target by ID
+        const targetEntity = this.character.game?.entities.find(
+          (e) => e.id === this.persistentAction?.targetId && !e.isDead
+        );
+        if (
+          targetEntity &&
+          this.character.mesh!.position.distanceTo(
+            targetEntity.mesh!.position
+          ) < this.searchRadius
+        ) {
+          this.target = targetEntity;
+          this.aiState = "movingToTarget"; // Explicitly set to ensure state consistency
+        } else {
+          this.persistentAction = null;
+          this.aiState = "idle";
+          this.target = null;
+          this.targetAction = null;
+        }
+      } else if (this.persistentAction.targetType) {
+        // Handle target types (resources or animals)
+        let nextTarget: Entity | Object3D | null = null;
+        const targetType = this.persistentAction.targetType;
 
-      // Check if targetType corresponds to a resource or an animal type
-      if (["wood", "stone", "herb"].includes(targetType)) {
-        nextTarget = this.findNearestResource(targetType);
-      } else {
-        nextTarget = this.findNearestAnimal(targetType);
-      }
+        if (["wood", "stone", "herb"].includes(targetType)) {
+          nextTarget = this.findNearestResource(targetType);
+        } else {
+          nextTarget = this.findNearestAnimal(targetType);
+        }
 
-      if (nextTarget) {
-        this.target = nextTarget;
-        // Keep aiState as "movingToTarget"
+        if (nextTarget) {
+          this.target = nextTarget;
+          this.aiState = "movingToTarget"; // Explicitly set to ensure state consistency
+        } else {
+          this.persistentAction = null;
+          this.aiState = "idle";
+          this.target = null;
+          this.targetAction = null;
+        }
       } else {
-        // No more targets of this type found
         this.persistentAction = null;
         this.aiState = "idle";
         this.target = null;
         this.targetAction = null;
       }
     } else {
-      // No persistent action, just go idle
       this.aiState = "idle";
       this.target = null;
       this.targetAction = null;
-      this.message = null; // Clear message too
+      this.message = null;
     }
   }
 
@@ -273,7 +285,7 @@ export class AIController {
 
   private isAffectedByEntities(): boolean {
     const currentTime = Date.now();
-    const affectedCooldown = 5000; // Reduced from 10000ms to 5000ms for faster reaction
+    const affectedCooldown = 5000;
 
     if (currentTime < this.lastAffectedTime + affectedCooldown) {
       return false;
@@ -281,13 +293,11 @@ export class AIController {
 
     if (!this.observation || !this.lastObservation) return false;
 
-    // Check self health change
     if (this.observation.self.health < this.lastObservation.self.health) {
       this.lastAffectedTime = currentTime;
       return true;
     }
 
-    // Check nearby characters
     const currentCharacters = this.observation.nearbyCharacters;
     const lastCharacters = this.lastObservation.nearbyCharacters;
     for (const currChar of currentCharacters) {
@@ -306,7 +316,6 @@ export class AIController {
   }
 
   async decideNextAction(): Promise<void> {
-    // Set a "deciding" state immediately to signal that an action is being determined
     this.aiState = "deciding";
 
     const prompt = generatePrompt(this);
@@ -372,79 +381,67 @@ export class AIController {
     this.message = null;
     this.persistentAction = null;
 
-    // Reset actionTimer to prevent immediate re-triggering
     this.actionTimer = 5 + Math.random() * 5;
 
     if (action === "attack" && target_id) {
-      // Target can be an Entity (Character/Animal) or a resource Object3D
       let foundTarget: Entity | Object3D | null = null;
 
-      // First, check Entities
       foundTarget =
         this.character.game?.entities.find((e) => e.id === target_id) ?? null;
 
-      // If not found in entities, check scene children (for resources)
       if (!foundTarget) {
         foundTarget =
           this.character.scene?.children.find(
             (child) =>
               child.userData.id === target_id &&
-              child.userData.isInteractable && // Resources are interactable (to be attackable)
+              child.userData.isInteractable &&
               child.visible
           ) ?? null;
       }
 
       if (foundTarget) {
-        // Determine if it's a resource or an entity for persistent action
-        let targetType: string | null = null;
-        if (foundTarget instanceof Entity) {
-          if (foundTarget instanceof Animal) {
-            targetType = foundTarget.animalType; // e.g., "Wolf"
-          } else if (foundTarget instanceof Character) {
-            targetType = "Character"; // Or use specific name/ID if needed
-          }
-        } else if (
-          foundTarget instanceof Object3D &&
-          foundTarget.userData.resource
-        ) {
-          targetType = foundTarget.userData.resource; // e.g., "wood", "stone"
-        }
-
-        if (targetType) {
-          // Set persistent action based on the type
-          this.persistentAction = { type: "attack", targetType: targetType };
-
-          // Find the *nearest* valid target of that type to start with
-          let nearestTarget: Entity | Object3D | null = null;
-          if (["wood", "stone", "herb"].includes(targetType)) {
-            nearestTarget = this.findNearestResource(targetType);
-          } else {
-            nearestTarget = this.findNearestAnimal(targetType);
-            // Could add findNearestCharacter if needed
-          }
-
-          if (nearestTarget) {
-            this.target = nearestTarget;
-            this.targetAction = "attack";
-            this.aiState = "movingToTarget";
-          } else {
-            // No valid target of this type found nearby
-            this.aiState = "idle";
-          }
-        } else {
-          // Target found, but couldn't determine type for persistent action (e.g., generic entity)
-          // Just attack the specific target
+        if (foundTarget instanceof Character) {
+          // Set persistent action for specific character ID
+          this.persistentAction = { type: "attack", targetId: foundTarget.id };
           this.target = foundTarget;
           this.targetAction = "attack";
           this.aiState = "movingToTarget";
+        } else {
+          // Handle resources and animals with targetType
+          let targetType: string | null = null;
+          if (foundTarget instanceof Animal) {
+            targetType = foundTarget.animalType;
+          } else if (
+            foundTarget instanceof Object3D &&
+            foundTarget.userData.resource
+          ) {
+            targetType = foundTarget.userData.resource;
+          }
+
+          if (targetType) {
+            this.persistentAction = { type: "attack", targetType };
+            const nearestTarget = ["wood", "stone", "herb"].includes(targetType)
+              ? this.findNearestResource(targetType)
+              : this.findNearestAnimal(targetType);
+            if (nearestTarget) {
+              this.target = nearestTarget;
+              this.targetAction = "attack";
+              this.aiState = "movingToTarget";
+            } else {
+              this.handleTargetLostOrDepleted();
+            }
+          } else {
+            this.target = foundTarget;
+            this.targetAction = "attack";
+            this.aiState = "movingToTarget";
+          }
         }
       } else {
-        // Target ID not found
-        this.aiState = "idle";
+        this.handleTargetLostOrDepleted();
       }
     } else if (action === "chat" && target_id) {
       const targetEntity = this.character.game?.entities.find(
-        (e) => e.id === target_id && e instanceof Character && !e.isDead // Ensure it's a living character
+        (e) => e.id === target_id && e instanceof Character && !e.isDead
       );
       if (targetEntity) {
         this.target = targetEntity;
@@ -452,10 +449,9 @@ export class AIController {
         this.message = message || "...";
         this.aiState = "movingToTarget";
       } else {
-        this.aiState = "idle";
+        this.handleTargetLostOrDepleted();
       }
     } else {
-      // Default to idle if action is unknown or target_id missing when required
       this.aiState = "idle";
     }
   }
@@ -468,10 +464,10 @@ export class AIController {
     const searchRadiusSq = this.searchRadius * this.searchRadius;
     this.character.scene.traverse((child) => {
       if (
-        child.userData.isInteractable && // Resources are interactable
+        child.userData.isInteractable &&
         child.userData.resource === resourceType &&
         child.visible &&
-        child.userData.health > 0 // Only target resources with health > 0
+        child.userData.health > 0
       ) {
         const distanceSq = selfPosition.distanceToSquared(child.position);
         if (distanceSq < searchRadiusSq && distanceSq < minDistanceSq) {
@@ -492,7 +488,7 @@ export class AIController {
     for (const entity of this.character.game.entities) {
       if (
         entity instanceof Animal &&
-        entity.animalType === animalType && // Match specific type from persistent action
+        entity.animalType === animalType &&
         !entity.isDead
       ) {
         const distanceSq = selfPosition.distanceToSquared(
