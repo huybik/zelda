@@ -955,3 +955,21 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
     height: 22px;
   }
 }
+
+.fixed-link.right {
+  bottom: -1px;
+  right: -1px;
+  border-top-left-radius: 12px;
+}
+.fixed-link {
+  font-family: "system-ui", sans-serif;
+  position: fixed;
+  padding: 7px;
+  font-size: 14px;
+  font-weight: bold;
+  background: #fff;
+  color: #000;
+  text-decoration: none;
+  z-index: 10000;
+  border: 1px solid #fff;
+}
