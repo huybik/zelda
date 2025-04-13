@@ -1,3 +1,4 @@
+// File: /src/objects/portalManager.ts
 import * as THREE from "three";
 import { Game } from "../main";
 import { createExitPortal, createStartPortal } from "../models/portals";
