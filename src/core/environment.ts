@@ -77,15 +77,15 @@ export function populateEnvironment(
   };
 
   // Add NPCs
-  // const farmerGiles = addCharacter(
-  //   villageCenter.clone().add(new Vector3(-12, 0, 2)),
-  //   "Farmer Giles",
-  //   "tavernMan"
-  // );
-  // farmerGiles.persona =
-  //   "A hardworking farmer who values community and is always willing to help others. He is knowledgeable about crops and livestock but can be a bit stubborn. He prefers to stay close to his farm but will venture out if necessary.";
-  // if (farmerGiles.aiController)
-  //   farmerGiles.aiController.persona = farmerGiles.persona;
+  const farmerGiles = addCharacter(
+    villageCenter.clone().add(new Vector3(-12, 0, 2)),
+    "Farmer Giles",
+    "tavernMan"
+  );
+  farmerGiles.persona =
+    "A hardworking farmer who values community and is always willing to help others. He is knowledgeable about crops and livestock but can be a bit stubborn. He prefers to stay close to his farm but will venture out if necessary.";
+  if (farmerGiles.aiController)
+    farmerGiles.aiController.persona = farmerGiles.persona;
 
   // const blacksmithBrynn = addCharacter(
   //   villageCenter.clone().add(new Vector3(10, 0, -3)),

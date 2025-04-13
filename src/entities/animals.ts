@@ -340,66 +340,56 @@ export class Animal extends Entity {
         item.mesh.visible // Must be visible
     );
 
-    const meshesToCheck = potentialTargets.map((e) => e.mesh!);
-    if (this.game.camera) {
-      this.rayCaster.camera = this.game.camera;
-    } else {
-      console.warn("game.camera is null, cannot set rayCaster.camera");
-    }
-    const intersects = this.rayCaster.intersectObjects(meshesToCheck, true);
+    let closestTarget: Entity | null = null;
+    let closestPoint: Vector3 | null = null;
+    let minDistanceSq = range * range;
+    const intersectionPoint = new Vector3(); // Reusable vector for intersection point
 
-    let targetHit = false;
-    if (intersects.length > 0) {
-      // Find the closest valid intersected entity
-      for (const intersect of intersects) {
-        let hitObject: Object3D | null = intersect.object;
-        let rootInstance: Entity | null = null;
+    for (const target of potentialTargets) {
+      const targetMesh = target.mesh!;
+      const boundingBox = target.userData.boundingBox as Box3 | undefined;
 
-        // Traverse up to find the root entity
-        while (hitObject) {
-          if (
-            hitObject.userData?.isEntity &&
-            hitObject.userData?.entityReference instanceof Entity
-          ) {
-            rootInstance = hitObject.userData.entityReference;
-            break;
+      if (!boundingBox || boundingBox.isEmpty()) {
+        console.warn(
+          `Skipping attack check for ${target.name}: Missing or empty bounding box.`
+        );
+        continue; // Skip if no valid bounding box
+      }
+
+      // Check for intersection with the bounding box
+      if (this.rayCaster.ray.intersectsBox(boundingBox)) {
+        // Calculate the intersection point
+        if (this.rayCaster.ray.intersectBox(boundingBox, intersectionPoint)) {
+          const distanceSq = attackOrigin.distanceToSquared(intersectionPoint);
+
+          // Check if within range and closer than previous hits
+          if (distanceSq < minDistanceSq) {
+            minDistanceSq = distanceSq;
+            closestTarget = target;
+            closestPoint = intersectionPoint.clone(); // Clone the point
           }
-          hitObject = hitObject.parent;
-        }
-
-        // Check if the found instance is a valid target
-        if (
-          rootInstance &&
-          rootInstance !== this &&
-          !rootInstance.isDead &&
-          potentialTargets.includes(rootInstance) // Ensure it was in our initial filter
-        ) {
-          // Apply damage
-          rootInstance.takeDamage(damage, this);
-          this.game.spawnParticleEffect(intersect.point, "red");
-          targetHit = true;
-
-          // Log the hit
-          if (this.game) {
-            this.game.logEvent(
-              this,
-              "attack_hit",
-              `${this.name} attacked ${rootInstance.name}.`,
-              rootInstance,
-              { damage: damage },
-              this.mesh.position
-            );
-          }
-          // Hit the first valid target in the raycast
-          break;
         }
       }
     }
 
-    // Log a miss if no target was hit (optional)
-    // if (!targetHit && this.game) {
-    //     this.game.logEvent(this, "attack_miss", `${this.name} attacked but missed.`, undefined, {}, this.mesh.position);
-    // }
+    // If a target was hit within range
+    if (closestTarget && closestPoint) {
+      // Apply damage
+      closestTarget.takeDamage(damage, this);
+      this.game.spawnParticleEffect(closestPoint, "red");
+
+      // Log the hit
+      if (this.game) {
+        this.game.logEvent(
+          this,
+          "attack_hit",
+          `${this.name} attacked ${closestTarget.name}.`,
+          closestTarget,
+          { damage: damage },
+          this.mesh.position
+        );
+      }
+    }
   }
 
   handleMovement(deltaTime: number): void {
