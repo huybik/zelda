@@ -378,7 +378,7 @@ export class Character extends Entity {
     }
 
     if (closestTarget && closestPoint) {
-      this.lookAt(closestTarget.position.clone());
+      this.lookAt(closestPoint);
 
       const targetMesh = (closestTarget as any).mesh ?? closestTarget;
 
