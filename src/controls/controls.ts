@@ -190,19 +190,11 @@ export class Controls {
     if (this.game?.interactionSystem?.isChatOpen) return;
     this.mouse.buttons[event.button] = true;
     this.mouseClickListeners[event.button]?.forEach((cb) => cb(event));
-    if (event.button === 0) {
-      // Left mouse button for attack
-      this.moveState.attack = true;
-    }
   }
 
   onMouseUp(event: MouseEvent): void {
     if (this.game?.mobileControls?.isActive()) return;
     this.mouse.buttons[event.button] = false;
-    if (event.button === 0) {
-      // Left mouse button release
-      this.moveState.attack = false;
-    }
   }
 
   onMouseMove(event: MouseEvent): void {
@@ -244,7 +236,7 @@ export class Controls {
       this.moveState.forward = (W ? 1 : 0) - (S ? 1 : 0);
       this.moveState.right = (A ? 1 : 0) - (D ? 1 : 0);
       this.moveState.sprint = Sprint ?? false;
-      // Attack state is now handled by KeyF and MouseButton 0 in onKeyDown/Up/MouseDown/Up
+      // Attack state is now handled by KeyF in onKeyDown/Up
     }
   }
 
