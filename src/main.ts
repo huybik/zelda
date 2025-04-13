@@ -43,6 +43,7 @@ import { AIController } from "./ai/npcAI.ts";
 import { AnimalAIController } from "./ai/animalAI.ts"; // Import Animal AI
 import { updateObservation } from "./ai/api.ts";
 import { LandingPage } from "./ui/landingPage.ts";
+import { QuestManager } from "./core/questManager.ts";
 
 // --- Language Data ---
 interface Language {
@@ -123,7 +124,7 @@ export class Game {
   startPortalRefUrl: string | null = null;
   startPortalOriginalParams: URLSearchParams | null = null;
   hasEnteredFromPortal: boolean = false;
-  quests: Quest[] | undefined;
+  questManager: QuestManager; // Replace quests array
   boundHandleVisibilityChange: () => void;
   wasPausedBeforeVisibilityChange: boolean = false;
   worldSize: number = WORLD_SIZE; // Make world size accessible
@@ -139,6 +140,7 @@ export class Game {
   private languageListHideTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
+    this.questManager = new QuestManager(this);
     this.boundHandleVisibilityChange = this.handleVisibilityChange.bind(this);
   }
 
@@ -174,7 +176,7 @@ export class Game {
     this.initPhysics();
     this.initEnvironment(models); // Populates NPCs, objects, and animals
     this.initSystems();
-    this.initQuests();
+    this.questManager.initQuests(); // Delegate to QuestManager
     this.initUI(); // Initializes minimap among other things
     this.setupUIControls();
 
@@ -264,82 +266,6 @@ export class Game {
         );
       }
       this.wasPausedBeforeVisibilityChange = false;
-    }
-  }
-
-  initQuests(): void {
-    this.quests = [
-      {
-        name: "Who is Blacksmith Brynn",
-        description: "Find out who Blacksmith Brynn is.",
-        isCompleted: false,
-        checkCompletion: (target, response) => {
-          return (
-            target.name === "Blacksmith Brynn" &&
-            response.toLowerCase().includes("brynn")
-          );
-        },
-      },
-      {
-        name: "Get Farmer Giles to collect rocks",
-        description: "Convince Farmer Giles to collect rocks.",
-        isCompleted: false,
-        checkCompletion: (target, response) => {
-          const lowerResponse = response.toLowerCase();
-          return (
-            target.name === "Farmer Giles" &&
-            (lowerResponse.includes("ok") || lowerResponse.includes("agree")) &&
-            lowerResponse.includes("rock")
-          );
-        },
-      },
-      {
-        name: "Convince Hunter Rex to kill Blacksmith Brynn",
-        description:
-          "Persuade Hunter Rex to take action against Blacksmith Brynn.",
-        isCompleted: false,
-        checkCompletion: (target, response) => {
-          const lowerResponse = response.toLowerCase();
-          return (
-            target.name === "Hunter Rex" &&
-            (lowerResponse.includes("ok") || lowerResponse.includes("agree")) &&
-            lowerResponse.includes("kill") &&
-            lowerResponse.includes("brynn")
-          );
-        },
-      },
-    ];
-  }
-
-  checkQuestCompletion(
-    interactionTarget: Character,
-    chatResponse: string
-  ): void {
-    this.quests?.forEach((quest) => {
-      if (
-        !quest.isCompleted &&
-        quest.checkCompletion(interactionTarget, chatResponse)
-      ) {
-        quest.isCompleted = true;
-        this.showCongratulationMessage(`Quest Completed: ${quest.name}`);
-        this.logEvent(
-          interactionTarget,
-          "quest_complete",
-          `Completed quest: ${quest.name}`,
-          undefined,
-          { quest: quest.name },
-          interactionTarget.mesh!.position
-        );
-      }
-    });
-  }
-
-  showCongratulationMessage(message: string): void {
-    const banner = document.getElementById("welcome-banner");
-    if (banner) {
-      banner.textContent = message;
-      banner.classList.remove("hidden");
-      setTimeout(() => banner.classList.add("hidden"), 5000);
     }
   }
 

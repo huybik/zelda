@@ -27,7 +27,7 @@ export class JournalDisplay {
   updateQuests(): void {
     if (!this.isOpen || !this.questListElement) return;
     this.questListElement.innerHTML = "";
-    this.game?.quests?.forEach((quest) => {
+    this.game?.questManager.quests?.forEach((quest) => {
       const li = document.createElement("li");
       li.textContent = `${quest.name}: ${quest.isCompleted ? "Completed" : "In Progress"}`;
       this.questListElement!.appendChild(li);

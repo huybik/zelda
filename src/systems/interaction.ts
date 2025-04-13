@@ -431,7 +431,10 @@ export class InteractionSystem {
               { message: npcMessage },
               targetAtSendStart.mesh!.position
             );
-            this.game.checkQuestCompletion(targetAtSendStart, npcMessage);
+            this.game.questManager.checkQuestCompletion(
+              targetAtSendStart,
+              npcMessage
+            );
           } else {
             console.log("Chat closed or target changed before NPC response.");
           }
