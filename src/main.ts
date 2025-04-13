@@ -33,7 +33,6 @@ import { loadModels } from "./core/assetLoader";
 import { createTerrain } from "./core/terrain";
 import { setupLighting } from "./core/lighting";
 import { populateEnvironment } from "./core/environment";
-import { createExitPortal, createStartPortal } from "./models/portals.ts";
 import { createWorldBoundary } from "./models/walls.ts";
 import {
   spawnParticleEffect,
@@ -41,55 +40,9 @@ import {
 } from "./systems/particles";
 import { AIController } from "./ai/npcAI.ts";
 import { AnimalAIController } from "./ai/animalAI.ts"; // Import Animal AI
-import { updateObservation } from "./ai/api.ts";
 import { LandingPage } from "./ui/landingPage.ts";
 import { QuestManager } from "./core/questManager.ts";
 import { PortalManager } from "./objects/portalManagement";
-
-// --- Language Data ---
-interface Language {
-  code: string;
-  name: string;
-}
-
-const languages: Language[] = [
-  { code: "en", name: "English" },
-  { code: "es", name: "Español (Spanish)" },
-  { code: "fr", name: "Français (French)" },
-  { code: "de", name: "Deutsch (German)" },
-  { code: "zh", name: "中文 (Chinese)" },
-  { code: "ja", name: "日本語 (Japanese)" },
-  { code: "ko", name: "한국어 (Korean)" },
-  { code: "ru", name: "Русский (Russian)" },
-  { code: "pt", name: "Português (Portuguese)" },
-  { code: "it", name: "Italiano (Italian)" },
-  { code: "ar", name: "العربية (Arabic)" },
-  { code: "hi", name: "हिन्दी (Hindi)" },
-  { code: "bn", name: "বাংলা (Bengali)" },
-  { code: "pa", name: "ਪੰਜਾਬੀ (Punjabi)" },
-  { code: "jv", name: "Basa Jawa (Javanese)" },
-  { code: "ms", name: "Bahasa Melayu (Malay)" },
-  { code: "tr", name: "Türkçe (Turkish)" },
-  { code: "vi", name: "Tiếng Việt (Vietnamese)" },
-  { code: "te", name: "తెలుగు (Telugu)" },
-  { code: "mr", name: "मराठी (Marathi)" },
-  { code: "ta", name: "தமிழ் (Tamil)" },
-  { code: "ur", name: "اردو (Urdu)" },
-  { code: "fa", name: "فارسی (Persian)" },
-  { code: "nl", name: "Nederlands (Dutch)" },
-  { code: "pl", name: "Polski (Polish)" },
-  { code: "uk", name: "Українська (Ukrainian)" },
-  { code: "ro", name: "Română (Romanian)" },
-  { code: "sv", name: "Svenska (Swedish)" },
-  { code: "el", name: "Ελληνικά (Greek)" },
-  { code: "hu", name: "Magyar (Hungarian)" },
-  { code: "cs", name: "Čeština (Czech)" },
-  { code: "fi", name: "Suomi (Finnish)" },
-  { code: "he", name: "עברית (Hebrew)" },
-  { code: "th", name: "ไทย (Thai)" },
-  { code: "id", name: "Bahasa Indonesia (Indonesian)" },
-  // Add more languages as needed
-].sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically by name
 
 export class Game {
   scene: Scene | null = null;
@@ -157,7 +110,7 @@ export class Game {
 
     // Setup Landing Page
     this.landingPage = new LandingPage(this);
-    this.landingPage.setup(languages, savedName, savedLang);
+    this.landingPage.setup(savedName, savedLang);
 
     // Initialize game elements in background
     const urlParams = new URLSearchParams(window.location.search);
@@ -661,78 +614,6 @@ export class Game {
       // Update minimap if it relies on the entities array directly
       if (this.minimap) {
         this.minimap.entities = this.entities; // Ensure minimap has the updated list
-      }
-    }
-  }
-
-  animatePortals(): void {
-    if (this.exitPortalParticles) {
-      const positions = this.exitPortalParticles.attributes.position
-        .array as Float32Array;
-      for (let i = 0; i < positions.length; i += 3) {
-        positions[i + 1] += 0.05 * Math.sin(Date.now() * 0.001 + i);
-      }
-      this.exitPortalParticles.attributes.position.needsUpdate = true;
-    }
-    if (this.startPortalParticles) {
-      const positions = this.startPortalParticles.attributes.position
-        .array as Float32Array;
-      for (let i = 0; i < positions.length; i += 3) {
-        positions[i + 1] += 0.05 * Math.sin(Date.now() * 0.001 + i);
-      }
-      this.startPortalParticles.attributes.position.needsUpdate = true;
-    }
-  }
-
-  checkPortalCollisions(): void {
-    if (!this.activeCharacter || !this.activeCharacter.mesh) return;
-    const playerBox = new Box3().setFromObject(this.activeCharacter.mesh);
-    const playerCenter = playerBox.getCenter(new Vector3());
-    if (this.exitPortalGroup && this.exitPortalBox) {
-      const portalCenter = this.exitPortalBox.getCenter(new Vector3());
-      const portalDistance = playerCenter.distanceTo(portalCenter);
-      const interactionThreshold = 15;
-      if (portalDistance < interactionThreshold) {
-        const currentSpeed = this.activeCharacter.velocity.length();
-        const selfUsername = this.activeCharacter.name;
-        const ref = window.location.href;
-        const newParams = new URLSearchParams();
-        newParams.append("username", selfUsername);
-        newParams.append("color", "white");
-        newParams.append("speed", currentSpeed.toFixed(2));
-        newParams.append("ref", ref);
-        newParams.append("speed_x", this.activeCharacter.velocity.x.toFixed(2));
-        newParams.append("speed_y", this.activeCharacter.velocity.y.toFixed(2));
-        newParams.append("speed_z", this.activeCharacter.velocity.z.toFixed(2));
-        const paramString = newParams.toString();
-        const nextPage =
-          "http://portal.pieter.com" + (paramString ? "?" + paramString : "");
-        if (playerBox.intersectsBox(this.exitPortalBox))
-          window.location.href = nextPage;
-      }
-    }
-    if (
-      this.startPortalGroup &&
-      this.startPortalBox &&
-      this.startPortalRefUrl &&
-      this.startPortalOriginalParams
-    ) {
-      const portalCenter = this.startPortalBox.getCenter(new Vector3());
-      const portalDistance = playerCenter.distanceTo(portalCenter);
-      const interactionThreshold = 15;
-      if (
-        portalDistance < interactionThreshold &&
-        playerBox.intersectsBox(this.startPortalBox)
-      ) {
-        let url = this.startPortalRefUrl;
-        if (!url.startsWith("http://") && !url.startsWith("https://"))
-          url = "https://" + url;
-        const newParams = new URLSearchParams();
-        for (const [key, value] of this.startPortalOriginalParams) {
-          if (key !== "ref" && key !== "portal") newParams.append(key, value);
-        }
-        const paramString = newParams.toString();
-        window.location.href = url + (paramString ? "?" + paramString : "");
       }
     }
   }
