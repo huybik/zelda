@@ -378,6 +378,8 @@ export class Character extends Entity {
     }
 
     if (closestTarget && closestPoint) {
+      this.lookAt(closestTarget.position.clone());
+
       const targetMesh = (closestTarget as any).mesh ?? closestTarget;
 
       // Check if the target is a resource
