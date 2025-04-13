@@ -1,4 +1,3 @@
-/* File: /src/ui/journal.ts */
 import { EventLog, EventEntry, Quest } from "../core/utils";
 import { Game } from "../main";
 
@@ -35,14 +34,16 @@ export class JournalDisplay {
       if (quest.isCompleted) {
         li.classList.add("quest-completed");
       }
-      li.addEventListener("click", () => this.onQuestClick(quest));
+      li.addEventListener("click", (event) => {
+        this.onQuestClick(quest);
+      });
       this.questListElement!.appendChild(li);
     });
   }
 
   onQuestClick(quest: Quest): void {
     if (this.game && quest) {
-      this.hide(); // Hide journal
+      // this.hide(); // Hide journal
       this.game.showQuestBanner(quest); // Show quest detail
     }
   }
