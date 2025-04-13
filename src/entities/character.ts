@@ -378,12 +378,12 @@ export class Character extends Entity {
     }
 
     if (closestTarget && closestPoint) {
-      this.lookAt(closestTarget.position.clone());
-
       const targetMesh = (closestTarget as any).mesh ?? closestTarget;
 
       // Check if the target is a resource
       if (targetMesh.userData.resource) {
+        // this.lookAt(closestTargetposition.clone());
+
         const resource = targetMesh.userData.resource as string;
         const currentHealth = targetMesh.userData.health as number;
         const maxHealth = targetMesh.userData.maxHealth as number;
