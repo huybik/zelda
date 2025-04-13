@@ -42,6 +42,7 @@ import {
 import { AIController } from "./ai/npcAI.ts";
 import { AnimalAIController } from "./ai/animalAI.ts"; // Import Animal AI
 import { updateObservation } from "./ai/api.ts";
+import { LandingPage } from "./ui/landingPage.ts";
 
 // --- Language Data ---
 interface Language {
@@ -128,6 +129,7 @@ export class Game {
   worldSize: number = WORLD_SIZE; // Make world size accessible
   language: string = "en"; // Default language
   isGameStarted: boolean = false; // Flag to control game start after landing page
+  private landingPage: LandingPage | null = null;
 
   // AI Throttling
   private lastAiUpdateTime: number = 0;
@@ -157,7 +159,8 @@ export class Game {
     this.language = savedLang || "en";
 
     // Setup Landing Page
-    this.setupLandingPage(savedName, savedLang);
+    this.landingPage = new LandingPage(this);
+    this.landingPage.setup(languages, savedName, savedLang);
 
     // Initialize game elements in background
     const urlParams = new URLSearchParams(window.location.search);
@@ -214,179 +217,6 @@ export class Game {
 
     // Start the animation loop, but game logic might be paused initially
     this.renderer!.setAnimationLoop(this.update.bind(this));
-  }
-
-  setupLandingPage(savedName: string | null, savedLang: string | null): void {
-    const landingPage = document.getElementById("landing-page");
-    const nameInput = document.getElementById(
-      "player-name"
-    ) as HTMLInputElement;
-    const langSearchInput = document.getElementById(
-      "language-search"
-    ) as HTMLInputElement;
-    const langListContainer = document.getElementById(
-      "language-list-container"
-    );
-    const langList = document.getElementById(
-      "language-list"
-    ) as HTMLUListElement;
-    const startButton = document.getElementById("start-game-button");
-    const gameContainer = document.getElementById("game-container");
-    const uiContainer = document.getElementById("ui-container");
-    const loadingText = landingPage?.querySelector(".loading-text");
-
-    if (
-      !landingPage ||
-      !nameInput ||
-      !langSearchInput ||
-      !langListContainer ||
-      !langList ||
-      !startButton ||
-      !gameContainer ||
-      !uiContainer ||
-      !loadingText
-    ) {
-      console.error("Landing page elements not found!");
-      this.isGameStarted = true; // Skip landing page if elements are missing
-      gameContainer?.classList.remove("hidden");
-      uiContainer?.classList.remove("hidden");
-      return;
-    }
-
-    let selectedLanguageCode = savedLang || "en"; // Initialize with saved or default
-
-    // Function to show/hide language list
-    const showLanguageList = () => {
-      if (this.languageListHideTimeout) {
-        clearTimeout(this.languageListHideTimeout);
-        this.languageListHideTimeout = null;
-      }
-      langListContainer.classList.remove("hidden");
-    };
-
-    const hideLanguageList = (immediate = false) => {
-      if (this.languageListHideTimeout) {
-        clearTimeout(this.languageListHideTimeout);
-        this.languageListHideTimeout = null;
-      }
-      if (immediate) {
-        langListContainer.classList.add("hidden");
-      } else {
-        // Delay hiding to allow clicks on list items
-        this.languageListHideTimeout = setTimeout(() => {
-          langListContainer.classList.add("hidden");
-          this.languageListHideTimeout = null;
-        }, 150); // 150ms delay
-      }
-    };
-
-    // Function to populate the language list
-    const populateLanguageList = (filter: string = "") => {
-      langList.innerHTML = ""; // Clear existing list
-      const filterLower = filter.toLowerCase();
-      const filteredLanguages = languages.filter(
-        (lang) =>
-          lang.name.toLowerCase().includes(filterLower) ||
-          lang.code.toLowerCase().includes(filterLower)
-      );
-
-      filteredLanguages.forEach((lang) => {
-        const li = document.createElement("li");
-        li.textContent = lang.name;
-        li.dataset.langCode = lang.code;
-        if (lang.code === selectedLanguageCode) {
-          li.classList.add("selected");
-        }
-        li.addEventListener("mousedown", (e) => {
-          // Use mousedown to register before blur
-          e.preventDefault(); // Prevent input from losing focus immediately
-          selectedLanguageCode = lang.code;
-          langSearchInput.value = lang.name; // Update input field
-          localStorage.setItem("selectedLanguageName", lang.name); // Save selection
-          populateLanguageList(); // Refresh list to show selection
-          hideLanguageList(true); // Hide immediately after selection
-          // Manually trigger blur if needed, though hiding might be enough
-          // langSearchInput.blur();
-        });
-        langList.appendChild(li);
-      });
-    };
-
-    // Initial population and state
-    populateLanguageList();
-    hideLanguageList(true); // Start hidden
-
-    // Pre-fill name input
-    if (savedName) {
-      nameInput.value = savedName;
-    }
-
-    // Set initial search input value if language was saved
-    const initialLang = languages.find((l) => l.code === selectedLanguageCode);
-    if (initialLang) {
-      langSearchInput.value = initialLang.name;
-    }
-
-    // Event listeners for search input
-    langSearchInput.addEventListener("input", () => {
-      populateLanguageList(langSearchInput.value);
-      showLanguageList(); // Ensure list is shown while typing
-    });
-
-    langSearchInput.addEventListener("focus", () => {
-      showLanguageList();
-      // Optional: Select all text on focus for easier searching
-      langSearchInput.select();
-    });
-
-    langSearchInput.addEventListener("blur", () => {
-      hideLanguageList(); // Hide with delay on blur
-    });
-
-    // Start button logic
-    startButton.onclick = () => {
-      const playerName = nameInput.value.trim() || "Player";
-
-      // Save settings
-      localStorage.setItem("playerName", playerName);
-      localStorage.setItem("selectedLanguage", selectedLanguageCode);
-      this.language = selectedLanguageCode;
-
-      // Update player name if already initialized
-      if (this.activeCharacter) {
-        this.activeCharacter.name = playerName;
-        // If name display exists, update it (though it might be hidden initially)
-        this.activeCharacter.updateNameDisplay(playerName);
-      }
-
-      // Hide landing page, show game
-      landingPage.classList.add("hidden");
-      gameContainer.classList.remove("hidden");
-      uiContainer.classList.remove("hidden");
-
-      // Set flag to start game logic updates
-      this.isGameStarted = true;
-      this.setPauseState(false); // Ensure game is not paused
-
-      // Show welcome banner
-      const banner = document.getElementById("welcome-banner");
-      if (banner) {
-        const welcomeText = this.mobileControls?.isActive()
-          ? `Welcome, ${playerName}! Use joysticks to move, drag screen to look, buttons to act.`
-          : `Welcome, ${playerName}! [WASD] Move, Mouse Look, [I] Inv, [J] Journal, [E] Interact, [F] Attack, [C] Switch, [Esc] Unlock/Close`;
-        banner.textContent = welcomeText;
-        banner.classList.remove("hidden");
-        setTimeout(() => banner.classList.add("hidden"), 5000);
-      }
-
-      // Try to play audio on user interaction
-      this.audioElement
-        ?.play()
-        .catch((e) => console.warn("Background music play failed:", e));
-    };
-
-    // Indicate loading is complete (or near complete)
-    loadingText.textContent = "Ready to start!";
   }
 
   handlePointerLockChange(): void {
