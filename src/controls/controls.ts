@@ -114,6 +114,7 @@ export class Controls {
   }
 
   onPointerLockChange(): void {
+    console.log(`current pointer lock to ${this.isPointerLocked}`);
     if (document.pointerLockElement === this.domElement) {
       this.isPointerLocked = true;
       document.body.classList.add("pointer-locked");
@@ -134,6 +135,7 @@ export class Controls {
         this.game?.setPauseState(true);
       }
     }
+    console.log(` pointer lock change to ${this.isPointerLocked}`);
   }
 
   onPointerLockError(): void {
