@@ -1,20 +1,19 @@
-/* File: /src/style.css */
-
+/* File: /style.css */
 html,
 body {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 100%;
-  overflow: hidden; /* Prevent scrollbars */
+  overflow: hidden;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   color: #333;
-  background-color: #87ceeb; /* Fallback sky */
+  background-color: #87ceeb;
   user-select: none;
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
-  touch-action: manipulation; /* Prevent double-tap zoom etc. on controls */
+  touch-action: manipulation;
 }
 
 /* --- Landing Page --- */
@@ -49,14 +48,14 @@ body {
   display: flex;
   flex-direction: column;
   gap: 15px;
-  align-items: stretch; /* Make labels/inputs take full width */
+  align-items: stretch;
   min-width: 300px;
   max-width: 400px;
 }
 
 .settings-form label {
   font-size: 1.1em;
-  margin-bottom: -5px; /* Reduce gap below label */
+  margin-bottom: -5px;
   text-align: left;
 }
 
@@ -70,7 +69,6 @@ body {
   color: #333;
 }
 
-/* Language Selector Styles */
 .language-selector {
   position: relative;
   display: flex;
@@ -84,21 +82,21 @@ body {
   border-radius: 5px;
   background-color: #f0f0f0;
   color: #333;
-  margin-bottom: 5px; /* Space between search and list */
+  margin-bottom: 5px;
 }
 
 #language-list-container {
-  position: absolute; /* Position relative to .language-selector */
-  top: 100%; /* Position below the search input */
+  position: absolute;
+  top: 100%;
   left: 0;
   width: 100%;
-  max-height: 150px; /* Limit height and make scrollable */
+  max-height: 150px;
   overflow-y: auto;
   border: 1px solid #ccc;
-  border-top: none; /* Avoid double border */
-  border-radius: 0 0 5px 5px; /* Round bottom corners */
+  border-top: none;
+  border-radius: 0 0 5px 5px;
   background-color: #fff;
-  z-index: 110; /* Ensure it's above other landing page elements */
+  z-index: 110;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   transition:
     opacity 0.15s ease-out,
@@ -134,7 +132,7 @@ body {
 }
 
 #language-list li.selected {
-  background-color: #d0eaff; /* Highlight selected language */
+  background-color: #d0eaff;
   font-weight: bold;
 }
 
@@ -167,9 +165,8 @@ body {
   width: 100%;
   height: 100%;
   cursor: default;
-  /* Ensure touch events are captured here for camera control */
   pointer-events: auto;
-  touch-action: none; /* Prevent browser default touch actions like scroll/zoom */
+  touch-action: none;
 }
 
 #game-container:focus-within {
@@ -187,20 +184,20 @@ canvas {
   left: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none; /* Allow clicks/touches through to canvas/game-container by default */
+  pointer-events: none;
   z-index: 10;
   display: flex;
   flex-direction: column;
 }
 
-/* Allow pointer events on specific UI elements */
 .ui-panel,
 #chat-container,
-#mobile-controls-layer > *, /* Allow events on direct children of mobile layer */
-#mobile-controls-layer .mobile-button /* Explicitly allow events on buttons */ {
+#quest-detail-banner, /* Make quest banner interactive */
+#mobile-controls-layer > *,
+#mobile-controls-layer .mobile-button {
   pointer-events: auto;
 }
-/* Ensure joystick zone allows events for nipplejs */
+
 #joystick-zone-left {
   pointer-events: auto;
 }
@@ -342,7 +339,6 @@ canvas {
 #inventory-display {
   bottom: 20px;
   left: 50%;
-  bottom: 50%;
   transform: translateX(-50%) scale(1);
   width: 85%;
   max-width: 700px;
@@ -380,7 +376,6 @@ canvas {
   flex-shrink: 0;
 }
 
-/* Inventory Slots */
 #inventory-slots {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
@@ -466,7 +461,6 @@ canvas {
   border-radius: 2px;
 }
 
-/* Journal Entries */
 .journal-section {
   margin-bottom: 15px;
   flex-shrink: 0;
@@ -527,22 +521,23 @@ canvas {
   margin-bottom: 0;
 }
 
+/* Quest Log Specific */
+li.quest-item {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+li.quest-item:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
 li.quest-completed {
   color: #555;
   font-style: italic;
   text-decoration: line-through;
   opacity: 0.7;
+  cursor: default; /* No action on completed quests */
 }
-li.quest-failed {
-  color: #a00;
-  font-style: italic;
-  opacity: 0.8;
-}
-li.quest-available {
-  color: #005a9c;
-}
-li.quest-active strong {
-  color: #006400;
+li.quest-completed:hover {
+  background-color: transparent; /* No hover effect */
 }
 
 /* --- Chat Interface --- */
@@ -630,7 +625,7 @@ li.quest-active strong {
     visibility 0s 0.3s;
 }
 
-/* Crosshair using ::after pseudo-element */
+/* Crosshair */
 body::after {
   content: "+";
   position: fixed;
@@ -647,10 +642,12 @@ body::after {
 }
 
 body.pointer-locked::after {
-  display: none;
+  display: block; /* Show crosshair when pointer locked */
 }
+/* Hide crosshair if any panel is open */
 body:has(.ui-panel:not(.hidden))::after,
 body:has(#chat-container:not(.hidden))::after,
+body:has(#quest-detail-banner:not(.hidden))::after,
 body:has(#mobile-controls-layer:not(.hidden))::after {
   display: none;
 }
@@ -688,27 +685,66 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   display: none;
 }
 
-/* Welcome Banner */
-#welcome-banner {
+/* Quest Detail Banner */
+#quest-detail-banner {
   position: fixed;
-  top: 2%;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
-  background-color: rgba(0, 0, 0, 0.3);
-  color: rgba(235, 235, 235, 0.97);
-  padding: 15px 25px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
-  font-size: 16px;
+  transform: translate(-50%, -50%);
+  background-color: rgba(30, 30, 30, 0.9);
+  color: white;
+  padding: 25px 35px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
   text-align: center;
   max-width: 90%;
+  width: 450px; /* Adjust width as needed */
   z-index: 30;
   opacity: 1;
   transition:
-    opacity 0.5s ease-out,
+    opacity 0.3s ease-out,
     visibility 0s 0s;
+}
+
+#quest-detail-banner.hidden {
+  opacity: 0;
+  visibility: hidden;
   pointer-events: none;
+  transition:
+    opacity 0.3s ease-out,
+    visibility 0s 0.3s;
+}
+
+#quest-detail-banner h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 1.4em;
+  color: #eee;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  padding-bottom: 10px;
+}
+
+#quest-detail-banner p {
+  margin-bottom: 25px;
+  font-size: 1em;
+  line-height: 1.5;
+  color: #ccc;
+}
+
+#quest-banner-ok {
+  padding: 10px 25px;
+  font-size: 1.1em;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+#quest-banner-ok:hover {
+  background-color: #45a049;
 }
 
 /* --- Mobile Controls --- */
@@ -718,7 +754,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   left: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none; /* Layer itself doesn't block */
+  pointer-events: none;
   z-index: 15;
   overflow: hidden;
 }
@@ -727,7 +763,6 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   display: none;
 }
 
-/* Joystick Zone (Left Only) */
 #joystick-zone-left {
   position: absolute;
   bottom: calc(10% + env(safe-area-inset-bottom));
@@ -737,13 +772,8 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   display: flex;
   justify-content: center;
   align-items: center;
-  /* pointer-events: auto; */ /* Moved to general UI rules */
 }
 
-/* Removed Right Joystick Zone Style */
-/* #joystick-zone-right { ... } */
-
-/* NippleJS specific styles */
 .nipple {
   pointer-events: auto !important;
   z-index: 20;
@@ -756,16 +786,10 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   background-color: rgba(50, 50, 50, 0.4) !important;
 }
 
-/* Removed Old Action Buttons Container Style */
-/* .action-buttons-container { ... } */
-
-/* New Right Action Buttons Container */
 #right-action-buttons {
   position: absolute;
   right: calc(5% + env(safe-area-inset-right));
-  /* top: 50%; */ /* Remove */
-  bottom: calc(15% + env(safe-area-inset-bottom)); /* Add */
-  /* transform: translateY(-50%); */ /* Remove */
+  bottom: calc(15% + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -774,9 +798,8 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   z-index: 18;
 }
 
-/* Mobile Button Base Style */
 .mobile-button {
-  position: relative; /* Change from absolute as flex handles positioning */
+  position: relative;
   background-color: rgba(50, 50, 50, 0.6);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.3);
@@ -795,10 +818,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   transition:
     background-color 0.1s ease,
     transform 0.1s ease;
-  pointer-events: auto; /* Buttons need pointer events */
-  /* z-index: 18; */ /* No longer needed if container has z-index */
-  /* Remove absolute positioning transforms */
-  /* transform: translate(...) */
+  pointer-events: auto;
 }
 
 .mobile-button svg {
@@ -811,21 +831,15 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   line-height: 1.1;
 }
 
-/* Active state for buttons */
 .mobile-button.active,
 .mobile-button:active {
   background-color: rgba(80, 80, 80, 0.8);
-  transform: scale(0.95); /* Keep scale feedback */
+  transform: scale(0.95);
 }
 
-/* Removed specific positioning for interact/attack buttons */
-/* #button-interact { transform: ... } */
-/* #button-attack { transform: ... } */
-
-/* Bottom Icon Buttons */
 .bottom-icon-buttons {
   position: absolute;
-  bottom: calc(15px + env(safe-area-inset-bottom)); /* Adjust for safe area */
+  bottom: calc(15px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -846,9 +860,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   height: 24px;
 }
 
-/* Media Query for Mobile Adjustments */
 @media (max-width: 768px) {
-  /* Adjust HUD */
   #hud {
     top: 10px;
     left: 10px;
@@ -868,7 +880,6 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
     top: 5px;
   }
 
-  /* Adjust Minimap */
   #minimap-container {
     top: 10px;
     right: 10px;
@@ -878,7 +889,6 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
     height: 100px;
   }
 
-  /* Adjust Panels */
   #inventory-display,
   #journal-display {
     width: 95%;
@@ -901,7 +911,6 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
     font-size: 12px;
   }
 
-  /* Adjust Chat */
   #chat-container {
     bottom: 5px;
     width: 95%;
@@ -918,18 +927,31 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
     font-size: 15px;
   }
 
-  /* Adjust Mobile Controls Layout */
+  #quest-detail-banner {
+    width: 90%;
+    padding: 20px;
+  }
+  #quest-detail-banner h3 {
+    font-size: 1.2em;
+  }
+  #quest-detail-banner p {
+    font-size: 0.95em;
+  }
+  #quest-banner-ok {
+    padding: 8px 20px;
+    font-size: 1em;
+  }
+
   #joystick-zone-left {
     bottom: calc(5% + env(safe-area-inset-bottom));
     left: 2%;
     width: 45%;
     height: 45%;
   }
-  /* Removed right zone adjustments */
 
   #right-action-buttons {
     right: calc(2% + env(safe-area-inset-right));
-    gap: 15px; /* Reduce gap slightly */
+    gap: 15px;
   }
 
   .mobile-button {
@@ -940,7 +962,6 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
     width: 26px;
     height: 26px;
   }
-  /* Removed specific button transform adjustments */
 
   .bottom-icon-buttons {
     bottom: calc(10px + env(safe-area-inset-bottom));

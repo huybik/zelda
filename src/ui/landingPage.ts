@@ -1,3 +1,4 @@
+/* File: /src/ui/landingPage.ts */
 import { Game } from "../main";
 
 interface Language {
@@ -44,8 +45,7 @@ export class LandingPage {
     { code: "he", name: "עברית (Hebrew)" },
     { code: "th", name: "ไทย (Thai)" },
     { code: "id", name: "Bahasa Indonesia (Indonesian)" },
-    // Add more languages as needed
-  ].sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically by name=
+  ].sort((a, b) => a.name.localeCompare(b.name));
 
   constructor(game: Game) {
     this.game = game;
@@ -88,6 +88,9 @@ export class LandingPage {
       return;
     }
 
+    // Pause the game while landing page is visible
+    this.game.setPauseState(true);
+
     let selectedLanguageCode = savedLang || "en";
 
     const showLanguageList = () => {
@@ -95,7 +98,7 @@ export class LandingPage {
         clearTimeout(this.languageListHideTimeout);
         this.languageListHideTimeout = null;
       }
-      langListContainer.classList.remove("hidden");
+      langListContainer?.classList.remove("hidden");
     };
 
     const hideLanguageList = (immediate = false) => {
@@ -104,10 +107,10 @@ export class LandingPage {
         this.languageListHideTimeout = null;
       }
       if (immediate) {
-        langListContainer.classList.add("hidden");
+        langListContainer?.classList.add("hidden");
       } else {
         this.languageListHideTimeout = setTimeout(() => {
-          langListContainer.classList.add("hidden");
+          langListContainer?.classList.add("hidden");
           this.languageListHideTimeout = null;
         }, 150);
       }
@@ -176,16 +179,17 @@ export class LandingPage {
       uiContainer.classList.remove("hidden");
 
       this.game.isGameStarted = true;
-      this.game.setPauseState(false);
 
-      const banner = document.getElementById("welcome-banner");
-      if (banner) {
-        const welcomeText = this.game.mobileControls?.isActive()
-          ? `Welcome, ${playerName}! Use joysticks to move, drag screen to look, buttons to act.`
-          : `Welcome, ${playerName}! [WASD] Move, Mouse Look, [I] Inv, [J] Journal, [E] Interact, [F] Attack, [C] Switch, [Esc] Unlock/Close`;
-        banner.textContent = welcomeText;
-        banner.classList.remove("hidden");
-        setTimeout(() => banner.classList.add("hidden"), 5000);
+      // Unpause is handled by showQuestBanner -> OK button click
+      // this.game.setPauseState(false); // Remove this line
+
+      // Show the first quest banner instead of welcome banner
+      const firstQuest = this.game.questManager.quests?.[0];
+      if (firstQuest) {
+        this.game.showQuestBanner(firstQuest);
+      } else {
+        // If no quests, just unpause
+        this.game.setPauseState(false);
       }
 
       this.game.audioElement

@@ -1,4 +1,4 @@
-// File: /src/controls/controls.ts
+/* File: /src/controls/controls.ts */
 import { Character } from "../entities/character";
 import { ThirdPersonCamera } from "../systems/camera";
 import { Game } from "../main";
@@ -119,10 +119,7 @@ export class Controls {
       document.body.classList.add("pointer-locked");
       this.mouse.dx = 0;
       this.mouse.dy = 0;
-      const inventoryIsOpen = this.game?.inventoryDisplay?.isOpen ?? false;
-      const journalIsOpen = this.game?.journalDisplay?.isOpen ?? false;
-      const chatIsOpen = this.game?.interactionSystem?.isChatOpen ?? false;
-      if (!inventoryIsOpen && !journalIsOpen && !chatIsOpen) {
+      if (!this.game?.isUIPaused()) {
         this.game?.setPauseState(false);
       }
     } else {
@@ -133,10 +130,7 @@ export class Controls {
       this.mouse.dx = 0;
       this.mouse.dy = 0;
       this.updateContinuousMoveState();
-      const inventoryIsOpen = this.game?.inventoryDisplay?.isOpen ?? false;
-      const journalIsOpen = this.game?.journalDisplay?.isOpen ?? false;
-      const chatIsOpen = this.game?.interactionSystem?.isChatOpen ?? false;
-      if (!inventoryIsOpen && !journalIsOpen && !chatIsOpen) {
+      if (!this.game?.isUIPaused()) {
         this.game?.setPauseState(true);
       }
     }
@@ -180,6 +174,8 @@ export class Controls {
     } else if (this.game?.journalDisplay?.isOpen) {
       this.game.journalDisplay.hide();
       this.game?.setPauseState(false);
+    } else if (this.game?.isQuestBannerVisible) {
+      this.game?.showQuestBanner(null); // Close quest banner
     } else if (this.isPointerLocked) {
       this.unlockPointer();
     }
@@ -215,13 +211,14 @@ export class Controls {
       targetElement === this.domElement ||
       (this.domElement.contains(targetElement) &&
         targetElement.closest(
-          "#inventory-display, #journal-display, #chat-container, #minimap-canvas, #welcome-banner, #mobile-controls-layer"
+          "#inventory-display, #journal-display, #chat-container, #minimap-canvas, #quest-detail-banner, #mobile-controls-layer"
         ) === null);
-    const inventoryIsOpen = this.game?.inventoryDisplay?.isOpen ?? false;
-    const journalIsOpen = this.game?.journalDisplay?.isOpen ?? false;
-    const chatIsOpen = this.game?.interactionSystem?.isChatOpen ?? false;
-    const uiBlocksPointerLock = inventoryIsOpen || journalIsOpen || chatIsOpen;
-    if (isGameContainerClick && !this.isPointerLocked && !uiBlocksPointerLock) {
+
+    if (
+      isGameContainerClick &&
+      !this.isPointerLocked &&
+      !this.game?.isUIPaused()
+    ) {
       this.lockPointer();
     }
   }
@@ -236,7 +233,6 @@ export class Controls {
       this.moveState.forward = (W ? 1 : 0) - (S ? 1 : 0);
       this.moveState.right = (A ? 1 : 0) - (D ? 1 : 0);
       this.moveState.sprint = Sprint ?? false;
-      // Attack state is now handled by KeyF in onKeyDown/Up
     }
   }
 
@@ -258,7 +254,7 @@ export class Controls {
     }
     this.mouse.dx = 0;
     this.mouse.dy = 0;
-    this.updateContinuousMoveState(); // Ensure continuous state is updated even if no keys pressed this frame
+    this.updateContinuousMoveState();
   }
 
   dispose(): void {

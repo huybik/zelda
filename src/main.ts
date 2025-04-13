@@ -1,4 +1,4 @@
-// File: /src/main.ts
+/* File: /src/main.ts */
 import * as THREE from "three";
 import {
   Scene,
@@ -17,7 +17,7 @@ import {
 import WebGL from "three/examples/jsm/capabilities/WebGL.js";
 import { Entity } from "./entities/entitiy";
 import { Character } from "./entities/character";
-import { Animal } from "./entities/animals"; // Import Animal
+import { Animal } from "./entities/animals";
 import { InteractionSystem } from "./systems/interaction";
 import { Physics } from "./systems/physics";
 import { ThirdPersonCamera } from "./systems/camera";
@@ -39,7 +39,7 @@ import {
   updateParticleEffects,
 } from "./systems/particles";
 import { AIController } from "./ai/npcAI.ts";
-import { AnimalAIController } from "./ai/animalAI.ts"; // Import Animal AI
+import { AnimalAIController } from "./ai/animalAI.ts";
 import { LandingPage } from "./ui/landingPage.ts";
 import { QuestManager } from "./core/questManager.ts";
 import { PortalManager } from "./objects/portalManagement";
@@ -64,27 +64,32 @@ export class Game {
   collidableObjects: Object3D[] = [];
   interactableObjects: Array<any> = [];
   isPaused: boolean = false;
+  isQuestBannerVisible: boolean = false; // Track quest banner state
   intentContainer: HTMLElement | null = null;
   particleEffects: Group[] = [];
   audioElement: HTMLAudioElement | null = null;
   startPortalRefUrl: string | null = null;
   startPortalOriginalParams: URLSearchParams | null = null;
   hasEnteredFromPortal: boolean = false;
-  questManager: QuestManager; // Replace quests array
+  questManager: QuestManager;
   boundHandleVisibilityChange: () => void;
   wasPausedBeforeVisibilityChange: boolean = false;
-  worldSize: number = WORLD_SIZE; // Make world size accessible
-  language: string = "en"; // Default language
-  isGameStarted: boolean = false; // Flag to control game start after landing page
+  worldSize: number = WORLD_SIZE;
+  language: string = "en";
+  isGameStarted: boolean = false;
   private landingPage: LandingPage | null = null;
   public portalManager: PortalManager;
 
-  // AI Throttling
   private lastAiUpdateTime: number = 0;
-  private aiUpdateInterval: number = 0.2; // Update AI 5 times per second
+  private aiUpdateInterval: number = 0.2;
 
-  // Landing page state
   private languageListHideTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  private questBannerElement: HTMLElement | null = null;
+  private questBannerTitle: HTMLElement | null = null;
+  private questBannerDesc: HTMLElement | null = null;
+  private questBannerButton: HTMLButtonElement | null = null;
+  private boundQuestBannerClickHandler: (() => void) | null = null;
 
   constructor() {
     this.questManager = new QuestManager(this);
@@ -100,44 +105,33 @@ export class Game {
     this.initInventory();
     this.initAudio();
 
-    // Load models while landing page might be shown
     const models = await loadModels();
 
-    // Check localStorage for settings
     const savedName = localStorage.getItem("playerName");
     const savedLang = localStorage.getItem("selectedLanguage");
     this.language = savedLang || "en";
 
-    // Setup Landing Page
-    this.landingPage = new LandingPage(this);
-    this.landingPage.setup(savedName, savedLang);
-
-    // Initialize game elements in background
+    // Pre-initialize game elements but keep paused
     const urlParams = new URLSearchParams(window.location.search);
     this.hasEnteredFromPortal = urlParams.get("portal") === "true";
     this.startPortalRefUrl = urlParams.get("ref");
     this.startPortalOriginalParams = urlParams;
 
-    this.initPlayer(models, savedName || "Player"); // Use saved name if available
+    this.initPlayer(models, savedName || "Player");
     this.initControls();
     this.initMobileControls();
     this.initPhysics();
-    this.initEnvironment(models); // Populates NPCs, objects, and animals
+    this.initEnvironment(models);
     this.initSystems();
-    this.questManager.initQuests(); // Delegate to QuestManager
-    this.initUI(); // Initializes minimap among other things
+    this.questManager.initQuests();
+    this.initUI();
     this.setupUIControls();
-
-    // Create portals AFTER minimap is initialized in initUI
-    // Initialize portal manager after UI setup
     this.portalManager.initPortals(
       this.scene!,
       this.hasEnteredFromPortal,
       this.startPortalRefUrl,
       this.startPortalOriginalParams
     );
-
-    // Set player orientation if entering from portal
     if (
       this.hasEnteredFromPortal &&
       this.portalManager.startPortal &&
@@ -149,27 +143,36 @@ export class Game {
           .add(new Vector3(0, 0, 10))
       );
     }
-
-    // Tell minimap about the portals
     if (this.minimap) {
       this.minimap.setPortals(
         this.portalManager.exitPortal?.group || null,
         this.portalManager.startPortal?.group || null
       );
     }
-
     this.entities.forEach((entity) => {
       if (entity instanceof Character || entity instanceof Animal) {
         entity.game = this;
-        // Only init displays for Characters (NPCs)
         if (entity instanceof Character) {
           entity.initIntentDisplay();
           entity.initNameDisplay();
         } else if (entity instanceof Animal) {
-          entity.initNameDisplay(); // Animals also get name display
+          entity.initNameDisplay();
         }
       }
     });
+
+    // Find Quest Banner elements
+    this.questBannerElement = document.getElementById("quest-detail-banner");
+    this.questBannerTitle = document.getElementById("quest-banner-title");
+    this.questBannerDesc = document.getElementById("quest-banner-description");
+    this.questBannerButton = document.getElementById(
+      "quest-banner-ok"
+    ) as HTMLButtonElement;
+
+    // Setup Landing Page LAST, it will handle initial pause state
+    this.landingPage = new LandingPage(this);
+    this.landingPage.setup(savedName, savedLang);
+
     document.addEventListener(
       "pointerlockchange",
       this.handlePointerLockChange.bind(this)
@@ -179,7 +182,6 @@ export class Game {
       this.boundHandleVisibilityChange
     );
 
-    // Start the animation loop, but game logic might be paused initially
     this.renderer!.setAnimationLoop(this.update.bind(this));
   }
 
@@ -187,7 +189,7 @@ export class Game {
     if (
       document.pointerLockElement === this.renderer?.domElement &&
       this.audioElement?.paused &&
-      this.isGameStarted // Only play if game has started
+      this.isGameStarted
     ) {
       this.audioElement
         .play()
@@ -216,7 +218,7 @@ export class Game {
           this.audioElement &&
           this.audioElement.paused &&
           !this.isPaused &&
-          this.isGameStarted // Only resume if game started
+          this.isGameStarted
         ) {
           this.audioElement
             .play()
@@ -291,7 +293,7 @@ export class Game {
     this.activeCharacter = new Character(
       this.scene!,
       playerSpawnPos,
-      playerName, // Use provided name
+      playerName,
       playerModel.scene,
       playerModel.animations,
       this.inventory!
@@ -340,7 +342,6 @@ export class Game {
       models,
       this
     );
-    // Animals are now added within populateEnvironment
   }
 
   initSystems(): void {
@@ -360,7 +361,7 @@ export class Game {
     this.minimap = new Minimap(
       document.getElementById("minimap-canvas") as HTMLCanvasElement,
       this.activeCharacter!,
-      this.entities, // Pass the entities array which now includes animals
+      this.entities,
       WORLD_SIZE
     );
     this.inventoryDisplay = new InventoryDisplay(this.inventory!);
@@ -372,18 +373,21 @@ export class Game {
 
   setupUIControls(): void {
     this.controls!.addKeyDownListener("KeyI", () => {
-      if (this.interactionSystem?.isChatOpen) return;
+      if (this.interactionSystem?.isChatOpen || this.isQuestBannerVisible)
+        return;
       this.journalDisplay!.hide();
       this.inventoryDisplay!.toggle();
       this.setPauseState(this.inventoryDisplay!.isOpen);
     });
     this.controls!.addKeyDownListener("KeyJ", () => {
-      if (this.interactionSystem?.isChatOpen) return;
+      if (this.interactionSystem?.isChatOpen || this.isQuestBannerVisible)
+        return;
       this.inventoryDisplay!.hide();
       this.journalDisplay!.toggle();
-      this.setPauseState(this.journalDisplay!.isOpen);
+      // Pause state is handled by journalDisplay show/hide
     });
     this.controls!.addKeyDownListener("KeyC", () => {
+      if (this.isPaused) return; // Prevent switching when paused
       if (
         this.interactionSystem!.currentTarget instanceof Character &&
         this.interactionSystem!.currentTarget !== this.activeCharacter
@@ -391,19 +395,7 @@ export class Game {
         this.switchControlTo(this.interactionSystem!.currentTarget);
       }
     });
-    this.controls!.addKeyDownListener("Escape", () => {
-      if (this.interactionSystem?.isChatOpen) {
-        this.interactionSystem.closeChatInterface();
-      } else if (this.inventoryDisplay!.isOpen) {
-        this.inventoryDisplay!.hide();
-        this.setPauseState(false);
-      } else if (this.journalDisplay!.isOpen) {
-        this.journalDisplay!.hide();
-        this.setPauseState(false);
-      } else if (this.controls!.isPointerLocked) {
-        this.controls!.unlockPointer();
-      }
-    });
+
     this.controls!.addMouseClickListener(0, (event: MouseEvent) => {
       if (this.inventoryDisplay!.isOpen) this.handleInventoryClick(event);
     });
@@ -430,21 +422,32 @@ export class Game {
   }
 
   setPauseState(paused: boolean): void {
-    // Don't allow pausing if the game hasn't started from landing page yet
-    if (!this.isGameStarted && paused) return;
-
     if (this.isPaused === paused) return;
+
+    // Special check for landing page: if landing page is visible, always pause.
+    const landingPageVisible = !document
+      .getElementById("landing-page")
+      ?.classList.contains("hidden");
+    if (landingPageVisible) {
+      paused = true;
+    }
+
+    // Prevent unpausing if a UI element requires it
+    if (!paused) {
+      if (this.isUIPaused()) {
+        console.log("Attempted to unpause, but UI requires pause.");
+        return; // Do not unpause if a UI element requires it
+      }
+    }
+
     this.isPaused = paused;
+
     if (!this.mobileControls?.isActive()) {
       if (this.isPaused) {
         if (this.controls?.isPointerLocked) this.controls.unlockPointer();
       } else {
-        if (
-          !this.inventoryDisplay?.isOpen &&
-          !this.journalDisplay?.isOpen &&
-          !this.interactionSystem?.isChatOpen &&
-          !document.pointerLockElement
-        ) {
+        // Only lock pointer if no UI is open
+        if (!this.isUIPaused() && !document.pointerLockElement) {
           this.controls?.lockPointer();
         }
       }
@@ -452,12 +455,73 @@ export class Game {
     console.log("Game Paused:", this.isPaused);
   }
 
+  // Checks if any UI element that requires pausing is open
+  isUIPaused(): boolean {
+    return (
+      this.inventoryDisplay?.isOpen ||
+      this.journalDisplay?.isOpen ||
+      this.interactionSystem?.isChatOpen ||
+      this.isQuestBannerVisible
+    );
+  }
+
+  showQuestBanner(quest: Quest | null, isCompletion: boolean = false): void {
+    if (
+      !this.questBannerElement ||
+      !this.questBannerTitle ||
+      !this.questBannerDesc ||
+      !this.questBannerButton
+    )
+      return;
+
+    // Remove previous listener if exists
+    if (this.boundQuestBannerClickHandler && this.questBannerButton) {
+      this.questBannerButton.removeEventListener(
+        "click",
+        this.boundQuestBannerClickHandler
+      );
+      this.boundQuestBannerClickHandler = null;
+    }
+
+    if (quest) {
+      this.questBannerTitle.textContent = isCompletion
+        ? `Quest Completed: ${quest.name}`
+        : quest.name;
+      this.questBannerDesc.textContent = quest.description;
+      this.questBannerElement.classList.remove("hidden");
+      this.isQuestBannerVisible = true;
+      this.setPauseState(true); // Pause the game
+
+      // Add new one-time listener
+      this.boundQuestBannerClickHandler = () => {
+        this.showQuestBanner(null); // Call hide logic
+      };
+      this.questBannerButton.addEventListener(
+        "click",
+        this.boundQuestBannerClickHandler,
+        { once: true }
+      );
+    } else {
+      // Hide the banner
+      this.questBannerElement.classList.add("hidden");
+      this.isQuestBannerVisible = false;
+      this.setPauseState(false); // Unpause the game (if no other UI requires pause)
+
+      // Clean up just in case
+      if (this.boundQuestBannerClickHandler && this.questBannerButton) {
+        this.questBannerButton.removeEventListener(
+          "click",
+          this.boundQuestBannerClickHandler
+        );
+      }
+      this.boundQuestBannerClickHandler = null;
+    }
+  }
+
   start(): void {
-    // Game loop is started in init(), but actual updates depend on isGameStarted flag
     console.log(
       "Game initialized. Waiting for user to start via landing page."
     );
-    // Welcome banner is now shown after clicking start on landing page
   }
 
   update(): void {
@@ -466,20 +530,18 @@ export class Game {
       !this.renderer ||
       !this.scene ||
       !this.camera ||
-      !this.activeCharacter
+      !this.activeCharacter ||
+      !this.isGameStarted // Don't update if game hasn't started from landing page
     )
       return;
 
-    const deltaTime = Math.min(this.clock.getDelta(), 0.05); // Use clamped delta time
+    const deltaTime = Math.min(this.clock.getDelta(), 0.05);
     const elapsedTime = this.clock.elapsedTime;
 
-    // Update controls regardless of pause state
     this.mobileControls?.update(deltaTime);
     this.controls!.update(deltaTime);
 
-    // Only run game logic if not paused AND game has started
-    if (!this.isPaused && this.isGameStarted) {
-      // --- AI Update Throttling ---
+    if (!this.isPaused) {
       const currentTime = this.clock.elapsedTime;
       const timeSinceLastAiUpdate = currentTime - this.lastAiUpdateTime;
       const shouldUpdateAiLogic =
@@ -488,58 +550,43 @@ export class Game {
       if (shouldUpdateAiLogic) {
         this.lastAiUpdateTime = currentTime;
       }
-      // --- End AI Update Throttling ---
 
-      // Update Player (always uses controls input)
       this.activeCharacter.update(deltaTime, {
         moveState: this.controls!.moveState,
         collidables: this.collidableObjects,
       });
 
-      this.physics!.update(deltaTime); // Physics uses player's velocity set by update
+      this.physics!.update(deltaTime);
 
-      // Update other entities (NPCs and Animals)
       this.entities.forEach((entity) => {
         if (entity === this.activeCharacter) return;
-        // Handle Character AI
         if (
           entity instanceof Character &&
           entity.aiController instanceof AIController
         ) {
           if (shouldUpdateAiLogic) {
-            // Compute and store the new move state inside the entity
-            // AI decision making (API call) happens within computeAIMoveState if needed
             entity.moveState = entity.aiController.computeAIMoveState(
-              timeSinceLastAiUpdate // Pass time since last AI update
+              timeSinceLastAiUpdate
             );
           }
-          // Update the entity using its current (potentially stale) moveState
           entity.update(deltaTime, {
-            moveState: entity.moveState, // Pass the entity's internal state
+            moveState: entity.moveState,
             collidables: this.collidableObjects,
           });
-        }
-        // Handle Animal AI
-        else if (
+        } else if (
           entity instanceof Animal &&
           entity.aiController instanceof AnimalAIController
         ) {
-          // Update AI logic (state decisions, target finding) only when throttled interval passes
           if (shouldUpdateAiLogic) {
-            // Pass the actual time since the last AI update for timers inside the AI
             entity.aiController.updateLogic(timeSinceLastAiUpdate);
           }
-          // Update the animal's movement and animations every frame based on its current state
-          // Animal.update now internally calls aiController.computeAIMovement()
           entity.update(deltaTime, { collidables: this.collidableObjects });
-        }
-        // Handle other generic entity updates (if any)
-        else if (
+        } else if (
           entity.update &&
           !(entity instanceof Character) &&
           !(entity instanceof Animal)
         ) {
-          entity.update(deltaTime); // Assuming generic entities don't need complex options
+          entity.update(deltaTime);
         }
       });
 
@@ -549,14 +596,12 @@ export class Game {
       this.portalManager.animatePortals();
       this.portalManager.checkPortalCollisions();
       updateParticleEffects(this, elapsedTime);
-      this.checkDeadEntityRemoval(); // Check for dead entities to remove
+      this.checkDeadEntityRemoval();
     }
 
-    // Update UI elements even if paused (e.g., FPS counter)
     this.hud!.update();
-    this.minimap!.update(); // Minimap should reflect current state
+    this.minimap!.update();
 
-    // Render the scene
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -567,12 +612,11 @@ export class Game {
     for (const entity of this.entities) {
       if (
         entity.isDead &&
-        entity !== this.activeCharacter && // Don't remove the player
+        entity !== this.activeCharacter &&
         entity.deathTimestamp !== null
       ) {
         const timeSinceDeath = now - entity.deathTimestamp;
         if (timeSinceDeath > 7000) {
-          // 7 seconds timeout
           entitiesToRemove.push(entity);
         }
       }
@@ -584,7 +628,6 @@ export class Game {
           `Removing dead entity: ${entityToRemove.name} after timeout.`
         );
 
-        // Remove from collidables
         const collidableIndex = this.collidableObjects.findIndex(
           (obj) => obj === entityToRemove.mesh
         );
@@ -592,7 +635,6 @@ export class Game {
           this.collidableObjects.splice(collidableIndex, 1);
         }
 
-        // Remove from interactables
         const interactableIndex = this.interactableObjects.findIndex(
           (obj) => obj === entityToRemove
         );
@@ -600,10 +642,8 @@ export class Game {
           this.interactableObjects.splice(interactableIndex, 1);
         }
 
-        // Call destroy method
-        entityToRemove.destroy?.(); // Use optional chaining just in case
+        entityToRemove.destroy?.();
 
-        // Remove from main entities list
         const entityIndex = this.entities.findIndex(
           (e) => e === entityToRemove
         );
@@ -611,9 +651,8 @@ export class Game {
           this.entities.splice(entityIndex, 1);
         }
       }
-      // Update minimap if it relies on the entities array directly
       if (this.minimap) {
-        this.minimap.entities = this.entities; // Ensure minimap has the updated list
+        this.minimap.entities = this.entities;
       }
     }
   }
@@ -637,7 +676,6 @@ export class Game {
     pressurize.y = getTerrainHeight(this.scene!, pressurize.x, pressurize.z);
     this.activeCharacter!.respawn(pressurize);
     this.setPauseState(false);
-    // this.interactionSystem!.cancelGatherAction(); // Removed gather
   }
 
   switchControlTo(targetCharacter: Character): void {
@@ -675,7 +713,6 @@ export class Game {
       oldPlayer.aiController = new AIController(oldPlayer);
       oldPlayer.aiController.persona = oldPlayer.persona;
     }
-    // Ensure the AI controller is the correct type and reset state
     if (oldPlayer.aiController instanceof AIController) {
       oldPlayer.aiController.aiState = "idle";
       oldPlayer.aiController.previousAiState = "idle";
@@ -687,7 +724,7 @@ export class Game {
     oldPlayer.initNameDisplay();
     newPlayer.removeDisplays();
     this.activeCharacter = newPlayer;
-    if (newPlayer.aiController) newPlayer.aiController = null; // Remove AI from new player
+    if (newPlayer.aiController) newPlayer.aiController = null;
     this.controls!.player = newPlayer;
     this.thirdPersonCamera!.target = newPlayer.mesh!;
     this.physics!.player = newPlayer;
@@ -742,7 +779,6 @@ export class Game {
       details,
       location,
     };
-    // Log to all Characters' event logs
     this.entities.forEach((entity) => {
       if (entity instanceof Character && entity.eventLog)
         entity.eventLog.addEntry(eventEntry);
@@ -789,8 +825,8 @@ if (WebGL.isWebGL2Available()) {
   async function startGame() {
     const gameInstance = new Game();
     window.game = gameInstance;
-    await gameInstance.init(); // Init now includes setting up landing page listeners
-    // gameInstance.start(); // Start is now effectively handled by the landing page button
+    await gameInstance.init();
+    // gameInstance.start(); // Start logic is now within init/landing page
     const onResize = () => gameInstance.onWindowResize();
     window.addEventListener("resize", onResize, false);
     window.addEventListener("beforeunload", () => {

@@ -1,5 +1,4 @@
 <!-- File: /index.html -->
-
 <!doctype html>
 <html lang="en">
   <head>
@@ -14,7 +13,6 @@
       rel="icon"
       href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌲</text></svg>"
     />
-    <!-- Include nipplejs library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
   </head>
   <body>
@@ -33,9 +31,7 @@
             placeholder="Search languages..."
           />
           <div id="language-list-container">
-            <ul id="language-list">
-              <!-- Language items will be populated by JS -->
-            </ul>
+            <ul id="language-list"></ul>
           </div>
         </div>
 
@@ -47,14 +43,9 @@
       >
     </div>
 
-    <!-- Game Container: Touch events for camera will be attached here -->
-    <div id="game-container" class="hidden">
-      <!-- Canvas will be appended here by main.ts -->
-    </div>
+    <div id="game-container" class="hidden"></div>
 
-    <!-- UI Layer -->
     <div id="ui-container" class="hidden">
-      <!-- HUD -->
       <div id="hud">
         <div class="stat-bars">
           <div class="bar-container">
@@ -70,12 +61,10 @@
         <div id="interaction-prompt" style="display: none"></div>
       </div>
 
-      <!-- Minimap -->
       <div id="minimap-container">
         <canvas id="minimap-canvas" width="150" height="150"></canvas>
       </div>
 
-      <!-- Desktop UI Panels -->
       <div id="inventory-display" class="ui-panel hidden">
         <h2>Inventory (I)</h2>
         <div id="inventory-slots"></div>
@@ -93,22 +82,20 @@
         </div>
       </div>
 
-      <!-- Chat Interface -->
       <div id="chat-container" class="hidden">
         <input type="text" id="chat-input" placeholder="Type your message..." />
       </div>
 
-      <!-- Welcome Banner -->
-      <div id="welcome-banner" class="hidden"></div>
+      <!-- Quest Detail Banner (Replaces Welcome Banner) -->
+      <div id="quest-detail-banner" class="hidden">
+        <h3 id="quest-banner-title">Quest Title</h3>
+        <p id="quest-banner-description">Quest description goes here.</p>
+        <button id="quest-banner-ok">OK</button>
+      </div>
 
-      <!-- Mobile Controls Layer (Initially hidden, shown by JS if mobile) -->
       <div id="mobile-controls-layer" class="hidden">
-        <!-- Joystick Zone (Left Only) -->
         <div id="joystick-zone-left"></div>
-        <!-- <div id="joystick-zone-right"></div> -->
-        <!-- Removed Right Zone -->
 
-        <!-- Action Buttons (Vertically aligned on the right) -->
         <div id="right-action-buttons">
           <button id="button-interact" class="mobile-button interact">
             <svg
@@ -137,11 +124,8 @@
             </svg>
             <span>Attack</span>
           </button>
-
-          <!-- Add more buttons here if needed, they will stack vertically -->
         </div>
 
-        <!-- Bottom Icon Buttons (Remain the same) -->
         <div class="bottom-icon-buttons">
           <button id="button-inventory" class="mobile-button icon-button">
             <svg

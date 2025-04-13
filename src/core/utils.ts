@@ -1,4 +1,4 @@
-// File: /src/core/utils.ts
+/* File: /src/core/utils.ts */
 import {
   Vector3,
   Quaternion,
@@ -69,6 +69,7 @@ export interface GameEvent {
 }
 
 export interface Quest {
+  id: string; // Unique identifier for the quest
   name: string;
   description: string;
   isCompleted: boolean;

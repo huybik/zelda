@@ -1,4 +1,4 @@
-// File: /src/core/questManager.ts
+/* File: /src/core/questManager.ts */
 import { Game } from "../main";
 import { Quest } from "../core/utils";
 import { Character } from "../entities/character";
@@ -15,6 +15,7 @@ export class QuestManager {
   initQuests(): void {
     this.quests = [
       {
+        id: "find_brynn",
         name: "Who is Blacksmith Brynn",
         description: "Find out who Blacksmith Brynn is.",
         isCompleted: false,
@@ -26,6 +27,7 @@ export class QuestManager {
         },
       },
       {
+        id: "gather_rocks_giles",
         name: "Get Farmer Giles to collect rocks",
         description: "Convince Farmer Giles to collect rocks.",
         isCompleted: false,
@@ -39,6 +41,7 @@ export class QuestManager {
         },
       },
       {
+        id: "kill_brynn_rex",
         name: "Convince Hunter Rex to kill Blacksmith Brynn",
         description:
           "Persuade Hunter Rex to take action against Blacksmith Brynn.",
@@ -66,7 +69,7 @@ export class QuestManager {
         quest.checkCompletion(interactionTarget, chatResponse)
       ) {
         quest.isCompleted = true;
-        this.showCongratulationMessage(`Quest Completed: ${quest.name}`);
+        this.game.showQuestBanner(quest, true); // Show banner on completion
         this.game.logEvent(
           interactionTarget,
           "quest_complete",
@@ -75,16 +78,13 @@ export class QuestManager {
           { quest: quest.name },
           interactionTarget.mesh!.position
         );
+        // Update journal UI if it's open
+        this.game.journalDisplay?.updateQuests();
       }
     });
   }
 
-  showCongratulationMessage(message: string): void {
-    const banner = document.getElementById("welcome-banner");
-    if (banner) {
-      banner.textContent = message;
-      banner.classList.remove("hidden");
-      setTimeout(() => banner.classList.add("hidden"), 5000);
-    }
+  getQuestById(id: string): Quest | undefined {
+    return this.quests.find((q) => q.id === id);
   }
 }

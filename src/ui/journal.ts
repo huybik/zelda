@@ -1,5 +1,5 @@
-// File: /src/ui/journal.ts
-import { EventLog, EventEntry } from "../core/utils";
+/* File: /src/ui/journal.ts */
+import { EventLog, EventEntry, Quest } from "../core/utils";
 import { Game } from "../main";
 
 export class JournalDisplay {
@@ -30,8 +30,21 @@ export class JournalDisplay {
     this.game?.questManager.quests?.forEach((quest) => {
       const li = document.createElement("li");
       li.textContent = `${quest.name}: ${quest.isCompleted ? "Completed" : "In Progress"}`;
+      li.dataset.questId = quest.id;
+      li.classList.add("quest-item");
+      if (quest.isCompleted) {
+        li.classList.add("quest-completed");
+      }
+      li.addEventListener("click", () => this.onQuestClick(quest));
       this.questListElement!.appendChild(li);
     });
+  }
+
+  onQuestClick(quest: Quest): void {
+    if (this.game && quest) {
+      this.hide(); // Hide journal
+      this.game.showQuestBanner(quest); // Show quest detail
+    }
   }
 
   setEventLog(newEventLog: EventLog): void {
@@ -68,11 +81,13 @@ export class JournalDisplay {
     this.updateEvents(this.eventLog.entries);
     this.updateQuests();
     this.displayElement.classList.remove("hidden");
+    this.game.setPauseState(true);
   }
 
   hide(): void {
     if (!this.displayElement || !this.isOpen) return;
     this.isOpen = false;
     this.displayElement.classList.add("hidden");
+    this.game.setPauseState(false);
   }
 }
