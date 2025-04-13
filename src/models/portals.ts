@@ -1,20 +1,28 @@
-// File: /src/objects/portals.ts
 import * as THREE from "three";
 import { getTerrainHeight } from "../core/utils";
-import { Game } from "../main";
 import { Vector3 } from "three";
 
-export function createExitPortal(scene: THREE.Scene, game: Game): void {
+// Define the Portal interface (could be imported from portalManagement.ts if shared)
+interface Portal {
+  group: THREE.Group;
+  box: THREE.Box3;
+  particles: THREE.BufferGeometry;
+  innerMaterial: THREE.MeshBasicMaterial;
+  refUrl?: string;
+  originalParams?: URLSearchParams;
+}
+
+export function createExitPortal(scene: THREE.Scene): Portal {
   const exitPortalGroup = new THREE.Group();
   exitPortalGroup.position.set(-30, 10, -40);
-  exitPortalGroup.rotation.x = 0;
   exitPortalGroup.rotation.y = Math.PI / 4;
-  exitPortalGroup.position.y = getTerrainHeight(
-    scene,
-    exitPortalGroup.position.x,
-    exitPortalGroup.position.z
-  );
-  exitPortalGroup.position.y += 5;
+  exitPortalGroup.position.y =
+    getTerrainHeight(
+      scene,
+      exitPortalGroup.position.x,
+      exitPortalGroup.position.z
+    ) + 5;
+
   const portalRadius = 5;
   const portalTube = 1.5;
   const exitPortalGeometry = new THREE.TorusGeometry(
@@ -31,6 +39,7 @@ export function createExitPortal(scene: THREE.Scene, game: Game): void {
   });
   const exitPortal = new THREE.Mesh(exitPortalGeometry, exitPortalMaterial);
   exitPortalGroup.add(exitPortal);
+
   const exitPortalInnerGeometry = new THREE.CircleGeometry(
     portalRadius - portalTube,
     32
@@ -46,6 +55,7 @@ export function createExitPortal(scene: THREE.Scene, game: Game): void {
     exitPortalInnerMaterial
   );
   exitPortalGroup.add(exitPortalInner);
+
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
   if (context) {
@@ -67,6 +77,7 @@ export function createExitPortal(scene: THREE.Scene, game: Game): void {
     label.position.y = portalRadius + 2;
     exitPortalGroup.add(label);
   }
+
   const exitPortalParticleCount = 1000;
   const exitPortalParticles = new THREE.BufferGeometry();
   const exitPortalPositions = new Float32Array(exitPortalParticleCount * 3);
@@ -101,7 +112,6 @@ export function createExitPortal(scene: THREE.Scene, game: Game): void {
   );
   exitPortalGroup.add(exitPortalParticleSystem);
 
-  // Add userData for Minimap
   exitPortalGroup.userData = {
     ...exitPortalGroup.userData,
     isPortal: true,
@@ -111,21 +121,26 @@ export function createExitPortal(scene: THREE.Scene, game: Game): void {
   };
 
   scene.add(exitPortalGroup);
-  game.exitPortalGroup = exitPortalGroup;
-  game.exitPortalBox = new THREE.Box3().setFromObject(exitPortalGroup);
-  game.exitPortalParticles = exitPortalParticles;
-  game.exitPortalInnerMaterial = exitPortalInnerMaterial;
+  return {
+    group: exitPortalGroup,
+    box: new THREE.Box3().setFromObject(exitPortalGroup),
+    particles: exitPortalParticles,
+    innerMaterial: exitPortalInnerMaterial,
+  };
 }
 
-export function createStartPortal(scene: THREE.Scene, game: Game): void {
-  if (!game.startPortalRefUrl) return;
+export function createStartPortal(
+  scene: THREE.Scene,
+  refUrl: string,
+  originalParams: URLSearchParams
+): Portal {
   const spawnPoint = new Vector3(0, 0, 5);
   spawnPoint.y = getTerrainHeight(scene, spawnPoint.x, spawnPoint.z);
   const startPortalGroup = new THREE.Group();
   startPortalGroup.position.copy(spawnPoint);
   startPortalGroup.position.y += 5;
-  startPortalGroup.rotation.x = 0;
   startPortalGroup.rotation.y = -Math.PI / 2;
+
   const portalRadius = 10;
   const portalTube = 1.5;
   const startPortalGeometry = new THREE.TorusGeometry(
@@ -142,6 +157,7 @@ export function createStartPortal(scene: THREE.Scene, game: Game): void {
   });
   const startPortal = new THREE.Mesh(startPortalGeometry, startPortalMaterial);
   startPortalGroup.add(startPortal);
+
   const startPortalInnerGeometry = new THREE.CircleGeometry(
     portalRadius - portalTube,
     32
@@ -157,6 +173,7 @@ export function createStartPortal(scene: THREE.Scene, game: Game): void {
     startPortalInnerMaterial
   );
   startPortalGroup.add(startPortalInner);
+
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
   if (context) {
@@ -166,7 +183,7 @@ export function createStartPortal(scene: THREE.Scene, game: Game): void {
     context.font = "bold 28px Arial";
     context.textAlign = "center";
     context.textBaseline = "middle";
-    let displayUrl = game.startPortalRefUrl;
+    let displayUrl = refUrl;
     try {
       const urlObj = new URL(
         displayUrl.startsWith("http") ? displayUrl : "https://" + displayUrl
@@ -189,6 +206,7 @@ export function createStartPortal(scene: THREE.Scene, game: Game): void {
     label.position.y = portalRadius + 2;
     startPortalGroup.add(label);
   }
+
   const startPortalParticleCount = 1000;
   const startPortalParticles = new THREE.BufferGeometry();
   const startPortalPositions = new Float32Array(startPortalParticleCount * 3);
@@ -223,7 +241,6 @@ export function createStartPortal(scene: THREE.Scene, game: Game): void {
   );
   startPortalGroup.add(startPortalParticleSystem);
 
-  // Add userData for Minimap
   startPortalGroup.userData = {
     ...startPortalGroup.userData,
     isPortal: true,
@@ -233,8 +250,12 @@ export function createStartPortal(scene: THREE.Scene, game: Game): void {
   };
 
   scene.add(startPortalGroup);
-  game.startPortalGroup = startPortalGroup;
-  game.startPortalBox = new THREE.Box3().setFromObject(startPortalGroup);
-  game.startPortalParticles = startPortalParticles;
-  game.startPortalInnerMaterial = startPortalInnerMaterial;
+  return {
+    group: startPortalGroup,
+    box: new THREE.Box3().setFromObject(startPortalGroup),
+    particles: startPortalParticles,
+    innerMaterial: startPortalInnerMaterial,
+    refUrl,
+    originalParams,
+  };
 }

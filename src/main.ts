@@ -44,6 +44,7 @@ import { AnimalAIController } from "./ai/animalAI.ts"; // Import Animal AI
 import { updateObservation } from "./ai/api.ts";
 import { LandingPage } from "./ui/landingPage.ts";
 import { QuestManager } from "./core/questManager.ts";
+import { PortalManager } from "./objects/portalManagement";
 
 // --- Language Data ---
 interface Language {
@@ -113,14 +114,6 @@ export class Game {
   intentContainer: HTMLElement | null = null;
   particleEffects: Group[] = [];
   audioElement: HTMLAudioElement | null = null;
-  exitPortalGroup: THREE.Group | null = null;
-  exitPortalBox: THREE.Box3 | null = null;
-  exitPortalParticles: THREE.BufferGeometry | null = null;
-  exitPortalInnerMaterial: THREE.MeshBasicMaterial | null = null;
-  startPortalGroup: THREE.Group | null = null;
-  startPortalBox: THREE.Box3 | null = null;
-  startPortalParticles: THREE.BufferGeometry | null = null;
-  startPortalInnerMaterial: THREE.MeshBasicMaterial | null = null;
   startPortalRefUrl: string | null = null;
   startPortalOriginalParams: URLSearchParams | null = null;
   hasEnteredFromPortal: boolean = false;
@@ -131,6 +124,7 @@ export class Game {
   language: string = "en"; // Default language
   isGameStarted: boolean = false; // Flag to control game start after landing page
   private landingPage: LandingPage | null = null;
+  public portalManager: PortalManager;
 
   // AI Throttling
   private lastAiUpdateTime: number = 0;
@@ -141,6 +135,7 @@ export class Game {
 
   constructor() {
     this.questManager = new QuestManager(this);
+    this.portalManager = new PortalManager(this);
     this.boundHandleVisibilityChange = this.handleVisibilityChange.bind(this);
   }
 
@@ -181,19 +176,33 @@ export class Game {
     this.setupUIControls();
 
     // Create portals AFTER minimap is initialized in initUI
-    createExitPortal(this.scene!, this);
-    if (this.hasEnteredFromPortal && this.startPortalRefUrl) {
-      createStartPortal(this.scene!, this);
-      if (this.activeCharacter?.mesh) {
-        this.activeCharacter.mesh.lookAt(
-          this.startPortalGroup!.position.clone().add(new Vector3(0, 0, 10))
-        );
-      }
+    // Initialize portal manager after UI setup
+    this.portalManager.initPortals(
+      this.scene!,
+      this.hasEnteredFromPortal,
+      this.startPortalRefUrl,
+      this.startPortalOriginalParams
+    );
+
+    // Set player orientation if entering from portal
+    if (
+      this.hasEnteredFromPortal &&
+      this.portalManager.startPortal &&
+      this.activeCharacter?.mesh
+    ) {
+      this.activeCharacter.mesh.lookAt(
+        this.portalManager.startPortal.group.position
+          .clone()
+          .add(new Vector3(0, 0, 10))
+      );
     }
 
     // Tell minimap about the portals
     if (this.minimap) {
-      this.minimap.setPortals(this.exitPortalGroup, this.startPortalGroup);
+      this.minimap.setPortals(
+        this.portalManager.exitPortal?.group || null,
+        this.portalManager.startPortal?.group || null
+      );
     }
 
     this.entities.forEach((entity) => {
@@ -584,8 +593,8 @@ export class Game {
       this.interactionSystem!.update(deltaTime);
       this.thirdPersonCamera!.update(deltaTime, this.collidableObjects);
       if (this.activeCharacter.isDead) this.respawnPlayer();
-      this.animatePortals();
-      this.checkPortalCollisions();
+      this.portalManager.animatePortals();
+      this.portalManager.checkPortalCollisions();
       updateParticleEffects(this, elapsedTime);
       this.checkDeadEntityRemoval(); // Check for dead entities to remove
     }
