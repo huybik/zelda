@@ -9,19 +9,11 @@ import {
 } from "three";
 import { createDeerModel, createWolfModel } from "../models/animalModels"; // Import procedural models
 
-export async function loadModels(): Promise<
-  Record<string, { scene: Group; animations: AnimationClip[] }>
-> {
+export async function loadModels(
+  modelPaths: Record<string, string>
+): Promise<Record<string, { scene: Group; animations: AnimationClip[] }>> {
   const loader = new GLTFLoader();
-  const modelPaths = {
-    player: "assets/player/scene.gltf",
-    tavernMan: "assets/tavernman/scene.gltf",
-    oldMan: "assets/oldman/scene.gltf",
-    woman: "assets/woman/scene.gltf",
-    // Add paths for GLTF animals if you have them
-    // wolf_gltf: "assets/animals/wolf.gltf",
-    // deer_gltf: "assets/animals/deer.gltf",
-  };
+
   const models: Record<string, { scene: Group; animations: AnimationClip[] }> =
     {};
 
@@ -45,6 +37,7 @@ export async function loadModels(): Promise<
 
   // Add procedurally generated models
   // These don't have pre-made animations, they will rely on generated ones
+
   try {
     models["deer_procedural"] = { scene: createDeerModel(), animations: [] };
   } catch (error) {

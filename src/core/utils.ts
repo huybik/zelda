@@ -8,7 +8,8 @@ import {
   Raycaster,
   Box3,
 } from "three";
-import { Character } from "../entities/character";
+import type { Character } from "../entities/character";
+import { getItemDefinition } from "./items"; // Import item definitions
 
 export interface EntityUserData {
   entityReference: any | null;
@@ -54,10 +55,12 @@ export interface TargetInfo {
   distance: number;
 }
 
+// Represents an item stack within the inventory UI/data
 export interface InventoryItem {
-  name: string;
+  id: string; // Use the unique ID from ItemDefinition (e.g., 'wood', 'sword')
+  name: string; // Display name (e.g., 'Wood', 'Sword')
   count: number;
-  icon?: string;
+  icon?: string; // Store icon filename (e.g., 'wood.png') for convenience
 }
 
 export interface GameEvent {
@@ -172,106 +175,166 @@ export class Inventory {
   size: number;
   items: Array<InventoryItem | null>;
   onChangeCallbacks: Array<(items: Array<InventoryItem | null>) => void>;
-  itemMaxStack: Record<string, number>;
 
   constructor(size: number = 20) {
     this.size = size;
     this.items = new Array(size).fill(null);
     this.onChangeCallbacks = [];
-    this.itemMaxStack = {
-      default: 64,
-      wood: 99,
-      stone: 99,
-      herb: 30,
-      feather: 50,
-      "Health Potion": 10,
-      gold: Infinity,
-    };
   }
 
-  getMaxStack(itemName: string): number {
-    return this.itemMaxStack[itemName] ?? this.itemMaxStack["default"];
+  /**
+   * Gets the maximum stack size for a given item ID.
+   * @param itemId The unique ID of the item.
+   * @returns The maximum stack size, or 1 if the item definition is not found or not stackable.
+   */
+  getMaxStack(itemId: string): number {
+    const definition = getItemDefinition(itemId);
+    // Use definition.maxStack if stackable, otherwise 1. Default to 1 if no definition.
+    return definition ? (definition.stackable ? definition.maxStack : 1) : 1;
   }
 
-  addItem(itemName: string, count: number = 1): boolean {
-    if (!itemName || count <= 0) return false;
-    const maxStack = this.getMaxStack(itemName);
+  /**
+   * Adds an item to the inventory.
+   * @param itemId The unique ID of the item to add.
+   * @param count The number of items to add.
+   * @returns True if all items were successfully added, false otherwise (e.g., inventory full).
+   */
+  addItem(itemId: string, count: number = 1): boolean {
+    const definition = getItemDefinition(itemId);
+    if (!definition || count <= 0) {
+      console.warn(
+        `Attempted to add invalid item ID: ${itemId} or count: ${count}`
+      );
+      return false;
+    }
+
+    const maxStack = this.getMaxStack(itemId);
     let remainingCount = count;
     let changed = false;
-    for (let i = 0; i < this.size && remainingCount > 0; i++) {
-      const slot = this.items[i];
-      if (slot?.name === itemName && slot.count < maxStack) {
-        const canAdd = maxStack - slot.count;
-        const amountToAdd = Math.min(remainingCount, canAdd);
-        slot.count += amountToAdd;
-        remainingCount -= amountToAdd;
-        changed = true;
-      }
-    }
-    if (remainingCount > 0) {
+
+    // First pass: Add to existing stacks if the item is stackable
+    if (definition.stackable) {
       for (let i = 0; i < this.size && remainingCount > 0; i++) {
-        if (!this.items[i]) {
-          const amountToAdd = Math.min(remainingCount, maxStack);
-          this.items[i] = {
-            name: itemName,
-            count: amountToAdd,
-            icon: itemName.toLowerCase().replace(/ /g, "_").replace(/'/g, ""),
-          };
+        const slot = this.items[i];
+        if (slot?.id === itemId && slot.count < maxStack) {
+          const canAdd = maxStack - slot.count;
+          const amountToAdd = Math.min(remainingCount, canAdd);
+          slot.count += amountToAdd;
           remainingCount -= amountToAdd;
           changed = true;
         }
       }
     }
+
+    // Second pass: Add to new slots
+    if (remainingCount > 0) {
+      for (let i = 0; i < this.size && remainingCount > 0; i++) {
+        if (!this.items[i]) {
+          const amountToAdd = Math.min(remainingCount, maxStack);
+          this.items[i] = {
+            id: definition.id,
+            name: definition.name,
+            count: amountToAdd,
+            icon: definition.icon, // Store icon filename
+          };
+          remainingCount -= amountToAdd;
+          changed = true;
+          // If item is not stackable, we only add one per slot, so break after finding one empty slot.
+          if (!definition.stackable) break;
+        }
+      }
+    }
+
     if (changed) this.notifyChange();
-    return remainingCount === 0;
+    return remainingCount === 0; // Return true if all items were added
   }
 
-  removeItem(itemName: string, count: number = 1): boolean {
-    if (!itemName || count <= 0) return false;
+  /**
+   * Removes an item from the inventory by its ID.
+   * @param itemId The unique ID of the item to remove.
+   * @param count The number of items to remove.
+   * @returns True if the specified count was successfully removed, false otherwise.
+   */
+  removeItem(itemId: string, count: number = 1): boolean {
+    if (!itemId || count <= 0) return false;
     let neededToRemove = count;
     let changed = false;
+
+    // Iterate backwards to remove from potentially partial stacks first
     for (let i = this.size - 1; i >= 0 && neededToRemove > 0; i--) {
       const slot = this.items[i];
-      if (slot?.name === itemName) {
+      if (slot?.id === itemId) {
         const amountToRemove = Math.min(neededToRemove, slot.count);
         slot.count -= amountToRemove;
         neededToRemove -= amountToRemove;
         changed = true;
-        if (slot.count === 0) this.items[i] = null;
+        if (slot.count === 0) {
+          this.items[i] = null; // Clear the slot if empty
+        }
       }
     }
+
     if (changed) this.notifyChange();
-    return neededToRemove === 0;
+    return neededToRemove === 0; // Return true if the required amount was removed
   }
 
+  /**
+   * Removes an item from a specific inventory slot index.
+   * @param index The index of the slot.
+   * @param count The number of items to remove from that slot.
+   * @returns True if items were successfully removed, false otherwise.
+   */
   removeItemByIndex(index: number, count: number = 1): boolean {
-    if (index < 0 || index >= this.size || !this.items[index] || count <= 0)
+    if (index < 0 || index >= this.size || !this.items[index] || count <= 0) {
       return false;
+    }
     const item = this.items[index]!;
     const removeCount = Math.min(count, item.count);
     item.count -= removeCount;
-    if (item.count === 0) this.items[index] = null;
+    if (item.count === 0) {
+      this.items[index] = null;
+    }
     this.notifyChange();
     return true;
   }
 
-  countItem(itemName: string): number {
+  /**
+   * Counts the total number of a specific item in the inventory.
+   * @param itemId The unique ID of the item to count.
+   * @returns The total count of the item across all stacks.
+   */
+  countItem(itemId: string): number {
     return this.items.reduce(
-      (total, item) => total + (item?.name === itemName ? item.count : 0),
+      (total, item) => total + (item?.id === itemId ? item.count : 0),
       0
     );
   }
 
+  /**
+   * Gets the item at a specific inventory index.
+   * @param index The index of the slot.
+   * @returns The InventoryItem in the slot, or null if the slot is empty or index is invalid.
+   */
   getItem(index: number): InventoryItem | null {
     return index >= 0 && index < this.size ? this.items[index] : null;
   }
 
+  /**
+   * Registers a callback function to be called when the inventory changes.
+   * @param callback The function to call with the updated items array.
+   */
   onChange(callback: (items: Array<InventoryItem | null>) => void): void {
-    if (typeof callback === "function") this.onChangeCallbacks.push(callback);
+    if (typeof callback === "function") {
+      this.onChangeCallbacks.push(callback);
+    }
   }
 
+  /**
+   * Notifies all registered callbacks about an inventory change.
+   */
   notifyChange(): void {
-    const itemsCopy = this.items.map((item) => (item ? { ...item } : null));
+    // Create a shallow copy for the notification
+    const itemsCopy = [...this.items];
     this.onChangeCallbacks.forEach((cb) => cb(itemsCopy));
   }
 }

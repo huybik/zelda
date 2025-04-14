@@ -8,12 +8,12 @@ body {
   overflow: hidden;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   color: #333;
-  background-color: #87ceeb;
+  background-color: #87ceeb; /* Default background */
   user-select: none;
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
-  touch-action: manipulation;
+  touch-action: manipulation; /* Prevent default touch actions like zoom */
 }
 
 /* --- Landing Page --- */
@@ -158,23 +158,25 @@ body {
   color: #ccc;
 }
 
+/* --- Game Container --- */
 #game-container {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  cursor: default;
-  pointer-events: auto;
-  touch-action: none;
+  cursor: default; /* Default cursor */
+  pointer-events: auto; /* Allow pointer events on the game itself */
+  touch-action: none; /* Prevent default touch actions like scrolling */
 }
 
-#game-container:focus-within {
-  /* cursor: none; */
+/* Hide system cursor when pointer is locked */
+body.pointer-locked {
+  cursor: none;
 }
 
 canvas {
-  display: block;
+  display: block; /* Prevent extra space below canvas */
 }
 
 /* --- UI Container --- */
@@ -184,20 +186,22 @@ canvas {
   left: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none;
+  pointer-events: none; /* Allow clicks to pass through to the game by default */
   z-index: 10;
   display: flex;
   flex-direction: column;
 }
 
+/* Make specific UI elements interactive */
 .ui-panel,
 #chat-container,
-#quest-detail-banner, /* Make quest banner interactive */
-#mobile-controls-layer > *,
+#quest-detail-banner,
+#mobile-controls-layer > *, /* Buttons, joystick zones */
 #mobile-controls-layer .mobile-button {
-  pointer-events: auto;
+  pointer-events: auto; /* Allow interaction with these elements */
 }
 
+/* Ensure joystick zone is interactive */
 #joystick-zone-left {
   pointer-events: auto;
 }
@@ -283,7 +287,7 @@ canvas {
   text-align: center;
   border: 1px solid rgba(255, 255, 255, 0.2);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
-  display: none;
+  display: none; /* Initially hidden */
   z-index: 15;
 }
 
@@ -314,9 +318,11 @@ canvas {
   z-index: 20;
   transition:
     opacity 0.2s ease-in-out,
-    transform 0.2s ease-in-out;
+    transform 0.2s ease-in-out,
+    visibility 0s 0s; /* Visibility transition happens immediately */
   opacity: 1;
   transform: scale(1);
+  visibility: visible;
 }
 
 .ui-panel.hidden {
@@ -327,13 +333,7 @@ canvas {
   transition:
     opacity 0.2s ease-in-out,
     transform 0.2s ease-in-out,
-    visibility 0s 0.2s;
-}
-.ui-panel {
-  visibility: visible;
-  transition:
-    opacity 0.2s ease-in-out,
-    transform 0.2s ease-in-out;
+    visibility 0s 0.2s; /* Delay visibility change until after transition */
 }
 
 #inventory-display {
@@ -343,7 +343,7 @@ canvas {
   width: 85%;
   max-width: 700px;
   max-height: 60vh;
-  display: flex;
+  display: flex; /* Use flex for main panel structure */
   flex-direction: column;
 }
 #inventory-display.hidden {
@@ -373,21 +373,50 @@ canvas {
   margin-bottom: 18px;
   font-size: 1.3em;
   user-select: none;
-  flex-shrink: 0;
+  flex-shrink: 0; /* Prevent header from shrinking */
+}
+
+/* Inventory Specific Layout */
+.inventory-content {
+  display: grid;
+  grid-template-columns: 2fr 1fr; /* Adjust ratio: 2 parts slots, 1 part description */
+  gap: 20px;
+  overflow: hidden; /* Prevent content overflow */
+  flex-grow: 1; /* Allow content area to fill remaining space */
+  min-height: 0; /* Crucial for allowing grid children to scroll */
 }
 
 #inventory-slots {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
-  gap: 12px;
-  overflow-y: auto;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(60px, 1fr)
+  ); /* Responsive columns */
+  gap: 10px;
+  overflow-y: auto; /* Allow only slots area to scroll */
   padding: 5px;
-  flex-grow: 1;
+  border: 1px solid #ddd;
+  background-color: rgba(255, 255, 255, 0.6);
+  border-radius: 4px;
+  /* Custom scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: #aaa #eee;
+}
+#inventory-slots::-webkit-scrollbar {
+  width: 8px;
+}
+#inventory-slots::-webkit-scrollbar-track {
+  background: #eee;
+  border-radius: 4px;
+}
+#inventory-slots::-webkit-scrollbar-thumb {
+  background-color: #aaa;
+  border-radius: 4px;
+  border: 2px solid #eee;
 }
 
 .inventory-slot {
-  width: 65px;
-  height: 65px;
+  aspect-ratio: 1 / 1; /* Maintain square shape */
   background-color: rgba(200, 200, 200, 0.9);
   border: 1px solid #999;
   border-radius: 5px;
@@ -397,7 +426,7 @@ canvas {
     background-color 0.15s ease,
     transform 0.1s ease;
   overflow: hidden;
-  display: flex;
+  display: flex; /* Center icon */
   justify-content: center;
   align-items: center;
 }
@@ -408,44 +437,14 @@ canvas {
 }
 
 .item-icon {
-  width: 40px;
-  height: 40px;
-  background-color: #ddd;
+  width: 75%; /* Icon size relative to slot */
+  height: 75%;
+  background-color: transparent; /* Use background image */
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
-  border-radius: 3px;
-  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.2);
-  visibility: hidden;
-}
-.item-icon.wood {
-  background-color: #8b4513;
-}
-.item-icon.stone {
-  background-color: #808080;
-}
-.item-icon.herb {
-  background-color: #228b22;
-}
-.item-icon.feather {
-  background-color: #ffffff;
-  border: 1px solid #eee;
-}
-.item-icon.health_potion {
-  background-color: #ff4500;
-  border-radius: 50%;
-}
-.item-icon.gold {
-  background-color: #ffd700;
-  border-radius: 50%;
-}
-.item-icon.hunters_bow {
-  background-color: #a0522d;
-  width: 50px;
-  height: 15px;
-}
-.item-icon.default_icon {
-  background-color: #aaa;
+  visibility: hidden; /* Hide placeholder initially */
+  image-rendering: pixelated; /* Keep icons crisp */
 }
 
 .item-count {
@@ -456,14 +455,70 @@ canvas {
   font-weight: bold;
   color: #f0f0f0;
   text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.9);
-  background-color: rgba(0, 0, 0, 0.2);
+  background-color: rgba(0, 0, 0, 0.3);
   padding: 0 3px;
   border-radius: 2px;
+  pointer-events: none; /* Don't interfere with slot clicks */
 }
 
+/* Item Description Panel */
+#item-description-panel {
+  background-color: rgba(220, 220, 220, 0.9);
+  border: 1px solid #bbb;
+  border-radius: 5px;
+  padding: 15px;
+  overflow-y: auto; /* Allow description to scroll */
+  transition:
+    opacity 0.2s ease-in-out,
+    visibility 0s 0s;
+  /* Custom scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: #aaa #eee;
+}
+#item-description-panel::-webkit-scrollbar {
+  width: 6px;
+}
+#item-description-panel::-webkit-scrollbar-track {
+  background: #eee;
+  border-radius: 3px;
+}
+#item-description-panel::-webkit-scrollbar-thumb {
+  background-color: #aaa;
+  border-radius: 3px;
+  border: 1px solid #eee;
+}
+
+#item-description-panel.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.2s ease-in-out,
+    visibility 0s 0.2s;
+}
+
+#item-description-title {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 1.1em;
+  font-weight: bold;
+  color: #333;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 5px;
+}
+
+#item-description-text {
+  margin: 0;
+  font-size: 0.95em;
+  line-height: 1.4;
+  color: #444;
+  white-space: pre-wrap; /* Preserve line breaks from description */
+}
+
+/* Journal Specific Layout */
 .journal-section {
   margin-bottom: 15px;
-  flex-shrink: 0;
+  flex-shrink: 0; /* Prevent sections from shrinking */
 }
 .journal-section:last-child {
   margin-bottom: 0;
@@ -482,12 +537,13 @@ canvas {
   list-style: none;
   padding: 0;
   margin: 0;
-  max-height: 25vh;
+  max-height: 25vh; /* Limit height */
   overflow-y: auto;
   border: 1px solid #ddd;
   background-color: rgba(255, 255, 255, 0.6);
   border-radius: 4px;
   padding: 10px;
+  /* Custom scrollbar */
   scrollbar-width: thin;
   scrollbar-color: #aaa #eee;
 }
@@ -534,10 +590,10 @@ li.quest-completed {
   font-style: italic;
   text-decoration: line-through;
   opacity: 0.7;
-  cursor: default; /* No action on completed quests */
+  cursor: default;
 }
 li.quest-completed:hover {
-  background-color: transparent; /* No hover effect */
+  background-color: transparent;
 }
 
 /* --- Chat Interface --- */
@@ -555,11 +611,13 @@ li.quest-completed:hover {
   z-index: 25;
   transition:
     opacity 0.2s ease-in-out,
-    transform 0.2s ease-in-out;
+    transform 0.2s ease-in-out,
+    visibility 0s 0s;
   opacity: 1;
   width: 90%;
   max-width: 500px;
   box-sizing: border-box;
+  visibility: visible;
 }
 
 #chat-container.hidden {
@@ -585,34 +643,9 @@ li.quest-completed:hover {
   outline: none;
   border-color: #aaa;
 }
-
-#chat-send,
-#chat-close {
-  padding: 10px 15px;
-  border: none;
-  border-radius: 5px;
-  background-color: #555;
-  color: white;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-  font-size: 16px;
-  flex-shrink: 0;
-}
-#chat-send:hover,
-#chat-close:hover {
-  background-color: #777;
-}
-#chat-send:disabled {
-  background-color: #444;
+#chat-input:disabled {
+  background-color: #ddd;
   cursor: not-allowed;
-  opacity: 0.6;
-}
-#chat-close {
-  background-color: #800;
-  padding: 10px 12px;
-}
-#chat-close:hover {
-  background-color: #a00;
 }
 
 /* --- Utility --- */
@@ -639,12 +672,13 @@ body::after {
   pointer-events: none;
   z-index: 5;
   user-select: none;
+  display: none; /* Hidden by default */
 }
 
 body.pointer-locked::after {
-  display: block; /* Show crosshair when pointer locked */
+  display: block; /* Show crosshair only when pointer locked */
 }
-/* Hide crosshair if any panel is open */
+/* Hide crosshair if any panel is open or on mobile */
 body:has(.ui-panel:not(.hidden))::after,
 body:has(#chat-container:not(.hidden))::after,
 body:has(#quest-detail-banner:not(.hidden))::after,
@@ -661,29 +695,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   padding: 2px 5px;
 }
 
-/* Intent Display */
-#intent-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 5;
-}
-
-.intent-text {
-  position: absolute;
-  transform: translateX(-50%);
-  background-color: rgba(0, 0, 0, 0.6);
-  color: #eee;
-  padding: 3px 6px;
-  border-radius: 3px;
-  font-size: 11px;
-  white-space: nowrap;
-  user-select: none;
-  display: none;
-}
+/* Intent Display (Sprites handled in JS) */
 
 /* Quest Detail Banner */
 #quest-detail-banner {
@@ -691,10 +703,12 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-
+  width: 90%;
+  max-width: 500px;
+  background-color: rgba(50, 50, 70, 0.95); /* Darker background */
+  color: #eee;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
   text-align: center;
-
   transition:
     opacity 0.3s ease-out,
     visibility 0s 0s;
@@ -715,6 +729,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   font-size: 1.4em;
   border-bottom: 1px solid rgba(255, 255, 255, 0.2);
   padding-bottom: 10px;
+  color: #fff;
 }
 
 #quest-detail-banner p {
@@ -733,7 +748,6 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
-
 #quest-banner-ok:hover {
   background-color: #45a049;
 }
@@ -745,7 +759,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   left: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none;
+  pointer-events: none; /* Base layer doesn't block */
   z-index: 15;
   overflow: hidden;
 }
@@ -756,15 +770,17 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
 
 #joystick-zone-left {
   position: absolute;
-  bottom: calc(10% + env(safe-area-inset-bottom));
+  bottom: calc(10% + env(safe-area-inset-bottom)); /* Adjust for safe areas */
   left: 5%;
   width: 40%;
   height: 40%;
   display: flex;
   justify-content: center;
   align-items: center;
+  /* background: rgba(255,0,0,0.1); */ /* Debugging */
 }
 
+/* NippleJS Styling */
 .nipple {
   pointer-events: auto !important;
   z-index: 20;
@@ -785,7 +801,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   flex-direction: column;
   align-items: center;
   gap: 20px;
-  pointer-events: none;
+  pointer-events: none; /* Container doesn't block */
   z-index: 18;
 }
 
@@ -805,11 +821,11 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   text-align: center;
   cursor: pointer;
   user-select: none;
-  -webkit-tap-highlight-color: transparent;
+  -webkit-tap-highlight-color: transparent; /* Remove tap highlight */
   transition:
     background-color 0.1s ease,
     transform 0.1s ease;
-  pointer-events: auto;
+  pointer-events: auto; /* Buttons are interactive */
 }
 
 .mobile-button svg {
@@ -817,7 +833,6 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   height: 28px;
   margin-bottom: 2px;
 }
-
 .mobile-button span {
   line-height: 1.1;
 }
@@ -836,7 +851,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   display: flex;
   gap: 20px;
   z-index: 16;
-  pointer-events: auto;
+  pointer-events: auto; /* Container needs to be interactive */
 }
 
 .icon-button {
@@ -845,12 +860,12 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   height: 55px;
   background-color: rgba(40, 40, 40, 0.7);
 }
-
 .icon-button svg {
   width: 24px;
   height: 24px;
 }
 
+/* Responsive Adjustments */
 @media (max-width: 768px) {
   #hud {
     top: 10px;
@@ -887,19 +902,26 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
     padding: 15px;
   }
   #inventory-slots {
-    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
-    gap: 10px;
-  }
-  .inventory-slot {
-    width: 60px;
-    height: 60px;
-  }
-  .item-icon {
-    width: 35px;
-    height: 35px;
+    grid-template-columns: repeat(auto-fill, minmax(55px, 1fr));
+    gap: 8px;
   }
   .item-count {
-    font-size: 12px;
+    font-size: 11px;
+    bottom: 2px;
+    right: 3px;
+  }
+
+  /* Stack inventory description below slots on small screens */
+  .inventory-content {
+    grid-template-columns: 1fr; /* Full width for both */
+    grid-template-rows: auto auto; /* Auto height */
+    max-height: 70vh; /* Adjust overall max height */
+  }
+  #inventory-slots {
+    max-height: 40vh; /* Limit slot height */
+  }
+  #item-description-panel {
+    max-height: 25vh; /* Limit description height */
   }
 
   #chat-container {
@@ -910,11 +932,6 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   }
   #chat-input {
     padding: 8px 10px;
-    font-size: 15px;
-  }
-  #chat-send,
-  #chat-close {
-    padding: 8px 12px;
     font-size: 15px;
   }
 
@@ -939,12 +956,10 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
     width: 45%;
     height: 45%;
   }
-
   #right-action-buttons {
     right: calc(2% + env(safe-area-inset-right));
     gap: 15px;
   }
-
   .mobile-button {
     width: 60px;
     height: 60px;
@@ -953,7 +968,6 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
     width: 26px;
     height: 26px;
   }
-
   .bottom-icon-buttons {
     bottom: calc(10px + env(safe-area-inset-bottom));
     gap: 15px;
@@ -968,11 +982,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   }
 }
 
-.fixed-link.right {
-  bottom: -1px;
-  right: -1px;
-  border-top-left-radius: 12px;
-}
+/* Fixed Link Styling */
 .fixed-link {
   font-family: "system-ui", sans-serif;
   position: fixed;
@@ -982,6 +992,11 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   background: #fff;
   color: #000;
   text-decoration: none;
-  z-index: 10000;
+  z-index: 10000; /* Ensure it's above everything */
   border: 1px solid #fff;
+}
+.fixed-link.right {
+  bottom: -1px;
+  right: -1px;
+  border-top-left-radius: 12px;
 }

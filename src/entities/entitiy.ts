@@ -6,7 +6,6 @@ import {
   Group,
   Mesh,
   Material,
-  Object3D,
   CanvasTexture,
   Sprite,
   SpriteMaterial,
@@ -20,8 +19,8 @@ import {
 } from "../core/utils";
 // Removed Raycaster import from here as it's imported above
 import { Game } from "../main";
-import { AIController } from "../ai/npcAI";
-import { AnimalAIController } from "../ai/animalAI"; // Import Animal AI
+import type { AIController } from "../ai/npcAI";
+import type { AnimalAIController } from "../ai/animalAI"; // Import Animal AI
 import { CHARACTER_HEIGHT, CHARACTER_RADIUS } from "../core/constants";
 
 export class Entity {
@@ -122,35 +121,6 @@ export class Entity {
     this.nameTexture.needsUpdate = true;
   }
 
-  initIntentDisplay(): void {
-    // Only init for NPCs with AIController, not animals
-    if (!(this.aiController instanceof AIController)) return;
-
-    // Initialize rayCaster here if not already done (e.g., by Character)
-    if (!this.rayCaster) {
-      this.rayCaster = new Raycaster();
-    }
-    if (this.game?.camera) {
-      this.rayCaster.camera = this.game.camera;
-    }
-    if (!this.intentCanvas) {
-      this.intentCanvas = document.createElement("canvas");
-      this.intentCanvas.width = 200;
-      this.intentCanvas.height = 75;
-      this.intentContext = this.intentCanvas.getContext("2d")!;
-      this.intentTexture = new CanvasTexture(this.intentCanvas);
-    }
-    if (!this.intentSprite) {
-      const material = new SpriteMaterial({ map: this.intentTexture });
-      this.intentSprite = new Sprite(material);
-      const aspectRatio = this.intentCanvas.width / this.intentCanvas.height;
-      this.intentSprite.scale.set(aspectRatio * 0.6, 0.6, 1);
-      this.intentSprite.position.set(0, CHARACTER_HEIGHT + 0.6, 0);
-      this.mesh!.add(this.intentSprite);
-    }
-    this.updateIntentDisplay("");
-  }
-
   removeDisplays(): void {
     if (this.intentSprite && this.mesh) {
       this.mesh.remove(this.intentSprite);
@@ -160,56 +130,6 @@ export class Entity {
       this.mesh.remove(this.nameSprite);
       this.nameSprite = null;
     }
-  }
-
-  updateIntentDisplay(text: string): void {
-    // Only update for NPCs with AIController
-    if (!(this.aiController instanceof AIController)) {
-      if (this.intentSprite) this.intentSprite.visible = false;
-      return;
-    }
-    if (!this.intentContext || !this.intentCanvas || !this.intentTexture)
-      return;
-    if (!text || text.trim() === "") {
-      if (this.intentSprite) this.intentSprite.visible = false;
-      return;
-    } else {
-      if (this.intentSprite) this.intentSprite.visible = true;
-    }
-    const ctx = this.intentContext;
-    const canvas = this.intentCanvas;
-    const maxWidth = canvas.width - 10;
-    const lineHeight = 20;
-    const x = canvas.width / 2;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    ctx.beginPath();
-    ctx.roundRect(0, 0, canvas.width, canvas.height, 10);
-    ctx.fill();
-    ctx.font = "13px Arial";
-    ctx.fillStyle = "white";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    const words = text.split(" ");
-    let lines = [];
-    let currentLine = "";
-    for (let i = 0; i < words.length; i++) {
-      const testLine = currentLine + words[i] + " ";
-      const metrics = ctx.measureText(testLine);
-      if (metrics.width > maxWidth && i > 0) {
-        lines.push(currentLine.trim());
-        currentLine = words[i] + " ";
-      } else {
-        currentLine = testLine;
-      }
-    }
-    lines.push(currentLine.trim());
-    const totalTextHeight = lines.length * lineHeight;
-    let startY = (canvas.height - totalTextHeight) / 2 + lineHeight / 2;
-    for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(lines[i], x, startY + i * lineHeight);
-    }
-    this.intentTexture.needsUpdate = true;
   }
 
   updateBoundingBox(): void {
@@ -269,11 +189,7 @@ export class Entity {
 
     // Stop AI updates
     if (this.aiController) {
-      if (this.aiController instanceof AIController) {
-        this.aiController.aiState = "dead";
-      } else if (this.aiController instanceof AnimalAIController) {
-        this.aiController.aiState = "dead";
-      }
+      this.aiController.aiState = "dead";
     }
     this.removeDisplays(); // Remove name/intent displays on death
   }
