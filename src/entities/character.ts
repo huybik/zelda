@@ -440,59 +440,60 @@ export class Character extends Entity {
       const modelPaths = {
         [definition.name]: `assets/items/weapons/${definition.modelFileName}`,
       };
+      let weaponModel = null;
       if (this.game && !this.game.models[definition.name]) {
         const models = await loadModels(modelPaths);
         this.game.models[definition.name] = models[definition.name];
+        weaponModel = this.game.models[definition.name].scene.clone();
+      } else if (this.game?.models[definition.name]) {
+        weaponModel = this.game.models[definition.name].scene.clone();
       }
-      if (this.game?.models[definition.name]) {
-        const weaponModel = this.game.models[definition.name].scene;
 
-        // Reset transformations
-        weaponModel.position.set(0, 0, 0);
-        weaponModel.rotation.set(0, 0, 0);
-        weaponModel.scale.set(1, 1, 1);
+      // Reset transformations
+      weaponModel?.position.set(0, 0, 0);
+      weaponModel?.rotation.set(0, 0, 0);
+      weaponModel?.scale.set(1, 1, 1);
 
-        // Adjustments per weapon type (tweak these values)
-        if (definition.id === "sword") {
-          weaponModel.rotateX(Math.PI / 2); // Align with hand
-          weaponModel.rotateY(Math.PI); // Face forward
-          weaponModel.position.set(0, 0.2, 0); // Move to tip of hand (adjust Y)
-          weaponModel.scale.set(1.0, 1.0, 1.0); // Adjust scale
-        } else if (definition.id === "axe") {
-          weaponModel.rotateX(Math.PI / 2);
-          weaponModel.rotateZ(-Math.PI / 2);
-          weaponModel.position.set(0, 0.25, 0); // Adjust for axe handle
-          weaponModel.scale.set(0.9, 0.9, 0.9);
-        } else if (definition.id === "pickaxe") {
-          weaponModel.rotateX(Math.PI / 2);
-          weaponModel.rotateZ(-Math.PI / 2);
-          weaponModel.position.set(0, 0.25, 0);
-          weaponModel.scale.set(0.9, 0.9, 0.9);
-        }
+      // Adjustments per weapon type (tweak these values)
+      if (definition.id === "sword") {
+        weaponModel?.rotateX(Math.PI / 2); // Align with hand
+        weaponModel?.rotateY(Math.PI); // Face forward
+        weaponModel?.position.set(0, 0.2, 0); // Move to tip of hand (adjust Y)
+        weaponModel?.scale.set(0.5, 0.5, 0.5); // Adjust scale
+      } else if (definition.id === "axe") {
+        weaponModel?.rotateX(Math.PI / 2);
+        weaponModel?.rotateZ(-Math.PI / 2);
+        weaponModel?.position.set(0, 0.25, 0); // Adjust for axe handle
+        weaponModel?.scale.set(0.4, 0.4, 0.4);
+      } else if (definition.id === "pickaxe") {
+        weaponModel?.rotateX(Math.PI / 2);
+        weaponModel?.rotateZ(-Math.PI / 2);
+        weaponModel?.position.set(0, 0.25, 0);
+        weaponModel?.scale.set(0.4, 0.4, 0.4);
+      }
 
-        // Add to hand bone
-        this.rightHandBone.add(weaponModel);
-        this.equippedWeapon = {
-          definition: definition,
-          modelInstance: weaponModel,
-          attachedBone: this.rightHandBone,
-        };
+      // Add to hand bone
+      this.rightHandBone.add(weaponModel!);
+      this.equippedWeapon = {
+        definition: definition,
+        modelInstance: weaponModel!,
+        attachedBone: this.rightHandBone,
+      };
 
-        // Debugging: Visualize hand bone orientation
-        const axesHelper = new AxesHelper(0.5);
-        this.rightHandBone.add(axesHelper);
+      // Debugging: Visualize hand bone orientation
+      const axesHelper = new AxesHelper(0.5);
+      this.rightHandBone.add(axesHelper);
 
-        console.log(`${this.name} equipped ${definition.name}.`);
-        if (this.game) {
-          this.game.logEvent(
-            this,
-            "equip",
-            `Equipped ${definition.name}.`,
-            undefined,
-            { item: definition.name },
-            this.mesh!.position
-          );
-        }
+      console.log(`${this.name} equipped ${definition.name}.`);
+      if (this.game) {
+        this.game.logEvent(
+          this,
+          "equip",
+          `Equipped ${definition.name}.`,
+          undefined,
+          { item: definition.name },
+          this.mesh!.position
+        );
       }
     } catch (error) {
       console.error(
