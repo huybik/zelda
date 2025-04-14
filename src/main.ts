@@ -133,9 +133,6 @@ export class Game {
     // Player initialized here, inventory is passed
     this.initPlayer(this.models, savedName || "Player");
 
-    // --- Initial Item Assignment ---
-    this.assignStartingItems(); // Assign items AFTER player is initialized
-
     this.initControls();
     this.initMobileControls();
     this.initPhysics();
@@ -183,7 +180,7 @@ export class Game {
     });
 
     // Assign random weapons to NPCs AFTER environment population and display init
-    this.assignNpcStartingWeapons();
+    this.assignStartingWeapons();
 
     // Find Quest Banner elements
     this.questBannerElement = document.getElementById("quest-detail-banner");
@@ -335,50 +332,23 @@ export class Game {
     this.interactableObjects.push(this.activeCharacter); // Add player to interactables if needed (e.g., for targeting)
   }
 
-  /** Assigns starting items to the player character. */
-  assignStartingItems(): void {
-    if (!this.activeCharacter || !this.inventory) return;
-
-    // Give player starting weapons/tools
-    this.inventory.addItem("axe", 1);
-    this.inventory.addItem("pickaxe", 1);
-    this.inventory.addItem("sword", 1);
-    this.inventory.addItem("potion", 3); // Add some potions
-    this.inventory.addItem("wood", 10); // Start with some resources
-    this.inventory.addItem("stone", 5);
-
-    // Optionally auto-equip one weapon for the player
-    const swordDef = getItemDefinition("sword");
-    if (swordDef && isWeapon(swordDef)) {
-      // Use requestAnimationFrame to ensure the character and bone are ready
-      requestAnimationFrame(() => {
-        this.activeCharacter?.equipWeapon(swordDef);
-      });
-    }
-  }
-
   /** Assigns a random starting weapon to each NPC. */
-  assignNpcStartingWeapons(): void {
+  assignStartingWeapons(): void {
     const availableWeapons: string[] = ["axe", "pickaxe", "sword"];
     this.entities.forEach((entity) => {
       // Ensure it's an NPC Character and not the player
-      if (
-        entity instanceof Character &&
-        entity.userData.isNPC &&
-        entity !== this.activeCharacter
-      ) {
+      if (entity instanceof Character) {
         const randomWeaponId =
           availableWeapons[Math.floor(Math.random() * availableWeapons.length)];
         const weaponDef = getItemDefinition(randomWeaponId);
         if (weaponDef && isWeapon(weaponDef)) {
-          // NPCs don't use the player inventory system directly for equipment in this setup.
-          // We just call their equip method. This assumes NPCs don't manage an inventory
-          // for equipment in the same way the player does.
+          entity.inventory?.addItem(randomWeaponId, 1);
+
           // Use requestAnimationFrame to delay slightly, ensuring bones are ready.
           requestAnimationFrame(() => {
             entity.equipWeapon(weaponDef);
           });
-          // console.log(`Assigned ${weaponDef.name} to NPC ${entity.name}`);
+          console.log(`Assigned ${weaponDef.name} to NPC ${entity.name}`);
         }
       }
     });

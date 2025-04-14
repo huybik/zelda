@@ -449,40 +449,49 @@ export class Character extends Entity {
         weaponModel = this.game.models[definition.name].scene.clone();
       }
 
-      // Reset transformations
-      weaponModel?.position.set(0, 0, 0);
-      weaponModel?.rotation.set(0, 0, 0);
-      weaponModel?.scale.set(1, 1, 1);
-
-      // Adjustments per weapon type (tweak these values)
-      if (definition.id === "sword") {
-        weaponModel?.rotateX(Math.PI / 2); // Align with hand
-        weaponModel?.rotateY(Math.PI); // Face forward
-        weaponModel?.position.set(0, 0.2, 0); // Move to tip of hand (adjust Y)
-        weaponModel?.scale.set(0.5, 0.5, 0.5); // Adjust scale
-      } else if (definition.id === "axe") {
-        weaponModel?.rotateX(Math.PI / 2);
-        weaponModel?.rotateZ(-Math.PI / 2);
-        weaponModel?.position.set(0, 0.25, 0); // Adjust for axe handle
-        weaponModel?.scale.set(0.4, 0.4, 0.4);
-      } else if (definition.id === "pickaxe") {
-        weaponModel?.rotateX(Math.PI / 2);
-        weaponModel?.rotateZ(-Math.PI / 2);
-        weaponModel?.position.set(0, 0.25, 0);
-        weaponModel?.scale.set(0.4, 0.4, 0.4);
+      if (!weaponModel) {
+        throw new Error(`Failed to load weapon model for ${definition.name}`);
       }
 
-      // Add to hand bone
-      this.rightHandBone.add(weaponModel!);
+      // Reset transformations
+      weaponModel.position.set(0, 0, 0);
+      weaponModel.rotation.set(0, 0, 0);
+      weaponModel.scale.set(1, 1, 1);
+
+      // Apply scale and position adjustments per weapon type
+      if (definition.id === "sword") {
+        weaponModel.scale.set(0.5, 0.5, 0.5);
+        weaponModel.position.set(0, 0.2, 0); // Offset along hand bone's Y-axis
+      } else if (definition.id === "axe") {
+        weaponModel.scale.set(0.4, 0.4, 0.4);
+        weaponModel.position.set(0, 0.25, 0);
+      } else if (definition.id === "pickaxe") {
+        weaponModel.scale.set(0.4, 0.4, 0.4);
+        weaponModel.position.set(0, 0.25, 0);
+      }
+
+      // Attach to the right hand bone
+      this.rightHandBone.add(weaponModel);
+
+      // Align weapon's world orientation with character's forward direction
+      const handBoneWorldQuaternion = new Quaternion();
+      this.rightHandBone.getWorldQuaternion(handBoneWorldQuaternion);
+      weaponModel.quaternion
+        .copy(this.mesh!.quaternion) // Character's world rotation
+        .premultiply(handBoneWorldQuaternion.invert()); // Adjust for hand bone's orientation
+
+      // Optional: Apply additional local rotation if weapon model orientation needs adjustment
+      // Example: If sword blade points along +Z instead of -Z, rotate Y by π
+      // if (definition.id === "sword") {
+      //   weaponModel.rotateY(Math.PI);
+      // }
+
+      // Store equipped weapon data
       this.equippedWeapon = {
         definition: definition,
-        modelInstance: weaponModel!,
+        modelInstance: weaponModel,
         attachedBone: this.rightHandBone,
       };
-
-      // Debugging: Visualize hand bone orientation
-      const axesHelper = new AxesHelper(0.5);
-      this.rightHandBone.add(axesHelper);
 
       console.log(`${this.name} equipped ${definition.name}.`);
       if (this.game) {
