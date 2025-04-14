@@ -18,11 +18,12 @@ interface BoneRegexMap {
 
 // Regex patterns to match common bone naming conventions
 const boneMappings: BoneRegexMap = {
+  // Existing mappings...
   LeftArm: [
-    /^(left|l)[._\-\s]?(arm|hand|forearm|clavicle|shoulder)/i, // e.g., left_arm, l hand
-    /^(arm|hand|forearm|clavicle|shoulder)[._\-\s]?(left|l)/i, // e.g., arm_l, Hand.L
+    /^(left|l)[._\-\s]?(arm|hand|forearm|clavicle|shoulder)/i,
+    /^(arm|hand|forearm|clavicle|shoulder)[._\-\s]?(left|l)/i,
     /^arm\.l/i,
-    /^hand\.l/i, // Specific common patterns
+    /^hand\.l/i,
   ],
   RightArm: [
     /^(right|r)[._\-\s]?(arm|hand|forearm|clavicle|shoulder)/i,
@@ -30,8 +31,21 @@ const boneMappings: BoneRegexMap = {
     /^arm\.r/i,
     /^hand\.r/i,
   ],
+  // Add new hand-specific categories
+  RightHand: [
+    /^(right|r)[._\-\s]?hand/i, // Matches "RightHand", "R_Hand"
+    /^hand[._\-\s]?(right|r)/i, // Matches "HandRight", "Hand_R"
+    /^hand\.r/i, // Matches "hand.r"
+    /hand(r|right)/i, // Matches "handr", "HandR_026", "handR_metarig_man1"
+  ],
+  LeftHand: [
+    /^(left|l)[._\-\s]?hand/i, // Matches "LeftHand", "L_Hand"
+    /^hand[._\-\s]?(left|l)/i, // Matches "HandLeft", "Hand_L"
+    /^hand\.l/i, // Matches "hand.l"
+    /hand(l|left)/i, // Matches "handl", "HandL_025"
+  ],
   LeftUpLeg: [
-    /^(left|l)[._\-\s]?(up(per)?|thigh)[._\-\s]?leg/i,
+    /^(left|l)[._\-\s]?(up(per)?)[._\-\s]?leg/i,
     /^(up(per)?|thigh)[._\-\s]?leg[._\-\s]?(left|l)/i,
     /^upleg\.l/i,
     /^thigh\.l/i,
@@ -71,14 +85,14 @@ const boneMappings: BoneRegexMap = {
 // Map common input names (like "LeftLeg") to the more specific keys used in boneMappings
 const categoryNameMapping: { [inputName: string]: string } = {
   leftarm: "LeftArm",
-  lefthand: "LeftArm", // Map hand to arm category for general arm swing
+  lefthand: "LeftHand", // Updated from "LeftArm" to "LeftHand"
   rightarm: "RightArm",
-  righthand: "RightArm",
+  righthand: "RightHand", // Updated from "RightArm" to "RightHand"
   leftupleg: "LeftUpLeg",
   leftthigh: "LeftUpLeg",
   rightupleg: "RightUpLeg",
   rightthigh: "RightUpLeg",
-  leftleg: "LeftLowLeg", // Map generic "LeftLeg" to lower leg
+  leftleg: "LeftLowLeg",
   leftshin: "LeftLowLeg",
   leftcalf: "LeftLowLeg",
   rightleg: "RightLowLeg",

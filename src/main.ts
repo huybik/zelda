@@ -96,6 +96,7 @@ export class Game {
   private questBannerDesc: HTMLElement | null = null;
   private questBannerButton: HTMLButtonElement | null = null;
   private boundQuestBannerClickHandler: (() => void) | null = null;
+  public models!: Record<string, { scene: Group; animations: AnimationClip[] }>;
 
   constructor() {
     this.questManager = new QuestManager(this);
@@ -118,7 +119,7 @@ export class Game {
       woman: "assets/woman/scene.gltf",
     };
 
-    const models = await loadModels(modelPaths);
+    this.models = await loadModels(modelPaths);
 
     const savedName = localStorage.getItem("playerName");
     const savedLang = localStorage.getItem("selectedLanguage");
@@ -130,7 +131,7 @@ export class Game {
     this.startPortalOriginalParams = urlParams;
 
     // Player initialized here, inventory is passed
-    this.initPlayer(models, savedName || "Player");
+    this.initPlayer(this.models, savedName || "Player");
 
     // --- Initial Item Assignment ---
     this.assignStartingItems(); // Assign items AFTER player is initialized
@@ -138,7 +139,7 @@ export class Game {
     this.initControls();
     this.initMobileControls();
     this.initPhysics();
-    this.initEnvironment(models); // NPCs created here
+    this.initEnvironment(this.models); // NPCs created here
     this.initSystems();
     this.questManager.initQuests();
     this.initUI(); // UI initialized here, including InventoryDisplay

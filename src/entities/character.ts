@@ -20,6 +20,7 @@ import {
   MathUtils, // Added Quaternion
   CanvasTexture,
   SpriteMaterial,
+  AxesHelper,
 } from "three";
 import {
   EventLog,
@@ -187,17 +188,15 @@ export class Character extends Entity {
     // Find the right hand bone after model is added and potentially scaled
     if (this.skeletonRoot) {
       // Try specific hand names first, then fallback to arm
-      this.rightHandBone =
-        findBone(this.skeletonRoot, "RightHand") ||
-        findBone(this.skeletonRoot, "hand.r") ||
-        findBone(this.skeletonRoot, "RightArm") ||
-        findBone(this.skeletonRoot, "arm.r");
+      this.rightHandBone = findBone(this.skeletonRoot, "RightHand");
       if (!this.rightHandBone) {
         console.warn(
           `RightHand/Arm bone not found for ${this.name}. Weapon attachment might fail.`
         );
       } else {
-        // console.log(`Found right hand bone for ${this.name}: ${this.rightHandBone.name}`);
+        console.log(
+          `Found right hand bone for ${this.name}: ${this.rightHandBone.name}`
+        );
       }
     }
 
@@ -435,53 +434,65 @@ export class Character extends Entity {
       return;
     }
 
-    // Unequip previous weapon first
     this.unequipWeapon();
 
     try {
       const modelPaths = {
         [definition.name]: `assets/items/weapons/${definition.modelFileName}`,
       };
-      const models = await loadModels(modelPaths);
-      const weaponModel = models[definition.name].scene;
-
-      // --- Adjust weapon model position/rotation ---
-      // These values often require trial and error per model/rig combination.
-      weaponModel.position.set(0, 0, 0); // Reset position relative to bone
-      weaponModel.rotation.set(0, 0, 0); // Reset rotation relative to bone
-      weaponModel.quaternion.set(0, 0, 0, 1); // Reset quaternion
-
-      // Example adjustments (MODIFY THESE based on your specific models/rig):
-      if (definition.id === "sword") {
-        weaponModel.rotateX(Math.PI / 2); // Point forward along bone's Y
-        weaponModel.rotateY(Math.PI); // Align blade edge if needed
-        weaponModel.position.set(0.05, 0.1, 0.1); // Adjust position in hand
-        weaponModel.scale.set(0.8, 0.8, 0.8); // Example scale adjustment
-      } else if (definition.id === "axe" || definition.id === "pickaxe") {
-        weaponModel.rotateX(Math.PI / 2); // Point forward
-        weaponModel.rotateZ(-Math.PI / 2); // Align head correctly
-        weaponModel.position.set(0, 0.15, 0.05); // Adjust position
-        weaponModel.scale.set(0.7, 0.7, 0.7); // Example scale adjustment
+      if (this.game && !this.game.models[definition.name]) {
+        const models = await loadModels(modelPaths);
+        this.game.models[definition.name] = models[definition.name];
       }
-      // Add more specific adjustments for other weapons/tools as needed
+      if (this.game?.models[definition.name]) {
+        const weaponModel = this.game.models[definition.name].scene;
 
-      this.rightHandBone.add(weaponModel);
-      this.equippedWeapon = {
-        definition: definition,
-        modelInstance: weaponModel,
-        attachedBone: this.rightHandBone,
-      };
+        // Reset transformations
+        weaponModel.position.set(0, 0, 0);
+        weaponModel.rotation.set(0, 0, 0);
+        weaponModel.scale.set(1, 1, 1);
 
-      console.log(`${this.name} equipped ${definition.name}.`);
-      if (this.game) {
-        this.game.logEvent(
-          this,
-          "equip",
-          `Equipped ${definition.name}.`,
-          undefined,
-          { item: definition.name },
-          this.mesh!.position
-        );
+        // Adjustments per weapon type (tweak these values)
+        if (definition.id === "sword") {
+          weaponModel.rotateX(Math.PI / 2); // Align with hand
+          weaponModel.rotateY(Math.PI); // Face forward
+          weaponModel.position.set(0, 0.2, 0); // Move to tip of hand (adjust Y)
+          weaponModel.scale.set(1.0, 1.0, 1.0); // Adjust scale
+        } else if (definition.id === "axe") {
+          weaponModel.rotateX(Math.PI / 2);
+          weaponModel.rotateZ(-Math.PI / 2);
+          weaponModel.position.set(0, 0.25, 0); // Adjust for axe handle
+          weaponModel.scale.set(0.9, 0.9, 0.9);
+        } else if (definition.id === "pickaxe") {
+          weaponModel.rotateX(Math.PI / 2);
+          weaponModel.rotateZ(-Math.PI / 2);
+          weaponModel.position.set(0, 0.25, 0);
+          weaponModel.scale.set(0.9, 0.9, 0.9);
+        }
+
+        // Add to hand bone
+        this.rightHandBone.add(weaponModel);
+        this.equippedWeapon = {
+          definition: definition,
+          modelInstance: weaponModel,
+          attachedBone: this.rightHandBone,
+        };
+
+        // Debugging: Visualize hand bone orientation
+        const axesHelper = new AxesHelper(0.5);
+        this.rightHandBone.add(axesHelper);
+
+        console.log(`${this.name} equipped ${definition.name}.`);
+        if (this.game) {
+          this.game.logEvent(
+            this,
+            "equip",
+            `Equipped ${definition.name}.`,
+            undefined,
+            { item: definition.name },
+            this.mesh!.position
+          );
+        }
       }
     } catch (error) {
       console.error(
