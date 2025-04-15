@@ -10,32 +10,25 @@ interface ActiveSprite {
   material: THREE.SpriteMaterial;
 }
 
-interface ActiveText {
-  element: HTMLElement;
-  startTime: number;
-}
-
 export class NotificationManager {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
-  private uiContainer: HTMLElement;
-  private activeAttackSprites: ActiveSprite[] = [];
-  private activeItemTexts: ActiveText[] = [];
+  private activeSprites: ActiveSprite[] = []; // Combined array for all sprites
 
   private readonly spriteDuration = 1.2; // seconds
   private readonly spriteFlySpeed = 1.5; // world units per second
   private readonly spriteScale = 0.3;
-
-  private readonly textDuration = 1.5; // seconds (CSS animation handles timing)
+  private readonly attackNumberFontSize = 40; // Smaller font size for attack numbers
+  private readonly itemTextFontSize = 56; // Larger font size for item text
 
   constructor(
     scene: THREE.Scene,
     camera: THREE.PerspectiveCamera,
-    uiContainer: HTMLElement
+    uiContainer: HTMLElement // Keep uiContainer for potential future HTML notifications
   ) {
     this.scene = scene;
     this.camera = camera;
-    this.uiContainer = uiContainer; // Container for HTML notifications
+    // uiContainer is no longer used for item added text, but keep for future
   }
 
   /**
@@ -44,21 +37,61 @@ export class NotificationManager {
    * @param position The world position where the damage occurred.
    */
   createAttackNumberSprite(amount: number, position: THREE.Vector3): void {
+    const text = amount.toString();
+    const color = "rgba(255, 50, 50, 1)"; // Red color
+    this.createSpriteNotification(
+      text,
+      color,
+      position,
+      this.attackNumberFontSize
+    );
+  }
+
+  /**
+   * Creates a floating text notification sprite for items added to the inventory.
+   * @param itemId The ID of the item added.
+   * @param count The number of items added.
+   * @param position The world position where the item was obtained.
+   */
+  createItemAddedSprite(
+    itemId: string,
+    count: number,
+    position: THREE.Vector3
+  ): void {
+    const definition = getItemDefinition(itemId);
+    const itemName = definition ? definition.name : itemId; // Fallback to ID
+    const text = `+${count} ${itemName}`;
+    const color = "rgba(144, 238, 144, 1)"; // Light green color
+    this.createSpriteNotification(text, color, position, this.itemTextFontSize);
+  }
+
+  /**
+   * Generic function to create a text sprite notification.
+   * @param text The text content for the sprite.
+   * @param color The CSS color string for the text.
+   * @param position The world position for the sprite.
+   * @param fontSize The font size in pixels.
+   */
+  private createSpriteNotification(
+    text: string,
+    color: string,
+    position: THREE.Vector3,
+    fontSize: number
+  ): void {
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     if (!context) return;
 
-    const fontSize = 48;
-    const padding = 10;
     context.font = `bold ${fontSize}px Arial`;
-    const textWidth = context.measureText(amount.toString()).width;
+    const padding = 10;
+    const textWidth = context.measureText(text).width;
 
     canvas.width = textWidth + padding * 2;
     canvas.height = fontSize + padding * 2;
 
-    // Re-apply font after resize
+    // Re-apply font and styles after resize
     context.font = `bold ${fontSize}px Arial`;
-    context.fillStyle = "rgba(255, 50, 50, 1)"; // Red color
+    context.fillStyle = color;
     context.textAlign = "center";
     context.textBaseline = "middle";
     context.shadowColor = "rgba(0, 0, 0, 0.7)";
@@ -66,11 +99,7 @@ export class NotificationManager {
     context.shadowOffsetX = 2;
     context.shadowOffsetY = 2;
 
-    context.fillText(
-      amount.toString(),
-      canvas.width / 2,
-      canvas.height / 2 + 2
-    ); // Adjust Y slightly for better centering
+    context.fillText(text, canvas.width / 2, canvas.height / 2 + 2); // Adjust Y slightly
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
@@ -78,9 +107,9 @@ export class NotificationManager {
     const material = new THREE.SpriteMaterial({
       map: texture,
       transparent: true,
-      depthTest: true, // Enable depth testing
-      depthWrite: false, // Keep depthWrite false for transparency
-      sizeAttenuation: true, // Scale with distance
+      depthTest: true,
+      depthWrite: false,
+      sizeAttenuation: true,
     });
 
     const sprite = new THREE.Sprite(material);
@@ -91,11 +120,11 @@ export class NotificationManager {
       this.spriteScale
     );
     sprite.position.copy(position);
-    sprite.center.set(0.5, 0.5); // Ensure scaling is from center
+    sprite.center.set(0.5, 0.5);
 
     this.scene.add(sprite);
 
-    this.activeAttackSprites.push({
+    this.activeSprites.push({
       sprite,
       startTime: performance.now() / 1000,
       initialPosition: position.clone(),
@@ -105,71 +134,15 @@ export class NotificationManager {
   }
 
   /**
-   * Creates a floating text notification for items added to the inventory.
-   * @param itemId The ID of the item added.
-   * @param count The number of items added.
-   */
-  createItemAddedText(itemId: string, count: number): void {
-    const definition = getItemDefinition(itemId);
-    const itemName = definition ? definition.name : itemId; // Fallback to ID if no definition
-
-    const textElement = document.createElement("div");
-    textElement.classList.add("item-added-notification");
-    textElement.textContent = `+${count} ${itemName}`;
-
-    this.uiContainer.appendChild(textElement);
-
-    this.activeItemTexts.push({
-      element: textElement,
-      startTime: performance.now() / 1000,
-    });
-
-    // Remove the element after the CSS animation completes
-    textElement.addEventListener(
-      "animationend",
-      () => {
-        if (textElement.parentNode === this.uiContainer) {
-          this.uiContainer.removeChild(textElement);
-          // Also remove from active list to prevent memory leaks if animationend fires late
-          const index = this.activeItemTexts.findIndex(
-            (t) => t.element === textElement
-          );
-          if (index > -1) {
-            this.activeItemTexts.splice(index, 1);
-          }
-        }
-      },
-      { once: true }
-    );
-
-    // Fallback removal in case animationend doesn't fire reliably
-    setTimeout(
-      () => {
-        if (textElement.parentNode === this.uiContainer) {
-          this.uiContainer.removeChild(textElement);
-        }
-        // Remove from active list
-        const index = this.activeItemTexts.findIndex(
-          (t) => t.element === textElement
-        );
-        if (index > -1) {
-          this.activeItemTexts.splice(index, 1);
-        }
-      },
-      this.textDuration * 1000 + 100
-    ); // Add a small buffer
-  }
-
-  /**
    * Updates the position and opacity of active notifications.
    * @param deltaTime Time elapsed since the last frame.
    */
   update(deltaTime: number): void {
     const now = performance.now() / 1000;
 
-    // Update Attack Sprites
-    for (let i = this.activeAttackSprites.length - 1; i >= 0; i--) {
-      const data = this.activeAttackSprites[i];
+    // Update Sprites
+    for (let i = this.activeSprites.length - 1; i >= 0; i--) {
+      const data = this.activeSprites[i];
       const elapsedTime = now - data.startTime;
       const progress = Math.min(1.0, elapsedTime / this.spriteDuration);
 
@@ -178,7 +151,7 @@ export class NotificationManager {
         this.scene.remove(data.sprite);
         data.material.dispose();
         data.texture.dispose();
-        this.activeAttackSprites.splice(i, 1);
+        this.activeSprites.splice(i, 1);
       } else {
         // Update position (fly up)
         data.sprite.position.y =
@@ -199,41 +172,18 @@ export class NotificationManager {
         data.material.needsUpdate = true; // Important for opacity changes
       }
     }
-
-    // Update Item Texts (CSS handles animation, just need cleanup check)
-    // The primary cleanup is handled by animationend listener and setTimeout in createItemAddedText
-    // This loop is mainly a fallback or for potential future logic
-    for (let i = this.activeItemTexts.length - 1; i >= 0; i--) {
-      const data = this.activeItemTexts[i];
-      const elapsedTime = now - data.startTime;
-      if (elapsedTime > this.textDuration + 0.5) {
-        // Extra safety cleanup
-        if (data.element.parentNode === this.uiContainer) {
-          this.uiContainer.removeChild(data.element);
-        }
-        this.activeItemTexts.splice(i, 1);
-      }
-    }
   }
 
   /**
    * Cleans up any remaining notifications.
    */
   dispose(): void {
-    // Dispose attack sprites
-    this.activeAttackSprites.forEach((data) => {
+    // Dispose sprites
+    this.activeSprites.forEach((data) => {
       this.scene.remove(data.sprite);
       data.material.dispose();
       data.texture.dispose();
     });
-    this.activeAttackSprites = [];
-
-    // Remove item text elements
-    this.activeItemTexts.forEach((data) => {
-      if (data.element.parentNode === this.uiContainer) {
-        this.uiContainer.removeChild(data.element);
-      }
-    });
-    this.activeItemTexts = [];
+    this.activeSprites = [];
   }
 }

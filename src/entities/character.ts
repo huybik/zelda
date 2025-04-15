@@ -801,9 +801,11 @@ export class Character extends Entity {
                   itemGrant.count
                 );
                 if (addResult && addResult.added > 0) {
-                  this.game.notificationManager?.createItemAddedText(
+                  // Use the new sprite notification
+                  this.game.notificationManager?.createItemAddedSprite(
                     itemGrant.id,
-                    addResult.added
+                    addResult.added,
+                    closestPoint
                   );
                   this.game.logEvent(
                     this,

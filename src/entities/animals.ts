@@ -1,4 +1,4 @@
-/* File: /src/entities/animals.ts */
+/* File: /src/entities/animal.ts */
 import {
   Scene,
   Vector3,
@@ -558,9 +558,11 @@ export class Animal extends Entity {
         if (itemId && count > 0) {
           const addResult = attacker.inventory?.addItem(itemId, count);
           if (addResult && addResult.added > 0) {
-            this.game.notificationManager?.createItemAddedText(
+            // Use the new sprite notification
+            this.game.notificationManager?.createItemAddedSprite(
               itemId,
-              addResult.added
+              addResult.added,
+              this.mesh!.position.clone().add(new Vector3(0, 0.5, 0)) // Position above animal
             );
           } else {
             // Log player inventory full? (Optional)
