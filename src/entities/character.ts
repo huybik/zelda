@@ -90,6 +90,16 @@ export class Character extends Entity {
   rightHandBone: Bone | null = null;
   equippedWeapon: EquippedItem | null = null; // Stores definition and model instance
 
+  // Helper quaternions for weapon orientation
+  private _charWorldQuat = new Quaternion();
+  private _handWorldQuat = new Quaternion();
+  private _targetLocalQuat = new Quaternion();
+  // Assumes weapon models point along +Z, rotate 180 deg around Y to face -Z (forward)
+  private _weaponRotationOffset = new Quaternion().setFromAxisAngle(
+    new Vector3(0, 0, 0),
+    Math.PI
+  );
+
   constructor(
     scene: Scene,
     position: Vector3,
@@ -469,6 +479,7 @@ export class Character extends Entity {
         weaponModel.scale.set(0.4, 0.4, 0.4);
         weaponModel.position.set(0, 0.25, 0);
       }
+      // Ensure DOM update cycle completes if needed before attaching
       await new Promise<void>((resolve) =>
         requestAnimationFrame(() => resolve())
       );
@@ -476,18 +487,9 @@ export class Character extends Entity {
       // Attach to the right hand bone
       this.rightHandBone.add(weaponModel);
 
-      // Align weapon's world orientation with character's forward direction
-      const handBoneWorldQuaternion = new Quaternion();
-      this.rightHandBone.getWorldQuaternion(handBoneWorldQuaternion);
-      weaponModel.quaternion
-        .copy(this.mesh!.quaternion) // Character's world rotation
-        .premultiply(handBoneWorldQuaternion.invert()); // Adjust for hand bone's orientation
-
-      // Optional: Apply additional local rotation if weapon model orientation needs adjustment
-      // Example: If sword blade points along +Z instead of -Z, rotate Y by π
-      // if (definition.id === "sword") {
-      //   weaponModel.rotateY(Math.PI);
-      // }
+      // Initial local rotation is set to identity (or a fixed offset if needed)
+      // The actual orientation will be handled in updateWeaponOrientation
+      weaponModel.rotation.set(0, 0, 0);
 
       // Store equipped weapon data
       this.equippedWeapon = {
@@ -987,6 +989,30 @@ export class Character extends Entity {
     // Add other actions here if needed
   }
 
+  updateWeaponOrientation(): void {
+    if (this.equippedWeapon && this.rightHandBone && this.mesh) {
+      const weaponModel = this.equippedWeapon.modelInstance;
+      const handBone = this.rightHandBone;
+
+      // Get current world quaternions (ensure matrices are updated if needed,
+      // but typically handled by renderer before frame)
+      this.mesh.getWorldQuaternion(this._charWorldQuat);
+      handBone.getWorldQuaternion(this._handWorldQuat);
+
+      // Calculate the desired local rotation: inv(HandWorld) * CharWorld
+      this._targetLocalQuat
+        .copy(this._handWorldQuat)
+        .invert()
+        .multiply(this._charWorldQuat);
+
+      // Apply offset if weapon model points along +Z instead of -Z (character forward)
+      this._targetLocalQuat.multiply(this._weaponRotationOffset);
+
+      // Apply the calculated local rotation to the weapon model
+      weaponModel.quaternion.copy(this._targetLocalQuat);
+    }
+  }
+
   update(deltaTime: number, options: UpdateOptions = {}): void {
     if (this.isDead) {
       this.updateAnimations(deltaTime); // Keep updating mixer for death animation
@@ -1045,7 +1071,8 @@ export class Character extends Entity {
       this.attackTriggered = false;
     }
 
-    this.updateAnimations(deltaTime);
+    this.updateAnimations(deltaTime); // Mixer updates bone transforms here
+    this.updateWeaponOrientation(); // Ensure weapon faces forward after animation update
     this.updateBoundingBox(); // Update box after position change
   }
 
