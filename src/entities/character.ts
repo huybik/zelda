@@ -444,26 +444,48 @@ export class Character extends Entity {
       return;
     }
 
-    this.unequipWeapon();
+    // Ensure the model is loaded (or load it)
+    const modelKey = definition.modelFileName; // Use filename as key for simplicity
+    let weaponModelData = this.game?.models[modelKey];
+    if (!weaponModelData) {
+      try {
+        const modelPaths = {
+          [modelKey]: `assets/items/weapons/${definition.modelFileName}`,
+        };
+        const loadedModels = await loadModels(modelPaths);
+        if (this.game) this.game.models[modelKey] = loadedModels[modelKey];
+        weaponModelData = loadedModels[modelKey];
+      } catch (error) {
+        console.error(
+          `Failed to load weapon model ${definition.modelFileName}:`,
+          error
+        );
+        if (this.game) {
+          this.game.logEvent(
+            this,
+            "equip_fail",
+            `Failed to equip ${definition.name} (load error).`,
+            undefined,
+            { item: definition.name, error: (error as Error).message },
+            this.mesh!.position
+          );
+        }
+        return;
+      }
+    }
+
+    if (!weaponModelData?.scene) {
+      console.error(`Weapon model data invalid for ${definition.name}`);
+      return;
+    }
+
+    // --- Start Equip Process ---
+    this.unequipWeapon(); // Unequip previous weapon first
 
     try {
-      const modelPaths = {
-        [definition.name]: `assets/items/weapons/${definition.modelFileName}`,
-      };
-      let weaponModel = null;
-      if (this.game && !this.game.models[definition.name]) {
-        const models = await loadModels(modelPaths);
-        this.game.models[definition.name] = models[definition.name];
-        weaponModel = this.game.models[definition.name].scene.clone();
-      } else if (this.game?.models[definition.name]) {
-        weaponModel = this.game.models[definition.name].scene.clone();
-      }
+      const weaponModel = weaponModelData.scene.clone();
 
-      if (!weaponModel) {
-        throw new Error(`Failed to load weapon model for ${definition.name}`);
-      }
-
-      // Reset transformations
+      // **Critical Reset:** Ensure clean state before applying transforms
       weaponModel.position.set(0, 0, 0);
       weaponModel.rotation.set(0, 0, 0);
       weaponModel.scale.set(1, 1, 1);
@@ -479,13 +501,17 @@ export class Character extends Entity {
         weaponModel.scale.set(0.5, 0.5, 0.5);
         weaponModel.position.set(0, 0.25, 0);
       }
-      // Ensure DOM update cycle completes if needed before attaching
+      // Add more weapon types if needed
+
+      // Wait a frame using requestAnimationFrame before attaching?
+      // This might help ensure transforms are calculated correctly.
+      // It can slightly delay the visual appearance.
+      // await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Attach to the right hand bone
       this.rightHandBone.add(weaponModel);
 
-      // Initial local rotation is set to identity (or a fixed offset if needed)
-      // The actual orientation will be handled in updateWeaponOrientation
+      // Reset local rotation AFTER attaching (orientation handled in update)
       weaponModel.rotation.set(0, 0, 0);
 
       // Store equipped weapon data
@@ -507,15 +533,12 @@ export class Character extends Entity {
         );
       }
     } catch (error) {
-      console.error(
-        `Failed to load and equip weapon ${definition.name}:`,
-        error
-      );
+      console.error(`Error during weapon attach ${definition.name}:`, error);
       if (this.game) {
         this.game.logEvent(
           this,
           "equip_fail",
-          `Failed to equip ${definition.name}.`,
+          `Failed to equip ${definition.name} (attach error).`,
           undefined,
           { item: definition.name, error: (error as Error).message },
           this.mesh!.position
