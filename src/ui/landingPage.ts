@@ -1,5 +1,7 @@
 /* File: /src/ui/landingPage.ts */
 import { Game } from "../main";
+import { Profession, ProfessionStartingWeapon } from "../core/items"; // Import Profession enum and starting weapon map
+import { getItemDefinition } from "../core/items"; // Import item definitions
 
 interface Language {
   code: string;
@@ -51,7 +53,11 @@ export class LandingPage {
     this.game = game;
   }
 
-  setup(savedName: string | null, savedLang: string | null): void {
+  setup(
+    savedName: string | null,
+    savedLang: string | null,
+    savedProfession: Profession | null
+  ): void {
     const landingPage = document.getElementById("landing-page");
     const nameInput = document.getElementById(
       "player-name"
@@ -69,6 +75,15 @@ export class LandingPage {
     const gameContainer = document.getElementById("game-container");
     const uiContainer = document.getElementById("ui-container");
     const loadingText = landingPage?.querySelector(".loading-text");
+    const professionSelector = document.getElementById(
+      "profession-selector"
+    ) as HTMLDivElement;
+    const startingWeaponDisplay = document.getElementById(
+      "starting-weapon"
+    ) as HTMLSpanElement;
+    const startingWeaponIcon = document.getElementById(
+      "starting-weapon-icon"
+    ) as HTMLImageElement; // Get the image element
 
     if (
       !landingPage ||
@@ -79,7 +94,10 @@ export class LandingPage {
       !startButton ||
       !gameContainer ||
       !uiContainer ||
-      !loadingText
+      !loadingText ||
+      !professionSelector ||
+      !startingWeaponDisplay ||
+      !startingWeaponIcon // Check for icon element
     ) {
       console.error("Landing page elements not found!");
       this.game.isGameStarted = true;
@@ -92,7 +110,62 @@ export class LandingPage {
     this.game.setPauseState(true);
 
     let selectedLanguageCode = savedLang || "en";
+    let selectedProfession = savedProfession || Profession.Hunter; // Default to Hunter
 
+    // --- Profession Selection ---
+    const updateStartingWeaponDisplay = () => {
+      const weaponId = ProfessionStartingWeapon[selectedProfession];
+      if (weaponId) {
+        const weaponDef = getItemDefinition(weaponId);
+        startingWeaponDisplay.textContent = weaponDef
+          ? weaponDef.name
+          : "Unknown";
+        // Update icon
+        startingWeaponIcon.src = weaponDef
+          ? `assets/items/icons/${weaponDef.icon}`
+          : "";
+        startingWeaponIcon.alt = weaponDef ? weaponDef.name : "";
+        startingWeaponIcon.style.display = weaponDef ? "inline-block" : "none";
+      } else {
+        startingWeaponDisplay.textContent = "None";
+        startingWeaponIcon.style.display = "none"; // Hide icon if no weapon
+      }
+    };
+
+    // Populate profession radio buttons
+    Object.values(Profession).forEach((prof) => {
+      if (prof === Profession.None) return; // Don't allow selecting 'None'
+
+      const radioId = `prof-${prof}`;
+      const label = document.createElement("label");
+      label.htmlFor = radioId;
+      label.textContent = prof;
+
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.id = radioId;
+      radio.name = "profession";
+      radio.value = prof;
+      radio.checked = prof === selectedProfession;
+
+      radio.addEventListener("change", () => {
+        if (radio.checked) {
+          selectedProfession = prof as Profession;
+          updateStartingWeaponDisplay();
+        }
+      });
+
+      const container = document.createElement("div"); // Container for radio + label
+      container.classList.add("profession-option");
+      container.appendChild(radio);
+      container.appendChild(label);
+
+      professionSelector.appendChild(container);
+    });
+
+    updateStartingWeaponDisplay(); // Initial display
+
+    // --- Language Selection ---
     const showLanguageList = () => {
       if (this.languageListHideTimeout) {
         clearTimeout(this.languageListHideTimeout);
@@ -163,15 +236,20 @@ export class LandingPage {
     });
     langSearchInput.addEventListener("blur", () => hideLanguageList());
 
+    // --- Start Button ---
     startButton.onclick = () => {
       const playerName = nameInput.value.trim() || "Player";
       localStorage.setItem("playerName", playerName);
       localStorage.setItem("selectedLanguage", selectedLanguageCode);
+      localStorage.setItem("selectedProfession", selectedProfession); // Save profession
       this.game.language = selectedLanguageCode;
+      this.game.playerProfession = selectedProfession; // Set profession in Game
 
       if (this.game.activeCharacter) {
         this.game.activeCharacter.name = playerName;
+        this.game.activeCharacter.profession = selectedProfession; // Set profession on Character
         this.game.activeCharacter.updateNameDisplay(playerName);
+        this.game.giveStartingWeapon(); // Give weapon after character is ready
       }
 
       landingPage.classList.add("hidden");

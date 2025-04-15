@@ -1,5 +1,4 @@
 /* File: /style.css */
-/* File: /style.css */
 html,
 body {
   margin: 0;
@@ -135,6 +134,54 @@ body {
 #language-list li.selected {
   background-color: #d0eaff;
   font-weight: bold;
+}
+
+#profession-selector {
+  text-align: left;
+  padding: 10px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 5px;
+}
+
+.profession-option {
+  margin-bottom: 5px; /* Space between profession options */
+  display: flex;
+  align-items: center;
+}
+
+#profession-selector label {
+  margin-left: 5px;
+  margin-right: 15px;
+  font-size: 1em;
+  cursor: pointer;
+}
+
+#profession-selector input[type="radio"] {
+  cursor: pointer;
+  margin-right: 5px; /* Space between radio and label */
+}
+
+.profession-info {
+  font-size: 0.9em;
+  color: #ccc;
+  margin-top: -5px;
+  text-align: left;
+  padding-left: 10px;
+  display: flex; /* Align icon and text */
+  align-items: center;
+}
+
+#starting-weapon {
+  font-weight: bold;
+  color: #fff;
+  margin-left: 5px; /* Space between icon and text */
+}
+
+.weapon-icon {
+  width: 32px; /* Adjust size as needed */
+  height: 32px;
+  vertical-align: middle; /* Align icon with text */
+  margin-right: 5px; /* Space before text */
 }
 
 #start-game-button {

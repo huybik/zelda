@@ -1,4 +1,4 @@
-// File: /src/core/environment.ts
+/* File: /src/core/environment.ts */
 import {
   Scene,
   Vector3,
@@ -20,6 +20,12 @@ import {
 } from "../models/objects";
 import { getTerrainHeight, randomFloat, Inventory } from "./utils";
 import { Game } from "../main";
+import {
+  Profession,
+  ProfessionStartingWeapon,
+  getItemDefinition,
+  isWeapon,
+} from "./items"; // Import Profession utils
 
 export function populateEnvironment(
   scene: Scene,
@@ -46,6 +52,7 @@ export function populateEnvironment(
     pos: Vector3,
     name: string,
     modelKey: string,
+    profession: Profession, // Add profession parameter
     isPlayer: boolean = false
   ): Character => {
     const model = models[modelKey];
@@ -60,6 +67,8 @@ export function populateEnvironment(
     );
     character.mesh!.position.y = getTerrainHeight(scene, pos.x, pos.z);
     character.game = gameInstance;
+    character.profession = profession; // Assign profession
+
     if (isPlayer) {
       character.name = "Player";
       character.userData.isPlayer = true;
@@ -70,6 +79,28 @@ export function populateEnvironment(
       character.userData.isNPC = true;
       if (!character.aiController)
         console.warn(`NPC ${name} created without AIController!`);
+
+      // Give starting weapon based on profession for NPCs
+      const startingWeaponId = ProfessionStartingWeapon[profession];
+      if (startingWeaponId) {
+        const addResult = character.inventory?.addItem(startingWeaponId, 1);
+        if (addResult && addResult.totalAdded > 0) {
+          const weaponDef = getItemDefinition(startingWeaponId);
+          if (weaponDef && isWeapon(weaponDef)) {
+            // Use requestAnimationFrame to delay slightly, ensuring bones are ready.
+            requestAnimationFrame(() => {
+              character.equipWeapon(weaponDef);
+            });
+            console.log(
+              `Gave starting weapon ${weaponDef.name} to NPC ${character.name} (${profession})`
+            );
+          }
+        } else {
+          console.warn(
+            `Could not give starting weapon ${startingWeaponId} to NPC ${character.name} (inventory full?).`
+          );
+        }
+      }
     }
     entities.push(character);
     collidableObjects.push(character.mesh!);
@@ -77,36 +108,39 @@ export function populateEnvironment(
     return character;
   };
 
-  // Add NPCs
+  // Add NPCs with professions
   const farmerGiles = addCharacter(
     villageCenter.clone().add(new Vector3(-12, 0, 2)),
     "Farmer Giles",
-    "tavernMan"
+    "tavernMan",
+    Profession.Farmer // Assign Farmer profession
   );
   farmerGiles.persona =
     "A hardworking farmer who values community and is always willing to help others. He is knowledgeable about crops and livestock but can be a bit stubborn. He prefers to stay close to his farm but will venture out if necessary.";
   if (farmerGiles.aiController)
     farmerGiles.aiController.persona = farmerGiles.persona;
 
-  // const blacksmithBrynn = addCharacter(
-  //   villageCenter.clone().add(new Vector3(10, 0, -3)),
-  //   "Blacksmith Brynn",
-  //   "woman"
-  // );
-  // blacksmithBrynn.persona =
-  //   "A skilled artisan who takes pride in her work. She is strong-willed and independent, often focused on her craft. She can be gruff but has a kind heart, especially towards those in need.";
-  // if (blacksmithBrynn.aiController)
-  //   blacksmithBrynn.aiController.persona = blacksmithBrynn.persona;
+  const blacksmithBrynn = addCharacter(
+    villageCenter.clone().add(new Vector3(10, 0, -3)),
+    "Blacksmith Brynn",
+    "woman",
+    Profession.Blacksmith // Assign Blacksmith profession
+  );
+  blacksmithBrynn.persona =
+    "A skilled artisan who takes pride in her work. She is strong-willed and independent, often focused on her craft. She can be gruff but has a kind heart, especially towards those in need.";
+  if (blacksmithBrynn.aiController)
+    blacksmithBrynn.aiController.persona = blacksmithBrynn.persona;
 
-  // const hunterRex = addCharacter(
-  //   new Vector3(halfSize * 0.4, 0, -halfSize * 0.3),
-  //   "Hunter Rex",
-  //   "oldMan"
-  // );
-  // hunterRex.persona =
-  //   "An experienced tracker and survivalist. He is quiet and observant, preferring the wilderness over the village. He is resourceful and can be relied upon in tough situations but is not very social.";
-  // if (hunterRex.aiController)
-  //   hunterRex.aiController.persona = hunterRex.persona;
+  const hunterRex = addCharacter(
+    new Vector3(halfSize * 0.4, 0, -halfSize * 0.3),
+    "Hunter Rex",
+    "oldMan",
+    Profession.Hunter // Assign Hunter profession
+  );
+  hunterRex.persona =
+    "An experienced tracker and survivalist. He is quiet and observant, preferring the wilderness over the village. He is resourceful and can be relied upon in tough situations but is not very social.";
+  if (hunterRex.aiController)
+    hunterRex.aiController.persona = hunterRex.persona;
 
   // Add Objects (Trees, Rocks, Herbs)
   const addObject = (

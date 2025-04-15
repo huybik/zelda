@@ -53,6 +53,7 @@ import {
   isWeapon,
   isConsumable,
   EquippedItem, // Added item types
+  Profession, // Added Profession enum
 } from "../core/items";
 import { loadModels } from "../core/assetLoader"; // Added weapon loader
 import { Animal } from "./animals";
@@ -80,6 +81,7 @@ export class Character extends Entity {
   attackTriggered: boolean = false;
   inventory: Inventory | null;
   persona: string = "";
+  profession: Profession = Profession.None; // Added profession property
   currentAction?: AnimationAction;
   actionType: string = "none"; // "attack", "chat", "none"
   isPerformingAction: boolean = false;
@@ -689,8 +691,6 @@ export class Character extends Entity {
     const baseDamage = this.equippedWeapon
       ? this.equippedWeapon.definition.damage
       : 2;
-    // Apply player bonus or use base damage for NPCs
-    const damage = this.userData.isPlayer ? baseDamage * 1.5 : baseDamage;
 
     if (
       !this.mesh ||
@@ -769,37 +769,66 @@ export class Character extends Entity {
     if (closestTarget && closestPoint) {
       const targetMesh = (closestTarget as any).mesh ?? closestTarget;
 
-      // Apply appropriate damage based on equipped weapon type vs target type
-      let effectiveDamage = damage;
+      // --- Calculate Damage Modifiers ---
+      let damageMultiplier = 1.0;
+
+      // 1. Profession Weapon Efficiency Bonus
       if (this.equippedWeapon) {
-        const weaponType = this.equippedWeapon.definition.type;
-        const weaponId = this.equippedWeapon.definition.id;
-        const targetResource = targetMesh.userData.resource;
+        const weaponDef = this.equippedWeapon.definition;
+        let efficientProfession: Profession | null = null;
+        if (weaponDef.id === "sword") efficientProfession = Profession.Hunter;
+        else if (weaponDef.id === "pickaxe")
+          efficientProfession = Profession.Blacksmith;
+        else if (weaponDef.id === "axe")
+          efficientProfession = Profession.Farmer;
 
-        if (targetResource === "wood" && weaponId === "axe")
-          effectiveDamage *= 2.0; // Axe bonus vs wood
-        else if (targetResource === "stone" && weaponId === "pickaxe")
-          effectiveDamage *= 2.0; // Pickaxe bonus vs stone
-        else if (targetResource && weaponType !== ItemType.Tool)
-          effectiveDamage *= 0.5; // Less damage to resources without correct tool type
-        else if (
-          targetResource &&
-          weaponType === ItemType.Tool &&
-          weaponId !== "axe" &&
-          weaponId !== "pickaxe"
-        )
-          effectiveDamage *= 0.75; // Generic tool vs resource
-        // No damage modification for weapons vs entities or incorrect tools vs resources needed here (base damage applies)
-      } else {
-        // Fist damage vs resources is low
-        if (targetMesh.userData.resource) effectiveDamage *= 0.25;
+        if (this.profession === efficientProfession) {
+          damageMultiplier *= 2.0; // 100% bonus
+        }
       }
-      effectiveDamage = Math.max(1, Math.round(effectiveDamage)); // Ensure at least 1 damage
 
+      // 2. Weapon vs Target Bonus
+      const targetIsEntity = closestTarget instanceof Entity;
+      const targetResource = targetMesh.userData.resource;
+      const weaponId = this.equippedWeapon?.definition.id;
+
+      if (weaponId === "sword" && targetIsEntity) {
+        damageMultiplier *= 2.0;
+      } else if (weaponId === "axe" && targetResource === "wood") {
+        damageMultiplier *= 2.0;
+      } else if (weaponId === "pickaxe" && targetResource === "stone") {
+        damageMultiplier *= 2.0;
+      } else if (!this.equippedWeapon && targetResource) {
+        // Fist damage vs resources is low
+        damageMultiplier *= 0.25;
+      } else if (
+        this.equippedWeapon &&
+        targetResource &&
+        this.equippedWeapon.definition.type !== ItemType.Tool
+      ) {
+        // Weapon vs resource (wrong type)
+        damageMultiplier *= 0.5;
+      } else if (
+        this.equippedWeapon &&
+        targetResource &&
+        this.equippedWeapon.definition.type === ItemType.Tool &&
+        weaponId !== "axe" &&
+        weaponId !== "pickaxe"
+      ) {
+        // Generic tool vs resource
+        damageMultiplier *= 0.75;
+      }
+
+      const effectiveDamage = Math.max(
+        1,
+        Math.round(baseDamage * damageMultiplier)
+      ); // Ensure at least 1 damage
+
+      // --- Apply Damage ---
       // --- Target is a Resource ---
       if (targetMesh.userData.resource) {
         console.log(
-          `${this.name} attack hit resource ${targetMesh.name || targetMesh.userData.resource}`
+          `${this.name} attack hit resource ${targetMesh.name || targetMesh.userData.resource} for ${effectiveDamage} damage.`
         );
         const resource = targetMesh.userData.resource as string;
         const currentHealth = targetMesh.userData.health as number;
@@ -896,7 +925,7 @@ export class Character extends Entity {
       // --- Target is an Entity (Character or Animal) ---
       else if (closestTarget instanceof Entity) {
         console.log(
-          `${this.name} attack hit entity ${closestTarget.name} at ${closestPoint.x.toFixed(1)},${closestPoint.y.toFixed(1)},${closestPoint.z.toFixed(1)}`
+          `${this.name} attack hit entity ${closestTarget.name} at ${closestPoint.x.toFixed(1)},${closestPoint.y.toFixed(1)},${closestPoint.z.toFixed(1)} for ${effectiveDamage} damage.`
         );
         closestTarget.takeDamage(effectiveDamage, this, closestPoint); // Pass hit location
         // this.game.spawnParticleEffect(closestPoint, "red"); // Moved to takeDamage

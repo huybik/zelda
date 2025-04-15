@@ -14,6 +14,33 @@ export enum EquipSlot {
   // Add other slots if needed (e.g., Head, Chest)
 }
 
+// Define Professions
+export enum Profession {
+  None = "None",
+  Hunter = "Hunter",
+  Blacksmith = "Blacksmith",
+  Farmer = "Farmer",
+}
+
+// Map professions to their efficient weapon types
+export const ProfessionWeaponMap: Record<
+  Profession,
+  ItemType.Weapon | ItemType.Tool | null
+> = {
+  [Profession.None]: null,
+  [Profession.Hunter]: ItemType.Weapon, // Hunter uses Swords (Weapon type)
+  [Profession.Blacksmith]: ItemType.Tool, // Blacksmith uses Pickaxe (Tool type)
+  [Profession.Farmer]: ItemType.Tool, // Farmer uses Axe (Tool type)
+};
+
+// Map professions to specific starting weapon IDs
+export const ProfessionStartingWeapon: Record<Profession, string | null> = {
+  [Profession.None]: null,
+  [Profession.Hunter]: "sword",
+  [Profession.Blacksmith]: "pickaxe",
+  [Profession.Farmer]: "axe",
+};
+
 // Base interface for all items
 export interface ItemDefinition {
   id: string; // Unique identifier (e.g., 'wood', 'sword_basic')
@@ -118,7 +145,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     id: "axe",
     name: "Axe",
     description:
-      "A basic axe, effective for chopping wood and as a makeshift weapon.",
+      "A basic axe, effective for chopping wood and as a makeshift weapon. Favored by Farmers.",
     icon: "axe.jpeg",
     type: ItemType.Tool,
     stackable: false,
@@ -130,7 +157,8 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
   pickaxe: {
     id: "pickaxe",
     name: "Pickaxe",
-    description: "A sturdy pickaxe, good for mining stone and breaking rocks.",
+    description:
+      "A sturdy pickaxe, good for mining stone and breaking rocks. Favored by Blacksmiths.",
     icon: "pickaxe.jpeg",
     type: ItemType.Tool,
     stackable: false,
@@ -143,7 +171,8 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
   sword: {
     id: "sword",
     name: "Sword",
-    description: "A simple but reliable iron sword for combat.",
+    description:
+      "A simple but reliable iron sword for combat. Favored by Hunters.",
     icon: "sword.jpeg",
     type: ItemType.Weapon,
     stackable: false,

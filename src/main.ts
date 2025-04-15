@@ -1,5 +1,4 @@
 /* File: /src/main.ts */
-/* File: /src/main.ts */
 import * as THREE from "three";
 import {
   Scene,
@@ -34,9 +33,9 @@ import {
   Inventory,
   getTerrainHeight,
   Quest,
-  InventoryItem,
+  InventoryItem, // Added InventoryItem
   EventEntry,
-} from "./core/utils.ts"; // Added InventoryItem
+} from "./core/utils.ts";
 import { WORLD_SIZE, TERRAIN_SEGMENTS } from "./core/constants";
 import { loadModels } from "./core/assetLoader";
 import { createTerrain } from "./core/terrain";
@@ -53,7 +52,13 @@ import { LandingPage } from "./ui/landingPage.ts";
 import { QuestManager } from "./core/questManager.ts";
 import { PortalManager } from "./objects/portalManagement";
 import { TradingSystem } from "./systems/tradingSystem.ts"; // Import TradingSystem
-import { getItemDefinition, WeaponDefinition, isWeapon } from "./core/items"; // Import item utils
+import {
+  getItemDefinition,
+  WeaponDefinition,
+  isWeapon,
+  Profession, // Import Profession
+  ProfessionStartingWeapon, // Import starting weapon map
+} from "./core/items";
 
 export class Game {
   scene: Scene | null = null;
@@ -90,6 +95,7 @@ export class Game {
   wasPausedBeforeVisibilityChange: boolean = false;
   worldSize: number = WORLD_SIZE;
   language: string = "en";
+  playerProfession: Profession = Profession.None; // Store player's chosen profession
   isGameStarted: boolean = false;
   private landingPage: LandingPage | null = null;
   public portalManager: PortalManager;
@@ -144,7 +150,11 @@ export class Game {
 
     const savedName = localStorage.getItem("playerName");
     const savedLang = localStorage.getItem("selectedLanguage");
+    const savedProfession = localStorage.getItem(
+      "selectedProfession"
+    ) as Profession | null;
     this.language = savedLang || "en";
+    this.playerProfession = savedProfession || Profession.Hunter; // Default if not saved
 
     const urlParams = new URLSearchParams(window.location.search);
     this.hasEnteredFromPortal = urlParams.get("portal") === "true";
@@ -153,11 +163,14 @@ export class Game {
 
     // Player initialized here, inventory is passed
     this.initPlayer(this.models, savedName || "Player");
+    // Set player profession AFTER initialization
+    if (this.activeCharacter)
+      this.activeCharacter.profession = this.playerProfession;
 
     this.initControls();
     this.initMobileControls();
     this.initPhysics();
-    this.initEnvironment(this.models); // NPCs created here
+    this.initEnvironment(this.models); // NPCs created here, including profession weapons
     this.initSystems(); // TradingSystem initialized here
     this.questManager.initQuests();
     this.initUI(); // UI initialized here, including InventoryDisplay
@@ -200,9 +213,6 @@ export class Game {
       }
     });
 
-    // Assign random weapons to NPCs AFTER environment population and display init
-    this.assignStartingWeapons();
-
     // Find Quest Banner elements
     this.questBannerElement = document.getElementById("quest-detail-banner");
     this.questBannerTitle = document.getElementById("quest-banner-title");
@@ -222,7 +232,7 @@ export class Game {
 
     // Setup Landing Page LAST, it will handle initial pause state
     this.landingPage = new LandingPage(this);
-    this.landingPage.setup(savedName, savedLang);
+    this.landingPage.setup(savedName, savedLang, savedProfession); // Pass saved profession
 
     document.addEventListener(
       "pointerlockchange",
@@ -362,27 +372,34 @@ export class Game {
     this.interactableObjects.push(this.activeCharacter); // Add player to interactables if needed (e.g., for targeting)
   }
 
-  /** Assigns a random starting weapon to each NPC. */
-  assignStartingWeapons(): void {
-    const availableWeapons: string[] = ["axe", "pickaxe", "sword"];
-    this.entities.forEach((entity) => {
-      // Ensure it's an NPC Character and not the player
-      if (entity instanceof Character) {
-        entity.inventory?.addItem("herb", 3);
-        const randomWeaponId =
-          availableWeapons[Math.floor(Math.random() * availableWeapons.length)];
-        const weaponDef = getItemDefinition(randomWeaponId);
-        if (weaponDef && isWeapon(weaponDef)) {
-          entity.inventory?.addItem(randomWeaponId, 1);
+  /** Gives the starting weapon to the player based on their chosen profession. */
+  giveStartingWeapon(): void {
+    if (!this.activeCharacter || !this.activeCharacter.inventory) return;
 
+    const startingWeaponId = ProfessionStartingWeapon[this.playerProfession];
+    if (startingWeaponId) {
+      const addResult = this.activeCharacter.inventory.addItem(
+        startingWeaponId,
+        1
+      );
+      if (addResult.totalAdded > 0) {
+        console.log(
+          `Gave starting weapon ${startingWeaponId} to player for profession ${this.playerProfession}.`
+        );
+        // Optionally equip it immediately
+        const weaponDef = getItemDefinition(startingWeaponId);
+        if (weaponDef && isWeapon(weaponDef)) {
           // Use requestAnimationFrame to delay slightly, ensuring bones are ready.
           requestAnimationFrame(() => {
-            entity.equipWeapon(weaponDef);
+            this.activeCharacter?.equipWeapon(weaponDef);
           });
-          console.log(`Assigned ${weaponDef.name} to NPC ${entity.name}`);
         }
+      } else {
+        console.warn(
+          `Could not give starting weapon ${startingWeaponId} to player (inventory full?).`
+        );
       }
-    });
+    }
   }
 
   initControls(): void {
