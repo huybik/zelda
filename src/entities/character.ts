@@ -473,16 +473,13 @@ export class Character extends Entity {
         weaponModel.scale.set(0.5, 0.5, 0.5);
         weaponModel.position.set(0, 0.2, 0); // Offset along hand bone's Y-axis
       } else if (definition.id === "axe") {
-        weaponModel.scale.set(0.4, 0.4, 0.4);
+        weaponModel.scale.set(0.5, 0.5, 0.5);
         weaponModel.position.set(0, 0.25, 0);
       } else if (definition.id === "pickaxe") {
-        weaponModel.scale.set(0.4, 0.4, 0.4);
+        weaponModel.scale.set(0.5, 0.5, 0.5);
         weaponModel.position.set(0, 0.25, 0);
       }
       // Ensure DOM update cycle completes if needed before attaching
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() => resolve())
-      );
 
       // Attach to the right hand bone
       this.rightHandBone.add(weaponModel);
@@ -657,7 +654,7 @@ export class Character extends Entity {
   }
 
   performAttack(): void {
-    const range = 2.5;
+    const range = 3;
     // Use weapon damage if equipped, otherwise a default value (e.g., fist damage)
     const baseDamage = this.equippedWeapon
       ? this.equippedWeapon.definition.damage

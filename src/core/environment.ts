@@ -20,6 +20,8 @@ import {
 import { getTerrainHeight, randomFloat, Inventory } from "./utils";
 import { Game } from "../main";
 
+
+
 export function populateEnvironment(
   scene: Scene,
   worldSize: number,
@@ -135,6 +137,8 @@ export function populateEnvironment(
       obj.userData.boundingBox.setFromObject(obj);
     }
   };
+  
+  
 
   addObject(createTree, worldSize, 25 * 25);
   addObject(

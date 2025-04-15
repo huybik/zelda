@@ -5,6 +5,7 @@ import { Character } from "../entities/character";
 import { Animal } from "../entities/animals";
 import { AIController } from "./npcAI"; // Import AIController for type hinting
 import { InteractionSystem } from "../systems/interaction"; // Import InteractionSystem for type hinting
+import { InventoryItem } from "../core/utils"; // Import InventoryItem
 
 // --- API Key Management ---
 const API_KEY1 = import.meta.env.VITE_API_KEY1;
@@ -68,6 +69,7 @@ export interface Observation {
     health: number;
     isDead: boolean;
     currentAction: string;
+    inventory: Array<InventoryItem | null>; // Add inventory to observation
   };
   nearbyCharacters: Array<{
     id: string;
@@ -75,6 +77,7 @@ export interface Observation {
     health: number;
     isDead: boolean;
     currentAction: string;
+    inventory?: Array<InventoryItem | null>; // Optionally observe others' inventories
   }>;
   nearbyAnimals: Array<{
     id: string;
@@ -114,6 +117,7 @@ export function updateObservation(
     health: controller.character.health,
     isDead: controller.character.isDead,
     currentAction: controller.aiState,
+    inventory: controller.character.inventory?.items ?? [], // Include self inventory
   };
   for (const entity of allEntities) {
     if (entity === controller.character || entity === controller.character.mesh)
@@ -139,6 +143,8 @@ export function updateObservation(
             : entity.isDead
               ? "dead"
               : "unknown"),
+        // Optionally include nearby character inventories if needed for complex AI
+        // inventory: entity.inventory?.items ?? [],
       });
     } else if (entity instanceof Animal) {
       nearbyAnimals.push({
@@ -182,9 +188,20 @@ export function generatePrompt(controller: AIController): string {
     .slice(-10)
     .map((entry) => `[${entry.timestamp}] ${entry.message}`)
     .join("\n");
+
+  // Format inventory for the prompt
+  const formatInventory = (inv: Array<InventoryItem | null>): string => {
+    if (!inv || inv.every((item) => item === null)) return "Empty";
+    return inv
+      .filter((item): item is InventoryItem => item !== null)
+      .map((item) => `${item.name} (${item.count})`)
+      .join(", ");
+  };
+
   const selfState = observation?.self
-    ? `- Health: ${observation.self.health}\n- Current action: ${observation.self.currentAction}`
+    ? `- Health: ${observation.self.health}\n- Current action: ${observation.self.currentAction}\n- Inventory: ${formatInventory(observation.self.inventory)}`
     : "Unknown";
+
   let nearbyCharacters = observation?.nearbyCharacters.length
     ? observation.nearbyCharacters
         .map(
@@ -194,6 +211,7 @@ export function generatePrompt(controller: AIController): string {
             )}, ${c.position.z.toFixed(1)}), health: ${c.health}, ${
               c.isDead ? "dead" : "alive"
             }, action: ${c.currentAction}`
+          // Optionally add inventory: ${formatInventory(c.inventory)}
         )
         .join("\n")
     : "None";
@@ -264,13 +282,36 @@ ${eventLog}
 
 Based on this information, decide your next action. If player told you to do something don't ask for clarification or guidance, just do it.
 Attack target to gather resource.
-Respond ONLY with a valid JSON object:
+You can also trade items with other characters.
+
+Respond ONLY with a valid JSON object using one of the following formats:
+
+1. Attack:
 {
-  "action": "attack" | "chat",
-  "target_id": "target_id_here",
-  "message": "message_here in ${language}",
-  "intent": "less than 10 words reason, response only in ${language} and not dual language"
+  "action": "attack",
+  "target_id": "target_entity_or_resource_id_here",
+  "intent": "brief reason in ${language}"
 }
+
+2. Chat:
+{
+  "action": "chat",
+  "target_id": "target_character_id_here",
+  "message": "message_here in ${language}",
+  "intent": "brief reason in ${language}"
+}
+
+3. Trade:
+{
+  "action": "trade",
+  "target_id": "target_character_id_here",
+  "give_items": [{"id": "item_id", "count": quantity}],
+  "receive_items": [{"id": "item_id", "count": quantity}],
+  "intent": "brief reason for trade in ${language}"
+}
+
+Choose only ONE action format. Ensure item IDs in trade are valid (e.g., 'wood', 'stone', 'herb', 'meat', 'potion', 'axe', 'pickaxe', 'sword', 'coin').
+Intent should be less than 10 words, response only in ${language} and not dual language.
 
 `.trim();
   return prompt;

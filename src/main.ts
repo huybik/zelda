@@ -51,6 +51,7 @@ import { AnimalAIController } from "./ai/animalAI.ts";
 import { LandingPage } from "./ui/landingPage.ts";
 import { QuestManager } from "./core/questManager.ts";
 import { PortalManager } from "./objects/portalManagement";
+import { TradingSystem } from "./systems/tradingSystem.ts"; // Import TradingSystem
 import { getItemDefinition, WeaponDefinition, isWeapon } from "./core/items"; // Import item utils
 
 export class Game {
@@ -65,6 +66,7 @@ export class Game {
   physics: Physics | null = null;
   inventory: Inventory | null = null; // This will be the PLAYER's inventory instance
   interactionSystem: InteractionSystem | null = null;
+  tradingSystem: TradingSystem | null = null; // Add TradingSystem
   hud: HUD | null = null;
   minimap: Minimap | null = null;
   inventoryDisplay: InventoryDisplay | null = null;
@@ -139,7 +141,7 @@ export class Game {
     this.initMobileControls();
     this.initPhysics();
     this.initEnvironment(this.models); // NPCs created here
-    this.initSystems();
+    this.initSystems(); // TradingSystem initialized here
     this.questManager.initQuests();
     this.initUI(); // UI initialized here, including InventoryDisplay
     this.setupUIControls();
@@ -417,6 +419,7 @@ export class Game {
       this.activeCharacter.eventLog,
       this
     );
+    this.tradingSystem = new TradingSystem(this); // Initialize TradingSystem
   }
 
   initUI(): void {
@@ -905,6 +908,48 @@ export class Game {
     // console.log(`[${timestamp}] ${message}`);
   }
 
+  /**
+   * Executes a trade between two characters based on IDs and item lists.
+   * This is intended to be called by the AIController after receiving an API response.
+   * @param initiatorId The ID of the character initiating the trade.
+   * @param targetId The ID of the character receiving the trade proposal.
+   * @param itemsToGive An array of items the initiator wants to give.
+   * @param itemsToReceive An array of items the initiator wants to receive.
+   * @returns True if the trade was successful, false otherwise.
+   */
+  executeTrade(
+    initiatorId: string,
+    targetId: string,
+    itemsToGive: InventoryItem[],
+    itemsToReceive: InventoryItem[]
+  ): boolean {
+    if (!this.tradingSystem) {
+      console.error("Trading system not initialized.");
+      return false;
+    }
+
+    const initiator = this.entities.find(
+      (e) => e instanceof Character && e.id === initiatorId
+    ) as Character | undefined;
+    const target = this.entities.find(
+      (e) => e instanceof Character && e.id === targetId
+    ) as Character | undefined;
+
+    if (!initiator || !target) {
+      console.warn(
+        `Trade execution failed: Could not find initiator (${initiatorId}) or target (${targetId}).`
+      );
+      return false;
+    }
+
+    return this.tradingSystem.initiateTrade(
+      initiator,
+      target,
+      itemsToGive,
+      itemsToReceive
+    );
+  }
+
   destroy(): void {
     document.removeEventListener(
       "visibilitychange",
@@ -946,6 +991,7 @@ export class Game {
     this.collidableObjects = [];
     this.interactableObjects = [];
     this.particleEffects = [];
+    this.tradingSystem = null; // Nullify trading system
     console.log("Game destroyed.");
   }
 }

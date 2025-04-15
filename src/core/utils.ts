@@ -318,6 +318,45 @@ export class Inventory {
   }
 
   /**
+   * Checks if the inventory contains at least the specified quantities of given items.
+   * @param itemsToCheck An array of InventoryItem objects representing the items and counts to check for.
+   * @returns True if all items are present in sufficient quantities, false otherwise.
+   */
+  hasItems(itemsToCheck: InventoryItem[]): boolean {
+    if (!itemsToCheck || itemsToCheck.length === 0) {
+      return true; // No items required, so condition is met.
+    }
+
+    // Create a temporary map to store the total count of each required item ID.
+    const requiredCounts: { [itemId: string]: number } = {};
+    for (const item of itemsToCheck) {
+      if (item && item.id && item.count > 0) {
+        requiredCounts[item.id] = (requiredCounts[item.id] || 0) + item.count;
+      }
+    }
+
+    // Create a map of available item counts in the inventory.
+    const availableCounts: { [itemId: string]: number } = {};
+    for (const slot of this.items) {
+      if (slot && slot.id && slot.count > 0) {
+        availableCounts[slot.id] = (availableCounts[slot.id] || 0) + slot.count;
+      }
+    }
+
+    // Check if available counts meet the required counts.
+    for (const itemId in requiredCounts) {
+      if (
+        !availableCounts[itemId] ||
+        availableCounts[itemId] < requiredCounts[itemId]
+      ) {
+        return false; // Not enough of this item.
+      }
+    }
+
+    return true; // All required items are present in sufficient quantities.
+  }
+
+  /**
    * Gets the item at a specific inventory index.
    * @param index The index of the slot.
    * @returns The InventoryItem in the slot, or null if the slot is empty or index is invalid.

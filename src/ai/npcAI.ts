@@ -1,7 +1,8 @@
+// File: src/ai/npcAI.ts
 import { Vector3, Object3D } from "three";
 import { Entity } from "../entities/entitiy";
 import { Character } from "../entities/character";
-import { MoveState, getTerrainHeight } from "../core/utils";
+import { MoveState, getTerrainHeight, InventoryItem } from "../core/utils"; // Added InventoryItem
 import { Animal } from "../entities/animals";
 import {
   sendToGemini,
@@ -18,7 +19,7 @@ export class AIController {
   homePosition: Vector3;
   destination: Vector3 | null = null;
   actionTimer: number = 5;
-  interactionDistance: number = 3; // Distance for chat
+  interactionDistance: number = 3; // Distance for chat/trade
   attackDistance: number = 2; // Distance for attacking entities/resources
   searchRadius: number;
   roamRadius: number;
@@ -26,8 +27,10 @@ export class AIController {
   observation: Observation | null = null;
   persona: string = "";
   currentIntent: string = "";
-  targetAction: string | null = null; // "attack" or "chat"
+  targetAction: string | null = null; // "attack", "chat", "trade"
   message: string | null = null;
+  tradeItemsGive: InventoryItem[] = []; // Items NPC wants to give
+  tradeItemsReceive: InventoryItem[] = []; // Items NPC wants to receive
   private lastApiCallTime: number = 0;
   private apiCallCooldown: number = 20000;
   lastObservation: Observation | null = null;
@@ -141,7 +144,7 @@ export class AIController {
           const requiredDistance =
             this.targetAction === "attack"
               ? this.attackDistance
-              : this.interactionDistance;
+              : this.interactionDistance; // Use interactionDistance for chat/trade
 
           if (distance > requiredDistance) {
             direction.normalize();
@@ -151,6 +154,7 @@ export class AIController {
             moveState.forward = 1;
             moveState.attack = false;
           } else {
+            // Reached target
             this.character.lookAt(targetPosition);
             moveState.forward = 0;
 
@@ -172,6 +176,7 @@ export class AIController {
               this.chatDecisionTimer === null &&
               this.target instanceof Character
             ) {
+              // Initiate chat
               if (this.target.aiController) {
                 this.target.aiController.aiState = "idle";
                 this.target.aiController.persistentAction = null;
@@ -189,17 +194,34 @@ export class AIController {
               }
               handleChatResponse(this.target, this.character, this.message);
 
-              this.aiState = "idle";
-              this.target = null;
-              this.targetAction = null;
-              this.message = null;
+              this.resetStateAfterAction();
+            } else if (
+              this.targetAction === "trade" &&
+              this.target instanceof Character &&
+              this.character.game?.tradingSystem
+            ) {
+              // Initiate trade
+              const success = this.character.game.tradingSystem.initiateTrade(
+                this.character,
+                this.target,
+                this.tradeItemsGive,
+                this.tradeItemsReceive
+              );
+              if (success) {
+                this.character.updateIntentDisplay(
+                  `Traded with ${this.target.name}.`
+                );
+              } else {
+                this.character.updateIntentDisplay(
+                  `Trade with ${this.target.name} failed.`
+                );
+              }
+              this.resetStateAfterAction();
             }
           }
         } else {
-          this.aiState = "idle";
-          this.target = null;
-          this.targetAction = null;
-          this.message = null;
+          // Target lost or action completed, go idle
+          this.resetStateAfterAction();
         }
         break;
       default:
@@ -211,6 +233,16 @@ export class AIController {
     this.previousAiState = this.aiState;
 
     return moveState;
+  }
+
+  private resetStateAfterAction(): void {
+    this.aiState = "idle";
+    this.target = null;
+    this.targetAction = null;
+    this.message = null;
+    this.tradeItemsGive = [];
+    this.tradeItemsReceive = [];
+    this.actionTimer = 3 + Math.random() * 4; // Short cooldown after action
   }
 
   private handleTargetLostOrDepleted(): void {
@@ -230,9 +262,7 @@ export class AIController {
           this.aiState = "movingToTarget"; // Explicitly set to ensure state consistency
         } else {
           this.persistentAction = null;
-          this.aiState = "idle";
-          this.target = null;
-          this.targetAction = null;
+          this.resetStateAfterAction();
         }
       } else if (this.persistentAction.targetType) {
         // Handle target types (resources or animals)
@@ -250,21 +280,15 @@ export class AIController {
           this.aiState = "movingToTarget"; // Explicitly set to ensure state consistency
         } else {
           this.persistentAction = null;
-          this.aiState = "idle";
-          this.target = null;
-          this.targetAction = null;
+          this.resetStateAfterAction();
         }
       } else {
         this.persistentAction = null;
-        this.aiState = "idle";
-        this.target = null;
-        this.targetAction = null;
+        this.resetStateAfterAction();
       }
     } else {
-      this.aiState = "idle";
-      this.target = null;
-      this.targetAction = null;
-      this.message = null;
+      // If not a persistent attack, just reset
+      this.resetStateAfterAction();
     }
   }
 
@@ -362,6 +386,8 @@ export class AIController {
     this.target = null;
     this.targetAction = null;
     this.message = null;
+    this.tradeItemsGive = [];
+    this.tradeItemsReceive = [];
     this.currentIntent = "Exploring";
   }
 
@@ -369,15 +395,20 @@ export class AIController {
     action: string;
     target_id?: string;
     message?: string;
+    give_items?: InventoryItem[];
+    receive_items?: InventoryItem[];
     intent: string;
   }): void {
-    const { action, target_id, message, intent } = actionData;
+    const { action, target_id, message, give_items, receive_items, intent } =
+      actionData;
     this.currentIntent = intent || "Thinking...";
     this.character.updateIntentDisplay(`${this.currentIntent}`);
     this.destination = null;
     this.target = null;
     this.targetAction = null;
     this.message = null;
+    this.tradeItemsGive = [];
+    this.tradeItemsReceive = [];
     this.persistentAction = null;
 
     this.actionTimer = 5 + Math.random() * 5;
@@ -450,8 +481,22 @@ export class AIController {
       } else {
         this.handleTargetLostOrDepleted();
       }
+    } else if (action === "trade" && target_id && give_items && receive_items) {
+      const targetEntity = this.character.game?.entities.find(
+        (e) => e.id === target_id && e instanceof Character && !e.isDead
+      );
+      if (targetEntity) {
+        this.target = targetEntity;
+        this.targetAction = "trade";
+        this.tradeItemsGive = give_items;
+        this.tradeItemsReceive = receive_items;
+        this.aiState = "movingToTarget";
+      } else {
+        this.handleTargetLostOrDepleted();
+      }
     } else {
-      this.aiState = "idle";
+      // Default to idle or roaming if action is invalid or "idle"
+      this.fallbackToDefaultBehavior(); // Use fallback which sets to roaming/idle
     }
   }
 
