@@ -704,7 +704,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   transform: translate(-50%, -50%);
   width: 90%;
   max-width: 500px;
-  background-color: rgba(50, 50, 70, 0.95); /* Darker background */
+  background-color: rgba(50, 50, 70, 0.7); /* Darker background */
   color: #eee;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
   text-align: center;
