@@ -18,6 +18,7 @@ export class NotificationManager {
   private readonly spriteDuration = 2; // seconds
   private readonly spriteFlySpeed = 2; // world units per second
   private readonly spriteScale = 0.3;
+  private readonly spritePositionRandomness = 0.7; // Max offset in world units (x/z)
   private readonly attackNumberFontSize = 40; // Smaller font size for attack numbers
   private readonly itemTextFontSize = 56; // Larger font size for item text
 
@@ -137,7 +138,15 @@ export class NotificationManager {
       this.spriteScale,
       this.spriteScale
     );
-    sprite.position.copy(position);
+
+    // Apply randomization to the initial position
+    const randomOffsetX = (Math.random() - 0.5) * this.spritePositionRandomness;
+    const randomOffsetZ = (Math.random() - 0.5) * this.spritePositionRandomness;
+    const randomizedPosition = position.clone();
+    randomizedPosition.x += randomOffsetX;
+    randomizedPosition.z += randomOffsetZ;
+
+    sprite.position.copy(randomizedPosition);
     sprite.center.set(0.5, 0.5);
 
     this.scene.add(sprite);
@@ -145,7 +154,7 @@ export class NotificationManager {
     this.activeSprites.push({
       sprite,
       startTime: performance.now() / 1000,
-      initialPosition: position.clone(),
+      initialPosition: randomizedPosition.clone(), // Store the randomized position
       texture,
       material,
     });
@@ -171,9 +180,12 @@ export class NotificationManager {
         data.texture.dispose();
         this.activeSprites.splice(i, 1);
       } else {
-        // Update position (fly up)
+        // Update position (fly up from initial randomized position)
         data.sprite.position.y =
           data.initialPosition.y + elapsedTime * this.spriteFlySpeed;
+        // Keep the randomized x/z
+        data.sprite.position.x = data.initialPosition.x;
+        data.sprite.position.z = data.initialPosition.z;
 
         // Update opacity (fade out in the second half)
         if (progress > 0.5) {
