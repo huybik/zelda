@@ -1,4 +1,4 @@
-// File: /src/models/objects.ts
+/* File: /src/models/objects.ts */
 import {
   Vector3,
   Mesh,
@@ -177,6 +177,12 @@ export function createTree(position: Vector3): Group {
 
   treeGroup.position.copy(position).setY(0); // Set Y to 0 initially, Environment will adjust
   const maxHealth = BASE_HEALTH.wood;
+
+  // Calculate bounding box based on the trunk mesh only
+  const trunkBox = new Box3();
+  trunkMesh.updateWorldMatrix(true, false); // Ensure trunk matrix is updated relative to group
+  trunkBox.setFromObject(trunkMesh); // Calculate box in group's local space (at y=0)
+
   treeGroup.userData = {
     isCollidable: true,
     isInteractable: true, // Can be targeted for attack
@@ -187,10 +193,8 @@ export function createTree(position: Vector3): Group {
     isDepletable: true,
     respawnTime: 20000,
     entityReference: treeGroup, // Reference to the Group itself
-    boundingBox: new Box3().setFromObject(treeGroup), // Compute initial bounding box
+    boundingBox: trunkBox, // Store the trunk-based bounding box
   };
-  // Ensure bounding box is updated after potential position adjustments in environment
-  treeGroup.userData.boundingBox.setFromObject(treeGroup);
 
   return treeGroup;
 }

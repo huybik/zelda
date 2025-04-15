@@ -7,6 +7,7 @@ import {
   AnimationClip,
   MathUtils,
   Mesh,
+  Box3,
 } from "three";
 import { Character } from "../entities/character";
 import { Animal } from "../entities/animals"; // Import Animal
@@ -19,8 +20,6 @@ import {
 } from "../models/objects";
 import { getTerrainHeight, randomFloat, Inventory } from "./utils";
 import { Game } from "../main";
-
-
 
 export function populateEnvironment(
   scene: Scene,
@@ -134,11 +133,26 @@ export function populateEnvironment(
       entities.push(obj); // Add to entities for potential minimap display if needed later
       obj.userData.id = `${obj.name}_${obj.uuid.substring(0, 6)}`;
 
-      obj.userData.boundingBox.setFromObject(obj);
+      // Update bounding box AFTER setting the final position
+      obj.updateMatrixWorld(true); // Ensure world matrix is current
+      if (obj.name === "Tree") {
+        const trunk = obj.getObjectByName("TreeTrunk") as Mesh;
+        if (trunk && obj.userData.boundingBox instanceof Box3) {
+          // Recompute the bounding box from the trunk using its updated world matrix
+          obj.userData.boundingBox.setFromObject(trunk, true);
+        } else {
+          // Fallback for non-trees or if trunk/box is missing
+          obj.userData.boundingBox?.setFromObject(obj, true);
+        }
+      } else if (obj.userData.boundingBox instanceof Box3) {
+        // Update box for other objects like rocks/herbs
+        obj.userData.boundingBox.setFromObject(obj, true);
+      } else {
+        // If no box exists, create one (shouldn't happen with current setup)
+        obj.userData.boundingBox = new Box3().setFromObject(obj, true);
+      }
     }
   };
-  
-  
 
   addObject(createTree, worldSize, 25 * 25);
   addObject(
