@@ -803,25 +803,6 @@ export class Character extends Entity {
         damageMultiplier *= 2.0;
       } else if (weaponId === "pickaxe" && targetResource === "stone") {
         damageMultiplier *= 2.0;
-      } else if (!this.equippedWeapon && targetResource) {
-        // Fist damage vs resources is low
-        damageMultiplier *= 0.25;
-      } else if (
-        this.equippedWeapon &&
-        targetResource &&
-        this.equippedWeapon.definition.type !== ItemType.Tool
-      ) {
-        // Weapon vs resource (wrong type)
-        damageMultiplier *= 0.5;
-      } else if (
-        this.equippedWeapon &&
-        targetResource &&
-        this.equippedWeapon.definition.type === ItemType.Tool &&
-        weaponId !== "axe" &&
-        weaponId !== "pickaxe"
-      ) {
-        // Generic tool vs resource
-        damageMultiplier *= 0.75;
       }
 
       const effectiveDamage = Math.max(
