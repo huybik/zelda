@@ -311,7 +311,8 @@ export class Animal extends Entity {
   }
 
   performAttack(): void {
-    const range = 2.5; // Attack range
+    // Use AI's attack range + a small buffer for the raycast
+    const range = (this.aiController?.attackRange ?? 2.0) + 0.5;
     const damage = this.animalType === "Wolf" ? 15 : 5; // Example damage
     if (
       !this.mesh ||
@@ -350,9 +351,7 @@ export class Animal extends Entity {
       const boundingBox = target.userData.boundingBox as Box3 | undefined;
 
       if (!boundingBox || boundingBox.isEmpty()) {
-        console.warn(
-          `Skipping attack check for ${target.name}: Missing or empty bounding box.`
-        );
+        // console.warn(`Skipping attack check for ${target.name}: Missing or empty bounding box.`);
         continue; // Skip if no valid bounding box
       }
 
@@ -389,6 +388,19 @@ export class Animal extends Entity {
           `${this.name} attacked ${closestTarget.name}.`,
           closestTarget,
           { damage: damage },
+          this.mesh.position
+        );
+      }
+    } else {
+      // Attack missed
+      console.log(`${this.name} attacked but hit nothing.`);
+      if (this.game) {
+        this.game.logEvent(
+          this,
+          "attack_fail",
+          `${this.name} attacked but missed.`,
+          undefined,
+          { reason: "No target in range/LOS" },
           this.mesh.position
         );
       }

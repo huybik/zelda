@@ -686,7 +686,12 @@ export class Character extends Entity {
   }
 
   performAttack(): void {
-    const range = 3;
+    // Determine attack range based on player/NPC and AI settings
+    let range = 3.0; // Default player range
+    if (this.aiController) {
+      range = this.aiController.attackDistance + 0.5; // NPC range based on AI + buffer
+    }
+
     // Use weapon damage if equipped, otherwise a default value (e.g., fist damage)
     const baseDamage = this.equippedWeapon
       ? this.equippedWeapon.definition.damage
@@ -944,9 +949,7 @@ export class Character extends Entity {
       // Attack missed or hit nothing
       if (this.userData.isNPC) {
         // Log error specifically for NPC misses
-        console.error(
-          `NPC Attack Fail: ${this.name} attacked but hit nothing.`
-        );
+        console.log(`NPC Attack Fail: ${this.name} attacked but hit nothing.`);
         if (this.game) {
           this.game.logEvent(
             this,
@@ -954,6 +957,19 @@ export class Character extends Entity {
             `${this.name} attacked but missed.`,
             undefined,
             { reason: "No target in range/LOS" },
+            this.mesh!.position
+          );
+        }
+      } else {
+        // Log player miss (optional)
+        console.log(`${this.name} attacked but hit nothing.`);
+        if (this.game) {
+          this.game.logEvent(
+            this,
+            "attack_miss",
+            `${this.name} attacked but missed.`,
+            undefined,
+            {},
             this.mesh!.position
           );
         }

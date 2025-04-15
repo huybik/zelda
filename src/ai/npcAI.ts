@@ -20,7 +20,7 @@ export class AIController {
   destination: Vector3 | null = null;
   actionTimer: number = 5;
   interactionDistance: number = 3; // Distance for chat/trade
-  attackDistance: number = 2; // Distance for attacking entities/resources
+  attackDistance: number = 3; // Distance for attacking entities/resources
   followDistance: number = 5; // Desired distance when following
   stoppingDistance: number = 3; // Distance to stop when following/moving to target
   searchRadius: number;
@@ -86,9 +86,7 @@ export class AIController {
       }
     }
     if (this.aiState !== this.previousAiState) {
-      console.log(
-        `AI state changed from ${this.previousAiState} to ${this.aiState}`
-      );
+      // console.log(`AI state changed from ${this.previousAiState} to ${this.aiState}`);
     }
 
     switch (this.aiState) {
@@ -387,15 +385,15 @@ export class AIController {
     try {
       console.log(
         `time since last call in seconds: ${(Date.now() - this.lastApiCallTime) / 1000}`
-      );
-      console.log(`Prompt for ${this.character.name}:\n${prompt}\n\n`);
+      ); // dont remove this
+      console.log(`Prompt for ${this.character.name}:\n${prompt}\n\n`); // dont remove this
       const response = await sendToGemini(prompt);
       this.lastApiCallTime = Date.now();
       if (response) {
         const actionData = JSON.parse(response);
         console.log(
           `Response from API for ${this.character.name}:\n${response}\n\n`
-        );
+        ); // dont remove this
         this.setActionFromAPI(actionData);
       } else {
         this.fallbackToDefaultBehavior();
