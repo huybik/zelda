@@ -143,9 +143,9 @@ export class Game {
 
     const modelPaths = {
       player: "assets/player.glb",
-      tavernMan: "assets/tavernman/scene.gltf",
-      oldMan: "assets/oldman/scene.gltf",
-      woman: "assets/woman/scene.gltf",
+      tavernMan: "assets/tavernman.glb",
+      oldMan: "assets/oldman.glb",
+      woman: "assets/woman.glb",
     };
 
     this.models = await loadModels(modelPaths);

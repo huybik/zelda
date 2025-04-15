@@ -401,7 +401,7 @@ export class AIController {
       console.log(
         `time since last call in seconds: ${(Date.now() - this.lastApiCallTime) / 1000}`
       ); // dont remove this
-      // console.log(`Prompt for ${this.character.name}:\n${prompt}\n\n`); // dont remove this
+      console.log(`Prompt for ${this.character.name}:\n${prompt}\n\n`); // dont remove this
       const response = await sendToGemini(prompt);
       this.lastApiCallTime = Date.now();
       if (response) {
