@@ -64,6 +64,11 @@ export class AIController {
       attack: false,
     };
 
+    if (this.character.isDead) {
+      if (this.aiState !== "dead") this.aiState = "dead";
+      return moveState; // No actions if dead
+    }
+
     if (this.character.game) {
       updateObservation(this, this.character.game.entities);
     }
@@ -90,6 +95,7 @@ export class AIController {
 
     switch (this.aiState) {
       case "deciding":
+      case "dead": // Added dead state check here
         break;
 
       case "idle":
@@ -374,6 +380,14 @@ export class AIController {
   }
 
   async decideNextAction(): Promise<void> {
+    // Prevent API call if dead
+    if (this.character.isDead) {
+      if (this.aiState !== "dead") {
+        this.aiState = "dead"; // Ensure state consistency
+      }
+      return;
+    }
+
     // Don't decide if already following or deciding
     if (this.aiState === "following" || this.aiState === "deciding") return;
 
@@ -398,7 +412,12 @@ export class AIController {
       }
     } catch (error) {
       console.error(`Error querying API for ${this.character.name}:`, error);
-      this.fallbackToDefaultBehavior();
+      // Ensure fallback doesn't run if dead (e.g., died during API call)
+      if (!this.character.isDead) {
+        this.fallbackToDefaultBehavior();
+      } else {
+        this.aiState = "dead"; // Ensure state remains dead on error
+      }
     }
   }
 
@@ -439,6 +458,12 @@ export class AIController {
     receive_items?: InventoryItem[];
     intent: string;
   }): void {
+    // If character died while API call was in progress, ignore the response
+    if (this.character.isDead) {
+      this.aiState = "dead";
+      return;
+    }
+
     const { action, target_id, message, give_items, receive_items, intent } =
       actionData;
     this.currentIntent = intent || "Thinking...";
