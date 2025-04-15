@@ -469,6 +469,9 @@ export class Character extends Entity {
         weaponModel.scale.set(0.4, 0.4, 0.4);
         weaponModel.position.set(0, 0.25, 0);
       }
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => resolve())
+      );
 
       // Attach to the right hand bone
       this.rightHandBone.add(weaponModel);
