@@ -45,6 +45,7 @@ export class AIController {
   private chatDecisionTimer: ReturnType<typeof setTimeout> | null = null;
   private lastAffectedTime: number = 0;
   private affectedCooldown: number = 20000;
+  public lastLoggedAttackTargetId: string | null = null; // Track last logged attack target
 
   constructor(character: Character) {
     this.character = character;
@@ -285,9 +286,11 @@ export class AIController {
     this.tradeItemsReceive = [];
     this.persistentAction = null; // Clear persistent action when resetting
     this.actionTimer = 3 + Math.random() * 4; // Short cooldown after action
+    this.lastLoggedAttackTargetId = null; // Reset logged target on state reset
   }
 
   private handleTargetLostOrDepleted(): void {
+    this.lastLoggedAttackTargetId = null; // Reset logged target when current target is lost/depleted
     if (this.persistentAction?.type === "attack") {
       if (this.persistentAction.targetId) {
         // Handle specific character target by ID
@@ -398,7 +401,7 @@ export class AIController {
       console.log(
         `time since last call in seconds: ${(Date.now() - this.lastApiCallTime) / 1000}`
       ); // dont remove this
-      console.log(`Prompt for ${this.character.name}:\n${prompt}\n\n`); // dont remove this
+      // console.log(`Prompt for ${this.character.name}:\n${prompt}\n\n`); // dont remove this
       const response = await sendToGemini(prompt);
       this.lastApiCallTime = Date.now();
       if (response) {
@@ -448,6 +451,7 @@ export class AIController {
     this.persistentAction = null; // Clear persistent action on fallback
     this.currentIntent = "Exploring";
     this.character.updateIntentDisplay(this.currentIntent);
+    this.lastLoggedAttackTargetId = null; // Reset logged target on fallback
   }
 
   setActionFromAPI(actionData: {
@@ -475,6 +479,7 @@ export class AIController {
     this.tradeItemsGive = [];
     this.tradeItemsReceive = [];
     this.persistentAction = null; // Reset persistent action by default
+    this.lastLoggedAttackTargetId = null; // Reset logged target when setting new action
 
     this.actionTimer = 5 + Math.random() * 5;
 

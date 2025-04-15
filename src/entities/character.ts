@@ -815,9 +815,6 @@ export class Character extends Entity {
       // --- Apply Damage ---
       // --- Target is a Resource ---
       if (targetMesh.userData.resource) {
-        console.log(
-          `${this.name} attack hit resource ${targetMesh.name || targetMesh.userData.resource} for ${effectiveDamage} damage.`
-        );
         const resource = targetMesh.userData.resource as string;
         const currentHealth = targetMesh.userData.health as number;
         const maxHealth = targetMesh.userData.maxHealth as number;
@@ -829,6 +826,16 @@ export class Character extends Entity {
             effectiveDamage,
             closestPoint
           ); // Show damage number
+
+          // Log hit only if target is different from last logged
+          const targetId = targetMesh.userData.id || targetMesh.uuid;
+          if (
+            this.game &&
+            this.aiController &&
+            this.aiController.lastLoggedAttackTargetId !== targetId
+          ) {
+            this.aiController.lastLoggedAttackTargetId = targetId;
+          }
 
           if (newHealth <= 0) {
             // Resource depleted - Grant item based on resource type
@@ -912,12 +919,13 @@ export class Character extends Entity {
       }
       // --- Target is an Entity (Character or Animal) ---
       else if (closestTarget instanceof Entity) {
-        // console.log(
-        //   `${this.name} attack hit entity ${closestTarget.name} at ${closestPoint.x.toFixed(1)},${closestPoint.y.toFixed(1)},${closestPoint.z.toFixed(1)} for ${effectiveDamage} damage.`
-        // );
         closestTarget.takeDamage(effectiveDamage, this, closestPoint); // Pass hit location
-        // this.game.spawnParticleEffect(closestPoint, "red"); // Moved to takeDamage
-        if (this.game) {
+        // Log hit only if target is different from last logged
+        if (
+          this.game &&
+          this.aiController &&
+          this.aiController.lastLoggedAttackTargetId !== closestTarget.id
+        ) {
           this.game.logEvent(
             this,
             "attack_hit",
@@ -926,23 +934,27 @@ export class Character extends Entity {
             { damage: effectiveDamage },
             this.mesh!.position
           );
+          this.aiController.lastLoggedAttackTargetId = closestTarget.id;
         }
       }
     } else {
       // Attack missed or hit nothing
-      if (this.userData.isNPC) {
-        // Log error specifically for NPC misses
+      // Log miss only if last logged event wasn't a miss
+      if (
+        this.game &&
+        this.aiController &&
+        this.aiController.lastLoggedAttackTargetId !== "miss"
+      ) {
         console.warn(`NPC Attack Fail: ${this.name} attacked but hit nothing.`);
-        if (this.game) {
-          this.game.logEvent(
-            this,
-            "attack_fail",
-            `${this.name} attacked but missed.`,
-            undefined,
-            { reason: "No target in range/LOS" },
-            this.mesh!.position
-          );
-        }
+        this.game.logEvent(
+          this,
+          "attack_fail",
+          `${this.name} attacked but missed.`,
+          undefined,
+          { reason: "No target in range/LOS" },
+          this.mesh!.position
+        );
+        this.aiController.lastLoggedAttackTargetId = "miss";
       }
     }
   }
@@ -1259,6 +1271,7 @@ export class Character extends Entity {
       this.aiController.persistentAction = null; // Clear persistent action
       this.aiController.currentIntent = "Recovering...";
       this.updateIntentDisplay(this.aiController.currentIntent);
+      this.aiController.lastLoggedAttackTargetId = null; // Reset logged target on respawn
     }
 
     // Reset animations

@@ -320,7 +320,8 @@ export class Animal extends Entity {
       !this.scene ||
       !this.game ||
       this.isDead ||
-      !this.rayCaster
+      !this.rayCaster ||
+      !this.aiController // Need AI controller for logging check
     )
       return;
 
@@ -374,15 +375,14 @@ export class Animal extends Entity {
 
     // If a target was hit within range
     if (closestTarget && closestPoint) {
-      // console.log(
-      //   `${this.name} attack hit ${closestTarget.name} at ${closestPoint.x.toFixed(1)},${closestPoint.y.toFixed(1)},${closestPoint.z.toFixed(1)}`
-      // );
       // Apply damage
       closestTarget.takeDamage(damage, this, closestPoint); // Pass hit location
-      // this.game.spawnParticleEffect(closestPoint, "red"); // Moved to takeDamage
 
-      // Log the hit
-      if (this.game) {
+      // Log the hit only if the target is different from the last logged one
+      if (
+        this.game &&
+        this.aiController.lastLoggedAttackTargetId !== closestTarget.id
+      ) {
         this.game.logEvent(
           this,
           "attack_hit",
@@ -391,11 +391,13 @@ export class Animal extends Entity {
           { damage: damage },
           this.mesh!.position
         );
+        this.aiController.lastLoggedAttackTargetId = closestTarget.id; // Update last logged target
       }
     } else {
       // Attack missed
-      console.warn(`${this.name} attacked but hit nothing.`);
-      if (this.game) {
+      // Log the miss only if the last logged event wasn't already a miss
+      if (this.game && this.aiController.lastLoggedAttackTargetId !== "miss") {
+        console.warn(`${this.name} attacked but hit nothing.`);
         this.game.logEvent(
           this,
           "attack_fail",
@@ -404,6 +406,7 @@ export class Animal extends Entity {
           { reason: "No target in range/LOS" },
           this.mesh!.position
         );
+        this.aiController.lastLoggedAttackTargetId = "miss"; // Mark last event as a miss
       }
     }
   }

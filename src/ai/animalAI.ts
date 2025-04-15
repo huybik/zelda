@@ -1,4 +1,4 @@
-// File: /src/ai/animalAI.ts
+/* File: /src/ai/animalAI.ts */
 import { Vector3 } from "three";
 import { Animal } from "../entities/animals";
 import { MoveState, getTerrainHeight } from "../core/utils";
@@ -25,6 +25,7 @@ export class AnimalAIController {
   // Throttling for expensive operations like finding targets
   private findTargetTimer: number = 0;
   private findTargetInterval: number = 0.5 + Math.random() * 0.5; // Check for targets every 0.5-1s
+  public lastLoggedAttackTargetId: string | null = null; // Track last logged attack target
 
   constructor(animal: Animal) {
     this.animal = animal;
@@ -190,18 +191,22 @@ export class AnimalAIController {
         this.actionTimer = 2 + Math.random() * 4; // Idle for a bit
         this.destination = null;
         this.target = null; // Clear target when going idle
+        this.lastLoggedAttackTargetId = null; // Reset logged target
         break;
       case "roaming":
         this.actionTimer = 5 + Math.random() * 10; // Reset timer for next roam decision *after* this roam finishes
         this.setNewRoamDestination();
+        this.lastLoggedAttackTargetId = null; // Reset logged target
         break;
       case "attacking":
         this.destination = null; // Stop roaming if switching to attack
         // Target should already be set before switching to this state
+        // Don't reset lastLoggedAttackTargetId here, only when leaving attack state
         break;
       case "dead":
         this.destination = null;
         this.target = null;
+        this.lastLoggedAttackTargetId = null; // Reset logged target
         break;
     }
   }
