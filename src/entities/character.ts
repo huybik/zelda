@@ -1270,27 +1270,25 @@ export class Character extends Entity {
     }
 
     // Re-equip starting weapon for NPCs
-    if (this.userData.isNPC) {
-      const startingWeaponId = ProfessionStartingWeapon[this.profession];
-      if (startingWeaponId && this.inventory) {
-        // Check if they still have it (it shouldn't have been dropped)
-        if (this.inventory.countItem(startingWeaponId) > 0) {
+    const startingWeaponId = ProfessionStartingWeapon[this.profession];
+    if (startingWeaponId && this.inventory) {
+      // Check if they still have it (it shouldn't have been dropped)
+      if (this.inventory.countItem(startingWeaponId) > 0) {
+        const weaponDef = getItemDefinition(startingWeaponId);
+        if (weaponDef && isWeapon(weaponDef)) {
+          requestAnimationFrame(() => {
+            this.equipWeapon(weaponDef);
+          });
+        }
+      } else {
+        // If they somehow lost it, give it back
+        const addResult = this.inventory.addItem(startingWeaponId, 1);
+        if (addResult.totalAdded > 0) {
           const weaponDef = getItemDefinition(startingWeaponId);
           if (weaponDef && isWeapon(weaponDef)) {
             requestAnimationFrame(() => {
               this.equipWeapon(weaponDef);
             });
-          }
-        } else {
-          // If they somehow lost it, give it back
-          const addResult = this.inventory.addItem(startingWeaponId, 1);
-          if (addResult.totalAdded > 0) {
-            const weaponDef = getItemDefinition(startingWeaponId);
-            if (weaponDef && isWeapon(weaponDef)) {
-              requestAnimationFrame(() => {
-                this.equipWeapon(weaponDef);
-              });
-            }
           }
         }
       }
