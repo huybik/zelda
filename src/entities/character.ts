@@ -55,6 +55,7 @@ import {
   EquippedItem, // Added item types
 } from "../core/items";
 import { loadModels } from "../core/assetLoader"; // Added weapon loader
+import { Animal } from "./animals";
 
 export class Character extends Entity {
   maxStamina: number;
@@ -797,6 +798,9 @@ export class Character extends Entity {
 
       // --- Target is a Resource ---
       if (targetMesh.userData.resource) {
+        console.log(
+          `${this.name} attack hit resource ${targetMesh.name || targetMesh.userData.resource}`
+        );
         const resource = targetMesh.userData.resource as string;
         const currentHealth = targetMesh.userData.health as number;
         const maxHealth = targetMesh.userData.maxHealth as number;
@@ -891,6 +895,9 @@ export class Character extends Entity {
       }
       // --- Target is an Entity (Character or Animal) ---
       else if (closestTarget instanceof Entity) {
+        console.log(
+          `${this.name} attack hit entity ${closestTarget.name} at ${closestPoint.x.toFixed(1)},${closestPoint.y.toFixed(1)},${closestPoint.z.toFixed(1)}`
+        );
         closestTarget.takeDamage(effectiveDamage, this, closestPoint); // Pass hit location
         // this.game.spawnParticleEffect(closestPoint, "red"); // Moved to takeDamage
         if (this.game) {
@@ -906,10 +913,22 @@ export class Character extends Entity {
       }
     } else {
       // Attack missed or hit nothing
-      // Optionally log misses, but can be spammy
-      // if (this.game) {
-      //   this.game.logEvent(this, "attack_miss", `${this.name} attacked thin air.`, undefined, {}, this.mesh!.position);
-      // }
+      if (this.userData.isNPC) {
+        // Log error specifically for NPC misses
+        console.error(
+          `NPC Attack Fail: ${this.name} attacked but hit nothing.`
+        );
+        if (this.game) {
+          this.game.logEvent(
+            this,
+            "attack_fail",
+            `${this.name} attacked but missed.`,
+            undefined,
+            { reason: "No target in range/LOS" },
+            this.mesh!.position
+          );
+        }
+      }
     }
   }
 

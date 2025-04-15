@@ -1,4 +1,4 @@
-/* File: /src/entities/animal.ts */
+/* File: /src/entities/animals.ts */
 import {
   Scene,
   Vector3,
@@ -374,6 +374,9 @@ export class Animal extends Entity {
 
     // If a target was hit within range
     if (closestTarget && closestPoint) {
+      console.log(
+        `${this.name} attack hit ${closestTarget.name} at ${closestPoint.x.toFixed(1)},${closestPoint.y.toFixed(1)},${closestPoint.z.toFixed(1)}`
+      );
       // Apply damage
       closestTarget.takeDamage(damage, this, closestPoint); // Pass hit location
       // this.game.spawnParticleEffect(closestPoint, "red"); // Moved to takeDamage
