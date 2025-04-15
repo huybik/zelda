@@ -1,4 +1,5 @@
 /* File: /style.css */
+/* File: /style.css */
 html,
 body {
   margin: 0;
@@ -650,12 +651,10 @@ li.quest-completed:hover {
 
 /* --- Utility --- */
 .hidden {
+  display: none !important; /* Use display none for reliable hiding */
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition:
-    opacity 0.3s ease-out,
-    visibility 0s 0.3s;
 }
 
 /* Crosshair */
@@ -697,7 +696,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
 
 /* Intent Display (Sprites handled in JS) */
 
-/* Quest Detail Banner */
+/* Quest/Trade Detail Banner */
 #quest-detail-banner {
   position: fixed;
   top: 50%;
@@ -736,20 +735,45 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   margin-bottom: 25px;
   font-size: 1em;
   line-height: 1.5;
+  white-space: pre-wrap; /* Allow line breaks in description */
 }
 
-#quest-banner-ok {
+#quest-banner-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 15px; /* Space between buttons */
+}
+
+#quest-banner-ok,
+.trade-button {
   padding: 10px 25px;
   font-size: 1.1em;
-  background-color: #4caf50;
   color: white;
   border: none;
   border-radius: 5px;
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
+
+#quest-banner-ok {
+  background-color: #4c7faf; /* Blueish OK */
+}
 #quest-banner-ok:hover {
+  background-color: #45709a;
+}
+
+.trade-button.accept {
+  background-color: #4caf50; /* Green Accept */
+}
+.trade-button.accept:hover {
   background-color: #45a049;
+}
+
+.trade-button.decline {
+  background-color: #f44336; /* Red Decline */
+}
+.trade-button.decline:hover {
+  background-color: #da190b;
 }
 
 /* --- Mobile Controls --- */
@@ -945,7 +969,8 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   #quest-detail-banner p {
     font-size: 0.95em;
   }
-  #quest-banner-ok {
+  #quest-banner-ok,
+  .trade-button {
     padding: 8px 20px;
     font-size: 1em;
   }

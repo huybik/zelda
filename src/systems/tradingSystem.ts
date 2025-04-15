@@ -1,7 +1,9 @@
+/* File: /src/systems/tradingSystem.ts */
 // File: src/systems/tradingSystem.ts
 import { Character } from "../entities/character";
 import { InventoryItem } from "../core/utils";
 import { Game } from "../main";
+import { Vector3 } from "three";
 
 export class TradingSystem {
   private game: Game;
@@ -11,20 +13,66 @@ export class TradingSystem {
   }
 
   /**
-   * Initiates and executes a trade between two characters if conditions are met.
-   * @param initiator The character initiating the trade.
-   * @param target The character receiving the trade proposal.
+   * Initiates the UI prompt for a trade offer.
+   * Called by the AI when it decides to trade.
+   * @param initiator The character initiating the trade (NPC).
+   * @param target The character receiving the trade proposal (Player).
    * @param itemsToGive An array of items the initiator wants to give.
    * @param itemsToReceive An array of items the initiator wants to receive.
+   */
+  requestTradeUI(
+    initiator: Character,
+    target: Character,
+    itemsToGive: InventoryItem[],
+    itemsToReceive: InventoryItem[]
+  ): void {
+    if (
+      !initiator ||
+      !target ||
+      initiator === target ||
+      initiator.isDead ||
+      target.isDead ||
+      !initiator.inventory ||
+      !target.inventory ||
+      target !== this.game.activeCharacter // Ensure target is the active player
+    ) {
+      console.warn("Trade UI request failed: Invalid participants.");
+      this.game.logEvent(
+        initiator,
+        "trade_request_fail",
+        `Trade request to ${target.name} failed (invalid participants).`,
+        target,
+        { reason: "Invalid participants" },
+        initiator.mesh?.position
+      );
+      return;
+    }
+
+    // Trigger the UI notification via the Game class
+    this.game.showTradeNotification(
+      initiator,
+      target,
+      itemsToGive,
+      itemsToReceive
+    );
+  }
+
+  /**
+   * Executes the actual trade after the player accepts.
+   * Performs final checks for item availability and inventory space.
+   * @param initiator The character who initiated the trade (NPC).
+   * @param target The character who accepted the trade (Player).
+   * @param itemsToGive Items the initiator will give.
+   * @param itemsToReceive Items the initiator will receive.
    * @returns True if the trade was successful, false otherwise.
    */
-  initiateTrade(
+  executeTrade(
     initiator: Character,
     target: Character,
     itemsToGive: InventoryItem[],
     itemsToReceive: InventoryItem[]
   ): boolean {
-    // --- Basic Checks ---
+    // --- Re-validate Participants and Inventories ---
     if (
       !initiator ||
       !target ||
@@ -34,116 +82,92 @@ export class TradingSystem {
       !initiator.inventory ||
       !target.inventory
     ) {
-      console.warn("Trade failed: Invalid participants or inventories.");
+      console.warn("Trade execution failed: Invalid participants.");
       this.game.logEvent(
         initiator,
         "trade_fail",
-        `Trade with ${target.name} failed (invalid participants).`,
+        `Trade with ${target.name} failed (invalid participants at execution).`,
         target,
-        { reason: "Invalid participants" },
+        { reason: "Invalid participants at execution" },
         initiator.mesh?.position
       );
       return false;
     }
 
     // --- Item Validation ---
-    // Ensure item arrays are valid
     const validGiveItems =
       itemsToGive?.filter((item) => item && item.count > 0) ?? [];
     const validReceiveItems =
       itemsToReceive?.filter((item) => item && item.count > 0) ?? [];
 
     if (validGiveItems.length === 0 && validReceiveItems.length === 0) {
-      console.warn("Trade failed: No items specified for trade.");
-      this.game.logEvent(
-        initiator,
-        "trade_fail",
-        `Trade with ${target.name} failed (no items specified).`,
-        target,
-        { reason: "No items specified" },
-        initiator.mesh?.position
-      );
+      console.warn("Trade execution failed: No items specified.");
+      // No need to log again if request was already logged
       return false;
     }
 
-    // --- Check Item Availability ---
+    // --- Final Check: Item Availability ---
     if (!initiator.inventory.hasItems(validGiveItems)) {
       console.warn(
-        `Trade failed: Initiator (${initiator.name}) does not have required items to give.`
+        `Trade execution failed: Initiator (${initiator.name}) lacks items.`
       );
       this.game.logEvent(
         initiator,
         "trade_fail",
-        `Trade with ${target.name} failed (initiator lacks items).`,
+        `Trade with ${target.name} failed (initiator lacked items at execution).`,
         target,
-        { reason: "Initiator lacks items", items: validGiveItems },
+        {
+          reason: "Initiator lacked items at execution",
+          items: validGiveItems,
+        },
         initiator.mesh?.position
+      );
+      // Notify player UI?
+      this.game.notificationManager?.createItemAddedSprite(
+        "Trade Failed", // Use a generic ID or message
+        0, // Count 0 indicates failure message
+        target.mesh!.position.clone().add(new Vector3(0, 1, 0))
       );
       return false;
     }
 
     if (!target.inventory.hasItems(validReceiveItems)) {
       console.warn(
-        `Trade failed: Target (${target.name}) does not have required items to receive.`
+        `Trade execution failed: Target (${target.name}) lacks items.`
       );
       this.game.logEvent(
         initiator,
         "trade_fail",
-        `Trade with ${target.name} failed (target lacks items).`,
+        `Trade with ${target.name} failed (target lacked items at execution).`,
         target,
-        { reason: "Target lacks items", items: validReceiveItems },
+        {
+          reason: "Target lacked items at execution",
+          items: validReceiveItems,
+        },
         initiator.mesh?.position
+      );
+      // Notify player UI
+      this.game.notificationManager?.createItemAddedSprite(
+        "Trade Failed",
+        0,
+        target.mesh!.position.clone().add(new Vector3(0, 1, 0))
       );
       return false;
     }
 
-    // --- Simulate Item Transfer to Check Space ---
-    // This is a simplified check. A more robust system might temporarily reserve slots.
-    let initiatorCanReceive = true;
+    // --- Final Check: Inventory Space (Simplified) ---
+    // This check remains simplified. A full check is complex.
+    let initiatorCanReceive = true; // Check if initiator (NPC) has space for itemsToReceive
     for (const item of validReceiveItems) {
-      // Check if adding this item would exceed inventory capacity
-      // This is an approximation; doesn't account for stacking perfectly
-      const currentCount = initiator.inventory.countItem(item.id);
-      const maxStack = initiator.inventory.getMaxStack(item.id);
-      const remainingSpaceInStacks = initiator.inventory.items.reduce(
-        (space, slot) => {
-          if (slot?.id === item.id) {
-            return space + (maxStack - slot.count);
-          }
-          return space;
-        },
-        0
-      );
-      const emptySlots = initiator.inventory.items.filter(
-        (slot) => slot === null
-      ).length;
-      const potentialSpace = remainingSpaceInStacks + emptySlots * maxStack;
-
-      if (item.count > potentialSpace) {
+      if (!this.canInventoryHold(initiator.inventory, item.id, item.count)) {
         initiatorCanReceive = false;
         break;
       }
     }
 
-    let targetCanReceive = true;
+    let targetCanReceive = true; // Check if target (Player) has space for itemsToGive
     for (const item of validGiveItems) {
-      const currentCount = target.inventory.countItem(item.id);
-      const maxStack = target.inventory.getMaxStack(item.id);
-      const remainingSpaceInStacks = target.inventory.items.reduce(
-        (space, slot) => {
-          if (slot?.id === item.id) {
-            return space + (maxStack - slot.count);
-          }
-          return space;
-        },
-        0
-      );
-      const emptySlots = target.inventory.items.filter(
-        (slot) => slot === null
-      ).length;
-      const potentialSpace = remainingSpaceInStacks + emptySlots * maxStack;
-
-      if (item.count > potentialSpace) {
+      if (!this.canInventoryHold(target.inventory, item.id, item.count)) {
         targetCanReceive = false;
         break;
       }
@@ -151,30 +175,43 @@ export class TradingSystem {
 
     if (!initiatorCanReceive) {
       console.warn(
-        `Trade failed: Initiator (${initiator.name}) does not have enough inventory space.`
+        `Trade execution failed: Initiator (${initiator.name}) inventory full.`
       );
       this.game.logEvent(
         initiator,
         "trade_fail",
-        `Trade with ${target.name} failed (initiator inventory full).`,
+        `Trade with ${target.name} failed (initiator inventory full at execution).`,
         target,
-        { reason: "Initiator inventory full", items: validReceiveItems },
+        {
+          reason: "Initiator inventory full at execution",
+          items: validReceiveItems,
+        },
         initiator.mesh?.position
+      );
+      this.game.notificationManager?.createItemAddedSprite(
+        "Trade Failed",
+        0,
+        target.mesh!.position.clone().add(new Vector3(0, 1, 0))
       );
       return false;
     }
 
     if (!targetCanReceive) {
       console.warn(
-        `Trade failed: Target (${target.name}) does not have enough inventory space.`
+        `Trade execution failed: Target (${target.name}) inventory full.`
       );
       this.game.logEvent(
         initiator,
         "trade_fail",
-        `Trade with ${target.name} failed (target inventory full).`,
+        `Trade with ${target.name} failed (target inventory full at execution).`,
         target,
-        { reason: "Target inventory full", items: validGiveItems },
+        { reason: "Target inventory full at execution", items: validGiveItems },
         initiator.mesh?.position
+      );
+      this.game.notificationManager?.createItemAddedSprite(
+        "Trade Failed",
+        0,
+        target.mesh!.position.clone().add(new Vector3(0, 1, 0))
       );
       return false;
     }
@@ -183,11 +220,11 @@ export class TradingSystem {
     // Remove items from initiator
     for (const item of validGiveItems) {
       if (!initiator.inventory.removeItem(item.id, item.count)) {
-        // This should ideally not happen due to the hasItems check, but handle defensively
         console.error(
           `Trade execution error: Failed to remove ${item.count}x ${item.id} from ${initiator.name}`
         );
-        // Rollback? For simplicity, we'll proceed but log the error.
+        // Consider rollback logic here in a more complex system
+        return false; // Fail the trade if removal fails
       }
     }
 
@@ -197,18 +234,39 @@ export class TradingSystem {
         console.error(
           `Trade execution error: Failed to remove ${item.count}x ${item.id} from ${target.name}`
         );
-        // Rollback?
+        // Rollback items given by initiator?
+        // For simplicity, fail the trade here.
+        // Add back items removed from initiator:
+        for (const itemToRestore of validGiveItems) {
+          initiator.inventory.addItem(itemToRestore.id, itemToRestore.count);
+        }
+        return false;
       }
     }
 
-    // Add items to target
+    // Add items to target (Player) - show notifications
     for (const item of validGiveItems) {
-      target.inventory.addItem(item.id, item.count);
+      const addResult = target.inventory.addItem(item.id, item.count);
+      if (addResult.totalAdded > 0) {
+        this.game.notificationManager?.createItemAddedSprite(
+          item.id,
+          addResult.totalAdded, // Show how many were actually added
+          target.mesh!.position.clone().add(new Vector3(0, 1, 0))
+        );
+      }
+      // Handle case where adding fails despite space check (should be rare)
+      if (addResult.totalAdded < item.count) {
+        console.error(
+          `Trade execution error: Failed to add all ${item.count}x ${item.id} to ${target.name}`
+        );
+        // Rollback? Very complex. Log and potentially leave partial trade.
+      }
     }
 
-    // Add items to initiator
+    // Add items to initiator (NPC) - no notifications needed
     for (const item of validReceiveItems) {
       initiator.inventory.addItem(item.id, item.count);
+      // Handle potential add failure for NPC?
     }
 
     // --- Log Success ---
@@ -227,21 +285,83 @@ export class TradingSystem {
       },
       initiator.mesh?.position
     );
-    // Also log from target's perspective if they are an NPC
-    if (target.aiController) {
-      this.game.logEvent(
-        target,
-        "trade_success",
-        `Received [${formatItems(validGiveItems)}] from ${initiator.name} for [${formatItems(validReceiveItems)}].`,
-        initiator,
-        {
-          gave: validReceiveItems, // Target gave these
-          received: validGiveItems, // Target received these
-        },
-        target.mesh?.position
-      );
-    }
+    // Also log from target's perspective
+    this.game.logEvent(
+      target,
+      "trade_success",
+      `Received [${formatItems(validGiveItems)}] from ${initiator.name} for [${formatItems(validReceiveItems)}].`,
+      initiator,
+      {
+        gave: validReceiveItems, // Target gave these
+        received: validGiveItems, // Target received these
+      },
+      target.mesh?.position
+    );
 
     return true;
+  }
+
+  /**
+   * Handles the logic when a player declines a trade offer.
+   * @param initiator The character who initiated the trade (NPC).
+   * @param target The character who declined the trade (Player).
+   */
+  declineTrade(initiator: Character, target: Character): void {
+    if (!initiator || !target) return;
+
+    const message = `${target.name} declined trade offer from ${initiator.name}.`;
+    console.log(message);
+    this.game.logEvent(
+      target, // Logged from player's perspective
+      "trade_decline",
+      message,
+      initiator,
+      {},
+      target.mesh?.position
+    );
+    // Log from NPC perspective as well
+    this.game.logEvent(
+      initiator,
+      "trade_decline",
+      `${target.name} declined the trade offer.`,
+      target,
+      {},
+      initiator.mesh?.position
+    );
+
+    // Optionally trigger NPC reaction logic here or via event log check
+    // initiator.aiController?.handleTradeDeclined();
+  }
+
+  /**
+   * Simplified check if an inventory can potentially hold a given item count.
+   * Does not perfectly account for stack merging vs new slots.
+   */
+  private canInventoryHold(
+    inventory: Character["inventory"],
+    itemId: string,
+    count: number
+  ): boolean {
+    if (!inventory) return false;
+    const maxStack = inventory.getMaxStack(itemId);
+    let remainingCount = count;
+
+    // Check space in existing stacks
+    for (const slot of inventory.items) {
+      if (slot?.id === itemId && slot.count < maxStack) {
+        remainingCount -= maxStack - slot.count;
+        if (remainingCount <= 0) return true;
+      }
+    }
+
+    // Check empty slots
+    for (const slot of inventory.items) {
+      if (slot === null) {
+        remainingCount -= maxStack;
+        if (remainingCount <= 0) return true;
+      }
+    }
+
+    return remainingCount <= 0;
   }
 }

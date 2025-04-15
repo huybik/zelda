@@ -1,4 +1,5 @@
 /* File: /src/main.ts */
+/* File: /src/main.ts */
 import * as THREE from "three";
 import {
   Scene,
@@ -76,7 +77,8 @@ export class Game {
   collidableObjects: Object3D[] = [];
   interactableObjects: Array<any> = []; // Includes Characters, Animals, Resources (Object3D)
   isPaused: boolean = false;
-  isQuestBannerVisible: boolean = false;
+  isQuestBannerVisible: boolean = false; // Tracks if the banner UI is visible (for quests or trades)
+  currentBannerType: "quest" | "trade" | "none" = "none"; // Tracks what the banner is showing
   intentContainer: HTMLElement | null = null;
   particleEffects: Group[] = [];
   audioElement: HTMLAudioElement | null = null;
@@ -95,11 +97,26 @@ export class Game {
   private lastAiUpdateTime: number = 0;
   private aiUpdateInterval: number = 0.2; // Update AI logic 5 times per second
 
+  // Banner UI Elements
   private questBannerElement: HTMLElement | null = null;
   private questBannerTitle: HTMLElement | null = null;
   private questBannerDesc: HTMLElement | null = null;
-  private questBannerButton: HTMLButtonElement | null = null;
-  private boundQuestBannerClickHandler: (() => void) | null = null;
+  private questBannerButtonContainer: HTMLElement | null = null; // Container for buttons
+  private questBannerOkButton: HTMLButtonElement | null = null;
+  private questBannerAcceptButton: HTMLButtonElement | null = null;
+  private questBannerDeclineButton: HTMLButtonElement | null = null;
+
+  // Store current banner handlers to remove them later
+  private boundBannerOkClickHandler: (() => void) | null = null;
+  private boundBannerAcceptClickHandler: (() => void) | null = null;
+  private boundBannerDeclineClickHandler: (() => void) | null = null;
+
+  // Store current trade details if a trade banner is shown
+  private currentTradeInitiator: Character | null = null;
+  private currentTradeTarget: Character | null = null;
+  private currentTradeGiveItems: InventoryItem[] = [];
+  private currentTradeReceiveItems: InventoryItem[] = [];
+
   public models!: Record<string, { scene: Group; animations: AnimationClip[] }>;
 
   constructor() {
@@ -190,8 +207,17 @@ export class Game {
     this.questBannerElement = document.getElementById("quest-detail-banner");
     this.questBannerTitle = document.getElementById("quest-banner-title");
     this.questBannerDesc = document.getElementById("quest-banner-description");
-    this.questBannerButton = document.getElementById(
+    this.questBannerButtonContainer = document.getElementById(
+      "quest-banner-buttons"
+    );
+    this.questBannerOkButton = document.getElementById(
       "quest-banner-ok"
+    ) as HTMLButtonElement;
+    this.questBannerAcceptButton = document.getElementById(
+      "quest-banner-accept"
+    ) as HTMLButtonElement;
+    this.questBannerDeclineButton = document.getElementById(
+      "quest-banner-decline"
     ) as HTMLButtonElement;
 
     // Setup Landing Page LAST, it will handle initial pause state
@@ -523,61 +549,227 @@ export class Game {
       this.inventoryDisplay?.isOpen ||
       this.journalDisplay?.isOpen ||
       this.interactionSystem?.isChatOpen ||
-      this.isQuestBannerVisible
+      this.isQuestBannerVisible // Check the generic banner visibility flag
     );
   }
 
-  showQuestBanner(quest: Quest | null, isCompletion: boolean = false): void {
+  /**
+   * Shows the quest/trade banner UI.
+   * @param title The title for the banner.
+   * @param description The description text.
+   * @param type The type of banner ('quest' or 'trade').
+   * @param onOk Optional handler for the OK button (for quests).
+   * @param onAccept Optional handler for the Accept button (for trades).
+   * @param onDecline Optional handler for the Decline button (for trades).
+   */
+  private showBanner(
+    title: string,
+    description: string,
+    type: "quest" | "trade",
+    onOk?: () => void,
+    onAccept?: () => void,
+    onDecline?: () => void
+  ): void {
     if (
       !this.questBannerElement ||
       !this.questBannerTitle ||
       !this.questBannerDesc ||
-      !this.questBannerButton
+      !this.questBannerButtonContainer ||
+      !this.questBannerOkButton ||
+      !this.questBannerAcceptButton ||
+      !this.questBannerDeclineButton
     )
       return;
 
-    // Remove previous listener if exists
-    if (this.boundQuestBannerClickHandler && this.questBannerButton) {
-      this.questBannerButton.removeEventListener(
-        "click",
-        this.boundQuestBannerClickHandler
-      );
-      this.boundQuestBannerClickHandler = null;
-    }
+    // --- Clean up previous listeners ---
+    this.removeBannerListeners();
 
-    if (quest) {
-      this.questBannerTitle.textContent = isCompletion
-        ? `Quest Completed: ${quest.name}`
-        : quest.name;
-      this.questBannerDesc.textContent = quest.description;
-      this.questBannerElement.classList.remove("hidden");
-      this.isQuestBannerVisible = true;
-      this.setPauseState(true); // Pause the game
+    // --- Configure Banner Content ---
+    this.questBannerTitle.textContent = title;
+    this.questBannerDesc.textContent = description;
+    this.currentBannerType = type;
 
-      // Add new one-time listener
-      this.boundQuestBannerClickHandler = () => {
-        this.showQuestBanner(null); // Call hide logic
-      };
-      this.questBannerButton.addEventListener(
-        "click",
-        this.boundQuestBannerClickHandler,
-        { once: true }
-      );
-    } else {
-      // Hide the banner
-      this.questBannerElement.classList.add("hidden");
-      this.isQuestBannerVisible = false;
-      this.setPauseState(false); // Unpause the game (if no other UI requires pause)
+    // --- Configure Buttons ---
+    if (type === "trade") {
+      this.questBannerOkButton.classList.add("hidden");
+      this.questBannerAcceptButton.classList.remove("hidden");
+      this.questBannerDeclineButton.classList.remove("hidden");
 
-      // Clean up just in case
-      if (this.boundQuestBannerClickHandler && this.questBannerButton) {
-        this.questBannerButton.removeEventListener(
+      if (onAccept) {
+        this.boundBannerAcceptClickHandler = () => {
+          onAccept();
+          this.hideQuestBanner(); // Hide after action
+        };
+        this.questBannerAcceptButton.addEventListener(
           "click",
-          this.boundQuestBannerClickHandler
+          this.boundBannerAcceptClickHandler
         );
       }
-      this.boundQuestBannerClickHandler = null;
+      if (onDecline) {
+        this.boundBannerDeclineClickHandler = () => {
+          onDecline();
+          this.hideQuestBanner(); // Hide after action
+        };
+        this.questBannerDeclineButton.addEventListener(
+          "click",
+          this.boundBannerDeclineClickHandler
+        );
+      }
+    } else {
+      // Quest or other notification type
+      this.questBannerOkButton.classList.remove("hidden");
+      this.questBannerAcceptButton.classList.add("hidden");
+      this.questBannerDeclineButton.classList.add("hidden");
+
+      if (onOk) {
+        this.boundBannerOkClickHandler = () => {
+          onOk();
+          this.hideQuestBanner(); // Hide after action
+        };
+        this.questBannerOkButton.addEventListener(
+          "click",
+          this.boundBannerOkClickHandler
+        );
+      }
     }
+
+    // --- Show Banner and Pause ---
+    this.questBannerElement.classList.remove("hidden");
+    this.isQuestBannerVisible = true;
+    this.setPauseState(true); // Pause the game
+  }
+
+  /** Removes all active banner button listeners. */
+  private removeBannerListeners(): void {
+    if (this.boundBannerOkClickHandler && this.questBannerOkButton) {
+      this.questBannerOkButton.removeEventListener(
+        "click",
+        this.boundBannerOkClickHandler
+      );
+    }
+    if (this.boundBannerAcceptClickHandler && this.questBannerAcceptButton) {
+      this.questBannerAcceptButton.removeEventListener(
+        "click",
+        this.boundBannerAcceptClickHandler
+      );
+    }
+    if (this.boundBannerDeclineClickHandler && this.questBannerDeclineButton) {
+      this.questBannerDeclineButton.removeEventListener(
+        "click",
+        this.boundBannerDeclineClickHandler
+      );
+    }
+    this.boundBannerOkClickHandler = null;
+    this.boundBannerAcceptClickHandler = null;
+    this.boundBannerDeclineClickHandler = null;
+  }
+
+  /** Hides the quest/trade banner and unpauses the game. */
+  hideQuestBanner(): void {
+    if (!this.questBannerElement || !this.isQuestBannerVisible) return;
+
+    this.removeBannerListeners(); // Clean up listeners
+    this.questBannerElement.classList.add("hidden");
+    this.isQuestBannerVisible = false;
+    this.currentBannerType = "none";
+    this.currentTradeInitiator = null; // Clear trade context
+    this.currentTradeTarget = null;
+    this.currentTradeGiveItems = [];
+    this.currentTradeReceiveItems = [];
+    this.setPauseState(false); // Unpause the game (if no other UI requires pause)
+  }
+
+  /**
+   * Shows a quest notification banner.
+   * @param quest The quest to display.
+   * @param isCompletion Whether this is a completion notification.
+   */
+  showQuestNotification(quest: Quest, isCompletion: boolean = false): void {
+    const title = isCompletion ? `Quest Completed: ${quest.name}` : quest.name;
+    this.showBanner(title, quest.description, "quest", () => {
+      // Optional: Add logic for when OK is clicked on a quest banner
+      console.log(`Quest banner acknowledged: ${quest.name}`);
+    });
+  }
+
+  /**
+   * Shows a trade offer notification banner.
+   * @param initiator The NPC initiating the trade.
+   * @param target The Player receiving the offer.
+   * @param itemsToGive Items the NPC wants to give.
+   * @param itemsToReceive Items the NPC wants to receive.
+   */
+  showTradeNotification(
+    initiator: Character,
+    target: Character,
+    itemsToGive: InventoryItem[],
+    itemsToReceive: InventoryItem[]
+  ): void {
+    if (!this.tradingSystem) return;
+
+    // Store trade details for handlers
+    this.currentTradeInitiator = initiator;
+    this.currentTradeTarget = target;
+    this.currentTradeGiveItems = [...itemsToGive];
+    this.currentTradeReceiveItems = [...itemsToReceive];
+
+    const title = `Trade Offer from ${initiator.name}`;
+    const formatItems = (items: InventoryItem[]) =>
+      items.map((i) => `${i.count}x ${i.id}`).join(", ") || "Nothing";
+    const giveDesc = formatItems(itemsToGive);
+    const receiveDesc = formatItems(itemsToReceive);
+    const description = `[${giveDesc}]\n[${receiveDesc}]`;
+
+    this.showBanner(
+      title,
+      description,
+      "trade",
+      undefined, // No OK handler for trades
+      () => this.handleTradeAccept(), // Accept handler
+      () => this.handleTradeDecline() // Decline handler
+    );
+  }
+
+  /** Handles the logic when the player clicks "Accept" on a trade offer. */
+  handleTradeAccept(): void {
+    if (
+      !this.tradingSystem ||
+      !this.currentTradeInitiator ||
+      !this.currentTradeTarget
+    )
+      return;
+
+    const success = this.tradingSystem.executeTrade(
+      this.currentTradeInitiator,
+      this.currentTradeTarget,
+      this.currentTradeGiveItems,
+      this.currentTradeReceiveItems
+    );
+
+    if (success) {
+      // Optionally show a success message (though item sprites might be enough)
+      console.log("Trade accepted and executed successfully.");
+    } else {
+      // Failure message is handled within executeTrade/notificationManager
+      console.log("Trade accepted but failed during execution.");
+    }
+    // hideQuestBanner is called automatically by showBanner's button handlers
+  }
+
+  /** Handles the logic when the player clicks "Decline" on a trade offer. */
+  handleTradeDecline(): void {
+    if (
+      !this.tradingSystem ||
+      !this.currentTradeInitiator ||
+      !this.currentTradeTarget
+    )
+      return;
+
+    this.tradingSystem.declineTrade(
+      this.currentTradeInitiator,
+      this.currentTradeTarget
+    );
+    // hideQuestBanner is called automatically by showBanner's button handlers
   }
 
   start(): void {
@@ -943,7 +1135,13 @@ export class Game {
       return false;
     }
 
-    return this.tradingSystem.initiateTrade(
+    // This method is now deprecated for direct AI calls.
+    // AI should call requestTradeUI, and player actions call executeTrade/declineTrade.
+    // For now, let's assume this might be called internally or for testing.
+    console.warn(
+      "Game.executeTrade called directly. Use TradingSystem methods instead."
+    );
+    return this.tradingSystem.executeTrade(
       initiator,
       target,
       itemsToGive,

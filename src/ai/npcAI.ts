@@ -1,3 +1,4 @@
+/* File: /src/ai/npcAI.ts */
 // File: src/ai/npcAI.ts
 import { Vector3, Object3D } from "three";
 import { Entity } from "../entities/entitiy";
@@ -200,22 +201,14 @@ export class AIController {
               this.target instanceof Character &&
               this.character.game?.tradingSystem
             ) {
-              // Initiate trade
-              const success = this.character.game.tradingSystem.initiateTrade(
+              // Request trade UI instead of executing directly
+              this.character.game.tradingSystem.requestTradeUI(
                 this.character,
                 this.target,
                 this.tradeItemsGive,
                 this.tradeItemsReceive
               );
-              if (success) {
-                this.character.updateIntentDisplay(
-                  `Traded with ${this.target.name}.`
-                );
-              } else {
-                this.character.updateIntentDisplay(
-                  `Trade with ${this.target.name} failed.`
-                );
-              }
+              // Reset state immediately after requesting the trade UI
               this.resetStateAfterAction();
             }
           }
@@ -486,11 +479,19 @@ export class AIController {
         (e) => e.id === target_id && e instanceof Character && !e.isDead
       );
       if (targetEntity) {
-        this.target = targetEntity;
-        this.targetAction = "trade";
-        this.tradeItemsGive = give_items;
-        this.tradeItemsReceive = receive_items;
-        this.aiState = "movingToTarget";
+        // Ensure target is the active player for trade requests
+        if (targetEntity === this.character.game?.activeCharacter) {
+          this.target = targetEntity;
+          this.targetAction = "trade";
+          this.tradeItemsGive = give_items;
+          this.tradeItemsReceive = receive_items;
+          this.aiState = "movingToTarget"; // Move towards player to initiate trade UI
+        } else {
+          console.warn(
+            `AI ${this.character.name} tried to trade with non-player ${targetEntity.name}. Falling back.`
+          );
+          this.fallbackToDefaultBehavior();
+        }
       } else {
         this.handleTargetLostOrDepleted();
       }

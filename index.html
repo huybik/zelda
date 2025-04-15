@@ -1,4 +1,5 @@
 <!-- File: /index.html -->
+<!-- File: /index.html -->
 <!doctype html>
 <html lang="en">
   <head>
@@ -100,11 +101,19 @@
         <input type="text" id="chat-input" placeholder="Type your message..." />
       </div>
 
-      <!-- Quest Detail Banner -->
+      <!-- Quest/Trade Detail Banner -->
       <div id="quest-detail-banner" class="hidden ui-panel">
-        <h3 id="quest-banner-title">Quest Title</h3>
-        <p id="quest-banner-description">Quest description goes here.</p>
-        <button id="quest-banner-ok">OK</button>
+        <h3 id="quest-banner-title">Banner Title</h3>
+        <p id="quest-banner-description">Banner description goes here.</p>
+        <div id="quest-banner-buttons">
+          <button id="quest-banner-ok">OK</button>
+          <button id="quest-banner-accept" class="hidden trade-button accept">
+            Accept
+          </button>
+          <button id="quest-banner-decline" class="hidden trade-button decline">
+            Decline
+          </button>
+        </div>
       </div>
 
       <!-- Mobile Controls Layer -->

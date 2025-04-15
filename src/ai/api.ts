@@ -194,7 +194,7 @@ export function generatePrompt(controller: AIController): string {
     if (!inv || inv.every((item) => item === null)) return "Empty";
     return inv
       .filter((item): item is InventoryItem => item !== null)
-      .map((item) => `${item.name} (${item.count})`)
+      .map((item) => `${item.id} (${item.count})`)
       .join(", ");
   };
 

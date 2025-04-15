@@ -69,7 +69,7 @@ export class QuestManager {
         quest.checkCompletion(interactionTarget, chatResponse)
       ) {
         quest.isCompleted = true;
-        this.game.showQuestBanner(quest, true); // Show banner on completion
+        this.game.showQuestNotification(quest, true); // Show banner on completion
         this.game.logEvent(
           interactionTarget,
           "quest_complete",

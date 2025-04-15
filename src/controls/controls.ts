@@ -1,4 +1,5 @@
 /* File: /src/controls/controls.ts */
+/* File: /src/controls/controls.ts */
 import { Character } from "../entities/character";
 import { ThirdPersonCamera } from "../systems/camera";
 import { Game } from "../main";
@@ -177,7 +178,12 @@ export class Controls {
       this.game.journalDisplay.hide();
       this.game?.setPauseState(false);
     } else if (this.game?.isQuestBannerVisible) {
-      this.game?.showQuestBanner(null); // Close quest banner
+      // If it's a trade offer, treat Escape as Decline
+      if (this.game.currentBannerType === "trade") {
+        this.game.handleTradeDecline(); // Call the decline handler
+      } else {
+        this.game.hideQuestBanner(); // Close regular quest banner
+      }
     } else if (this.isPointerLocked) {
       this.unlockPointer();
     }
