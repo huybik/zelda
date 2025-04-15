@@ -197,20 +197,24 @@ export class Inventory {
    * Adds an item to the inventory.
    * @param itemId The unique ID of the item to add.
    * @param count The number of items to add.
-   * @returns True if all items were successfully added, false otherwise (e.g., inventory full).
+   * @returns An object containing the amount added in this call (`added`) and the total amount successfully added (`totalAdded`).
    */
-  addItem(itemId: string, count: number = 1): boolean {
+  addItem(
+    itemId: string,
+    count: number = 1
+  ): { added: number; totalAdded: number } {
     const definition = getItemDefinition(itemId);
     if (!definition || count <= 0) {
       console.warn(
         `Attempted to add invalid item ID: ${itemId} or count: ${count}`
       );
-      return false;
+      return { added: 0, totalAdded: 0 };
     }
 
     const maxStack = this.getMaxStack(itemId);
     let remainingCount = count;
     let changed = false;
+    let amountAddedInCall = 0;
 
     // First pass: Add to existing stacks if the item is stackable
     if (definition.stackable) {
@@ -221,6 +225,7 @@ export class Inventory {
           const amountToAdd = Math.min(remainingCount, canAdd);
           slot.count += amountToAdd;
           remainingCount -= amountToAdd;
+          amountAddedInCall += amountToAdd;
           changed = true;
         }
       }
@@ -238,6 +243,7 @@ export class Inventory {
             icon: definition.icon, // Store icon filename
           };
           remainingCount -= amountToAdd;
+          amountAddedInCall += amountToAdd;
           changed = true;
           // If item is not stackable, we only add one per slot, so break after finding one empty slot.
           if (!definition.stackable) break;
@@ -246,7 +252,8 @@ export class Inventory {
     }
 
     if (changed) this.notifyChange();
-    return remainingCount === 0; // Return true if all items were added
+    const totalAdded = count - remainingCount;
+    return { added: amountAddedInCall, totalAdded: totalAdded };
   }
 
   /**

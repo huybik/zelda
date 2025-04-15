@@ -1,4 +1,4 @@
-// File: /src/entities/entitiy.ts
+/* File: /src/entities/entitiy.ts */
 import {
   Scene,
   Vector3,
@@ -159,9 +159,19 @@ export class Entity {
     this.mesh.lookAt(target);
   }
 
-  takeDamage(amount: number, attacker: Entity | null = null): void {
+  takeDamage(
+    amount: number,
+    attacker: Entity | null = null,
+    hitPosition?: Vector3
+  ): void {
     if (this.isDead || amount <= 0) return;
     this.health = Math.max(0, this.health - amount);
+
+    // Use provided hitPosition or estimate based on bounding box center
+    const displayPosition =
+      hitPosition ??
+      this.boundingBox.getCenter(new Vector3()).add(new Vector3(0, 0.2, 0)); // Slightly above center
+
     if (this.game) {
       const message = `${this.name} took ${amount} damage${
         attacker ? ` from ${attacker.name}` : ""
@@ -174,7 +184,15 @@ export class Entity {
         { damage: amount },
         this.mesh!.position
       );
+      // Spawn damage number notification
+      this.game.notificationManager?.createAttackNumberSprite(
+        amount,
+        displayPosition
+      );
+      // Spawn particle effect
+      this.game.spawnParticleEffect(displayPosition, "red");
     }
+
     if (this.health <= 0) this.die(attacker);
   }
 

@@ -28,6 +28,7 @@ import { HUD } from "./ui/hud";
 import { InventoryDisplay } from "./ui/inventory";
 import { JournalDisplay } from "./ui/journal";
 import { Minimap } from "./ui/minimap";
+import { NotificationManager } from "./ui/notificationManager"; // Import NotificationManager
 import {
   Inventory,
   getTerrainHeight,
@@ -68,6 +69,7 @@ export class Game {
   minimap: Minimap | null = null;
   inventoryDisplay: InventoryDisplay | null = null;
   journalDisplay: JournalDisplay | null = null;
+  notificationManager: NotificationManager | null = null; // Add NotificationManager
   entities: Array<any> = []; // Includes Characters, Animals, Resources (Object3D)
   collidableObjects: Object3D[] = [];
   interactableObjects: Array<any> = []; // Includes Characters, Animals, Resources (Object3D)
@@ -418,8 +420,8 @@ export class Game {
   }
 
   initUI(): void {
-    if (!this.activeCharacter || !this.inventory)
-      throw new Error("Cannot init UI: Player or Inventory missing.");
+    if (!this.activeCharacter || !this.inventory || !this.scene || !this.camera)
+      throw new Error("Cannot init UI: Core components missing.");
     this.hud = new HUD(this.activeCharacter);
     this.minimap = new Minimap(
       document.getElementById("minimap-canvas") as HTMLCanvasElement,
@@ -432,6 +434,12 @@ export class Game {
     this.journalDisplay = new JournalDisplay(
       this.activeCharacter.eventLog,
       this
+    );
+    // Initialize NotificationManager
+    this.notificationManager = new NotificationManager(
+      this.scene,
+      this.camera,
+      document.getElementById("ui-container")!
     );
   }
 
@@ -667,6 +675,7 @@ export class Game {
     // --- UI Update (always update) ---
     this.hud!.update();
     this.minimap!.update();
+    this.notificationManager?.update(deltaTime); // Update notifications regardless of pause state
     // Inventory and Journal displays update themselves internally when shown/data changes
 
     // --- Render ---
@@ -906,6 +915,7 @@ export class Game {
     this.mobileControls?.destroy();
     this.inventoryDisplay?.destroy(); // Clean up inventory display listeners
     this.journalDisplay = null; // Assuming journal doesn't need complex cleanup
+    this.notificationManager?.dispose(); // Dispose notification manager
     this.entities.forEach((entity) => entity.destroy?.()); // Call destroy on entities that have it
     this.scene?.traverse((object) => {
       if (object instanceof THREE.Mesh) {

@@ -776,7 +776,10 @@ export class Character extends Entity {
         if (currentHealth > 0) {
           const newHealth = Math.max(0, currentHealth - effectiveDamage);
           targetMesh.userData.health = newHealth;
-          this.game.spawnParticleEffect(closestPoint, "red"); // Hit particle
+          this.game.notificationManager?.createAttackNumberSprite(
+            effectiveDamage,
+            closestPoint
+          ); // Show damage number
 
           if (newHealth <= 0) {
             // Resource depleted - Grant item based on resource type
@@ -791,31 +794,50 @@ export class Character extends Entity {
             else if (resource === "herb")
               itemsToGrant.push({ id: "herb", count: 1 });
 
-            let allAdded = true;
-            for (const itemGrant of itemsToGrant) {
-              if (!this.inventory?.addItem(itemGrant.id, itemGrant.count)) {
-                allAdded = false;
-                this.game.logEvent(
-                  this,
-                  "gather_fail",
-                  `${this.name}'s inventory full, could not gather ${itemGrant.count} ${itemGrant.id}.`,
-                  targetMesh.name || targetMesh.id,
-                  { resource: itemGrant.id },
-                  closestPoint
+            // Check if the gatherer is the player before showing notifications
+            if (this === this.game.activeCharacter) {
+              for (const itemGrant of itemsToGrant) {
+                const addResult = this.inventory?.addItem(
+                  itemGrant.id,
+                  itemGrant.count
                 );
-                break; // Stop trying to add if inventory is full
-              } else {
-                this.game.logEvent(
-                  this,
-                  "gather_complete",
-                  `${this.name} gathered ${itemGrant.count} ${itemGrant.id}.`,
-                  targetMesh.name || targetMesh.id,
-                  { resource: itemGrant.id },
-                  closestPoint
-                );
+                if (addResult && addResult.added > 0) {
+                  this.game.notificationManager?.createItemAddedText(
+                    itemGrant.id,
+                    addResult.added
+                  );
+                  this.game.logEvent(
+                    this,
+                    "gather_complete",
+                    `${this.name} gathered ${addResult.totalAdded} ${itemGrant.id}.`,
+                    targetMesh.name || targetMesh.id,
+                    { resource: itemGrant.id },
+                    closestPoint
+                  );
+                } else {
+                  this.game.logEvent(
+                    this,
+                    "gather_fail",
+                    `${this.name}'s inventory full, could not gather ${itemGrant.count} ${itemGrant.id}.`,
+                    targetMesh.name || targetMesh.id,
+                    { resource: itemGrant.id },
+                    closestPoint
+                  );
+                  break; // Stop trying to add if inventory is full
+                }
+              }
+            } else {
+              // NPC gathering, just add items without notification
+              for (const itemGrant of itemsToGrant) {
+                if (
+                  !this.inventory?.addItem(itemGrant.id, itemGrant.count)
+                    .totalAdded
+                ) {
+                  // Log NPC inventory full? (Optional)
+                  break;
+                }
               }
             }
-            if (allAdded) this.game.spawnParticleEffect(closestPoint, "green"); // Success particle
 
             // Handle resource depletion and respawn timer
             if (targetMesh.userData.isDepletable) {
@@ -839,8 +861,8 @@ export class Character extends Entity {
       }
       // --- Target is an Entity (Character or Animal) ---
       else if (closestTarget instanceof Entity) {
-        closestTarget.takeDamage(effectiveDamage, this);
-        this.game.spawnParticleEffect(closestPoint, "red"); // Combat hit particle
+        closestTarget.takeDamage(effectiveDamage, this, closestPoint); // Pass hit location
+        // this.game.spawnParticleEffect(closestPoint, "red"); // Moved to takeDamage
         if (this.game) {
           this.game.logEvent(
             this,

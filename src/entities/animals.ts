@@ -1,4 +1,4 @@
-// File: /src/entities/animals.ts
+/* File: /src/entities/animals.ts */
 import {
   Scene,
   Vector3,
@@ -375,8 +375,8 @@ export class Animal extends Entity {
     // If a target was hit within range
     if (closestTarget && closestPoint) {
       // Apply damage
-      closestTarget.takeDamage(damage, this);
-      this.game.spawnParticleEffect(closestPoint, "red");
+      closestTarget.takeDamage(damage, this, closestPoint); // Pass hit location
+      // this.game.spawnParticleEffect(closestPoint, "red"); // Moved to takeDamage
 
       // Log the hit
       if (this.game) {
@@ -441,7 +441,7 @@ export class Animal extends Entity {
       !this.isPerformingAction &&
       this.attackAction
     ) {
-      this.triggerAction("attack"); // Trigger the attack animation and logic
+      this.triggerAction("attack"); // Trigger the attack animation and ilogic
     }
     // If performing an attack, let the animation play out (handled by 'finished' listener)
     else if (this.isPerformingAction && this.actionType === "attack") {
@@ -545,10 +545,30 @@ export class Animal extends Entity {
         this.mesh!.position.clone()
       );
       // Could add loot drop logic here
-      if (this.animalType === "Wolf" && attacker instanceof Character) {
-        attacker.inventory?.addItem("feather", MathUtils.randInt(1, 3));
-      } else if (this.animalType === "Deer" && attacker instanceof Character) {
-        attacker.inventory?.addItem("feather", MathUtils.randInt(2, 5));
+      if (attacker instanceof Character) {
+        let itemId = "";
+        let count = 0;
+        if (this.animalType === "Wolf") {
+          itemId = "meat"; // Example loot
+          count = MathUtils.randInt(1, 3);
+        } else if (this.animalType === "Deer") {
+          itemId = "meat"; // Example loot
+          count = MathUtils.randInt(2, 5);
+        }
+        if (itemId && count > 0) {
+          const addResult = attacker.inventory?.addItem(itemId, count);
+          if (addResult && addResult.added > 0) {
+            this.game.notificationManager?.createItemAddedText(
+              itemId,
+              addResult.added
+            );
+          } else {
+            // Log player inventory full? (Optional)
+          }
+        }
+      } else if (attacker instanceof Character) {
+        // NPC attacker loot logic (if any) - no notification
+        // attacker.inventory?.addItem(...)
       }
     }
   }
