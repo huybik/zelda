@@ -142,7 +142,7 @@ export class Game {
     this.initAudio();
 
     const modelPaths = {
-      player: "assets/player/scene.gltf",
+      player: "assets/player.glb",
       tavernMan: "assets/tavernman/scene.gltf",
       oldMan: "assets/oldman/scene.gltf",
       woman: "assets/woman/scene.gltf",

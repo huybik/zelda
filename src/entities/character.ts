@@ -493,25 +493,34 @@ export class Character extends Entity {
       // **Critical Reset:** Ensure clean state before applying transforms
       weaponModel.position.set(0, 0, 0);
       weaponModel.rotation.set(0, 0, 0);
-      weaponModel.scale.set(1, 1, 1);
+      weaponModel.scale.set(1, 1, 1); // Start with identity scale
 
-      // Apply scale and position adjustments per weapon type
+      // --- NEW: Counteract parent scale ---
+      const charWorldScale = new Vector3();
+      this.mesh!.getWorldScale(charWorldScale); // Get the character mesh's world scale
+      // Calculate inverse scale. Handle potential zero scale? (Unlikely but safe)
+      const invCharScale = new Vector3(
+        charWorldScale.x === 0 ? 1 : 1 / charWorldScale.x,
+        charWorldScale.y === 0 ? 1 : 1 / charWorldScale.y,
+        charWorldScale.z === 0 ? 1 : 1 / charWorldScale.z
+      );
+      weaponModel.scale.copy(invCharScale); // Apply inverse scale
+
+      // --- Apply a standard base scale for all weapons ---
+      // This ensures weapons have a consistent size relative to the hand,
+      // regardless of the character model's original or adjusted scale.
+      weaponModel.scale.multiplyScalar(0.1); // Adjust this scalar as needed for desired weapon size
+
+      // Apply position adjustments per weapon type (relative to hand bone)
+      // These offsets define the weapon's position relative to the hand bone's origin.
       if (definition.id === "sword") {
-        weaponModel.scale.set(0.5, 0.5, 0.5);
         weaponModel.position.set(0, 0.2, 0); // Offset along hand bone's Y-axis
       } else if (definition.id === "axe") {
-        weaponModel.scale.set(0.5, 0.5, 0.5);
         weaponModel.position.set(0, 0.25, 0);
       } else if (definition.id === "pickaxe") {
-        weaponModel.scale.set(0.5, 0.5, 0.5);
         weaponModel.position.set(0, 0.25, 0);
       }
       // Add more weapon types if needed
-
-      // Wait a frame using requestAnimationFrame before attaching?
-      // This might help ensure transforms are calculated correctly.
-      // It can slightly delay the visual appearance.
-      // await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Attach to the right hand bone
       this.rightHandBone.add(weaponModel);
