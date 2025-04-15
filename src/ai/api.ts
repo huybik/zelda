@@ -281,8 +281,7 @@ Here are the recent events you are aware of:
 ${eventLog}
 
 Based on this information, decide your next action. If player told you to do something don't ask for clarification or guidance, just do it.
-Attack target to gather resource.
-You can also trade items with other characters.
+Attack target to gather resource. Trade to give or receive item from target.
 
 Respond ONLY with a valid JSON object using one of the following formats:
 

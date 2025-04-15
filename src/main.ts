@@ -342,6 +342,7 @@ export class Game {
     this.entities.forEach((entity) => {
       // Ensure it's an NPC Character and not the player
       if (entity instanceof Character) {
+        entity.inventory?.addItem("herb", 3);
         const randomWeaponId =
           availableWeapons[Math.floor(Math.random() * availableWeapons.length)];
         const weaponDef = getItemDefinition(randomWeaponId);
