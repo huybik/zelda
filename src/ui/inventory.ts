@@ -19,8 +19,7 @@ export class InventoryDisplay {
   isOpen: boolean = false;
   boundUpdateDisplay: (items: Array<InventoryItem | null>) => void;
   boundHandleSlotClick: (event: MouseEvent) => void; // Declare type
-  clickTimeout: ReturnType<typeof setTimeout> | null = null;
-  doubleClickDelay: number = 300; // Milliseconds for double click detection
+  selectedItemIndex: number | null = null; // Track the index of the item whose description is shown
 
   constructor(inventory: Inventory, game: Game) {
     // Accept Game instance
@@ -68,6 +67,8 @@ export class InventoryDisplay {
     ) {
       this.createSlots(); // Recreate slots if size differs
     }
+    this.selectedItemIndex = null; // Reset selection when inventory changes
+    this.hideItemDescription();
   }
 
   createSlots(): void {
@@ -160,19 +161,17 @@ export class InventoryDisplay {
 
     const item = this.inventory.getItem(index);
 
-    // Clear previous timeout if exists (indicates a double click)
-    if (this.clickTimeout !== null) {
-      clearTimeout(this.clickTimeout);
-      this.clickTimeout = null;
-      // Double click detected: Perform item action
+    // Check if the same item was clicked again
+    if (this.selectedItemIndex === index && item) {
+      // Second click on the same item: perform action
       this.handleItemAction(index, item);
+      this.selectedItemIndex = null; // Reset selection after action
+      // handleItemAction already hides description
     } else {
-      // Start timeout for single click action (show description)
-      this.clickTimeout = setTimeout(() => {
-        this.clickTimeout = null;
-        // Single click action: Show description
-        this.showItemDescription(item);
-      }, this.doubleClickDelay);
+      // First click on this item, or click on a different item, or click on empty slot
+      this.showItemDescription(item); // Show description (or hide if item is null)
+      // Update selected index only if an item is present to be described
+      this.selectedItemIndex = item ? index : null;
     }
   }
 
@@ -182,6 +181,7 @@ export class InventoryDisplay {
     if (item && this.game.activeCharacter) {
       this.game.activeCharacter.handleItemAction(index);
       this.hideItemDescription(); // Hide description after use/equip attempt
+      this.selectedItemIndex = null; // Ensure selection is cleared after action
     }
   }
 
@@ -235,6 +235,7 @@ export class InventoryDisplay {
     if (this.descriptionPanel) {
       this.descriptionPanel.classList.add("hidden");
     }
+    // Do not reset selectedItemIndex here, only when clicking elsewhere, closing, or taking action
   }
 
   toggle(): void {
@@ -247,6 +248,7 @@ export class InventoryDisplay {
     this.updateDisplay(this.inventory.items); // Update display immediately
     this.displayElement.classList.remove("hidden");
     // Don't automatically hide description when opening inventory
+    // Don't reset selection on show, allow remembering last selection if desired
   }
 
   hide(): void {
@@ -254,11 +256,7 @@ export class InventoryDisplay {
     this.isOpen = false;
     this.displayElement.classList.add("hidden");
     this.hideItemDescription(); // Hide description when closing inventory
-    // Clear click timeout if inventory is closed to prevent single click action
-    if (this.clickTimeout) {
-      clearTimeout(this.clickTimeout);
-      this.clickTimeout = null;
-    }
+    this.selectedItemIndex = null; // Reset selection when closing
   }
 
   // Clean up listeners when the display is no longer needed
@@ -276,10 +274,6 @@ export class InventoryDisplay {
           (cb) => cb !== this.boundUpdateDisplay
         );
     }
-    // Clear any pending timeouts
-    if (this.clickTimeout) {
-      clearTimeout(this.clickTimeout);
-    }
     // Nullify references to prevent memory leaks
     this.inventory = null!;
     this.game = null!;
@@ -288,5 +282,6 @@ export class InventoryDisplay {
     this.descriptionPanel = null;
     this.descriptionTitle = null;
     this.descriptionText = null;
+    this.selectedItemIndex = null;
   }
 }
