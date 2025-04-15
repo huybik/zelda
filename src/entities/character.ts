@@ -589,6 +589,12 @@ export class Character extends Entity {
       }
       // Remove one item from the specific inventory slot
       this.inventory.removeItemByIndex(inventoryIndex, 1);
+      // Show item removed notification
+      this.game?.notificationManager?.createItemRemovedSprite(
+        definition.id,
+        1, // Always 1 for consumables currently
+        this.mesh!.position.clone().add(new Vector3(0, 1, 0))
+      );
     } else {
       // Log if the item had no usable effect (e.g., already at full health)
       console.log(

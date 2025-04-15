@@ -735,7 +735,17 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   margin-bottom: 25px;
   font-size: 1em;
   line-height: 1.5;
-  white-space: pre-wrap; /* Allow line breaks in description */
+}
+
+/* Trade Item Styling */
+#quest-banner-description .trade-item-receive {
+  color: lightgreen;
+  font-weight: bold;
+}
+
+#quest-banner-description .trade-item-give {
+  color: lightcoral; /* Light red */
+  font-weight: bold;
 }
 
 #quest-banner-buttons {

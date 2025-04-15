@@ -15,8 +15,8 @@ export class NotificationManager {
   private camera: THREE.PerspectiveCamera;
   private activeSprites: ActiveSprite[] = []; // Combined array for all sprites
 
-  private readonly spriteDuration = 1.2; // seconds
-  private readonly spriteFlySpeed = 1.5; // world units per second
+  private readonly spriteDuration = 2; // seconds
+  private readonly spriteFlySpeed = 2; // world units per second
   private readonly spriteScale = 0.3;
   private readonly attackNumberFontSize = 40; // Smaller font size for attack numbers
   private readonly itemTextFontSize = 56; // Larger font size for item text
@@ -62,6 +62,24 @@ export class NotificationManager {
     const itemName = definition ? definition.name : itemId; // Fallback to ID
     const text = `+${count} ${itemName}`;
     const color = "rgba(144, 238, 144, 1)"; // Light green color
+    this.createSpriteNotification(text, color, position, this.itemTextFontSize);
+  }
+
+  /**
+   * Creates a floating text notification sprite for items removed from the inventory.
+   * @param itemId The ID of the item removed.
+   * @param count The number of items removed.
+   * @param position The world position where the item was removed/used.
+   */
+  createItemRemovedSprite(
+    itemId: string,
+    count: number,
+    position: THREE.Vector3
+  ): void {
+    const definition = getItemDefinition(itemId);
+    const itemName = definition ? definition.name : itemId; // Fallback to ID
+    const text = `-${count} ${itemName}`;
+    const color = "rgba(255, 150, 150, 1)"; // Light red color
     this.createSpriteNotification(text, color, position, this.itemTextFontSize);
   }
 

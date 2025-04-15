@@ -556,7 +556,7 @@ export class Game {
   /**
    * Shows the quest/trade banner UI.
    * @param title The title for the banner.
-   * @param description The description text.
+   * @param description The description text or HTML.
    * @param type The type of banner ('quest' or 'trade').
    * @param onOk Optional handler for the OK button (for quests).
    * @param onAccept Optional handler for the Accept button (for trades).
@@ -564,7 +564,7 @@ export class Game {
    */
   private showBanner(
     title: string,
-    description: string,
+    description: string, // Can be HTML
     type: "quest" | "trade",
     onOk?: () => void,
     onAccept?: () => void,
@@ -586,7 +586,8 @@ export class Game {
 
     // --- Configure Banner Content ---
     this.questBannerTitle.textContent = title;
-    this.questBannerDesc.textContent = description;
+    // Use innerHTML to render potential HTML in description (for trade items)
+    this.questBannerDesc.innerHTML = description;
     this.currentBannerType = type;
 
     // --- Configure Buttons ---
@@ -696,8 +697,8 @@ export class Game {
    * Shows a trade offer notification banner.
    * @param initiator The NPC initiating the trade.
    * @param target The Player receiving the offer.
-   * @param itemsToGive Items the NPC wants to give.
-   * @param itemsToReceive Items the NPC wants to receive.
+   * @param itemsToGive Items the NPC wants to give (Player receives).
+   * @param itemsToReceive Items the NPC wants to receive (Player gives).
    */
   showTradeNotification(
     initiator: Character,
@@ -714,15 +715,29 @@ export class Game {
     this.currentTradeReceiveItems = [...itemsToReceive];
 
     const title = `Trade Offer from ${initiator.name}`;
+
+    // Helper to format items with names
     const formatItems = (items: InventoryItem[]) =>
-      items.map((i) => `${i.count}x ${i.id}`).join(", ") || "Nothing";
-    const giveDesc = formatItems(itemsToGive);
-    const receiveDesc = formatItems(itemsToReceive);
-    const description = `[${giveDesc}]\n[${receiveDesc}]`;
+      items
+        .map((i) => {
+          const def = getItemDefinition(i.id);
+          return `${i.count}x ${def ? def.name : i.id}`; // Use name if available
+        })
+        .join(", ") || "Nothing";
+
+    // Create HTML description with colored spans
+    const giveDesc = formatItems(itemsToGive); // Items NPC gives (Player receives)
+    const receiveDesc = formatItems(itemsToReceive); // Items NPC receives (Player gives)
+
+    const descriptionHTML = `
+            You Receive: <span class="trade-item-receive">${giveDesc}</span>
+            <br>
+            You Give: <span class="trade-item-give">${receiveDesc}</span>
+        `;
 
     this.showBanner(
       title,
-      description,
+      descriptionHTML, // Pass HTML string
       "trade",
       undefined, // No OK handler for trades
       () => this.handleTradeAccept(), // Accept handler

@@ -228,7 +228,7 @@ export class TradingSystem {
       }
     }
 
-    // Remove items from target
+    // Remove items from target (Player) - show notifications
     for (const item of validReceiveItems) {
       if (!target.inventory.removeItem(item.id, item.count)) {
         console.error(
@@ -241,6 +241,13 @@ export class TradingSystem {
           initiator.inventory.addItem(itemToRestore.id, itemToRestore.count);
         }
         return false;
+      } else {
+        // Show item removed notification for the player
+        this.game.notificationManager?.createItemRemovedSprite(
+          item.id,
+          item.count,
+          target.mesh!.position.clone().add(new Vector3(0, 1, 0))
+        );
       }
     }
 
