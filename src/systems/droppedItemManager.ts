@@ -23,14 +23,17 @@ export class DroppedItemManager {
   private game: Game;
   private activeItems: Map<string, DroppedItemData> = new Map();
   private readonly orbRadius = 0.25;
-  private readonly particleCount = 50;
-  private readonly particleSize = 0.05;
-  private readonly particleSpread = 0.5;
+  private readonly particleCount = 70; // Increased particle count
+  private readonly particleSize = 0.06; // Slightly larger particles
+  private readonly particleSpread = 0.6; // Increased spread
   private readonly floatFrequency = 1.5;
   private readonly floatAmplitude = 0.15;
   private readonly collectionRadiusSq = 1.5 * 1.5; // Squared radius for efficiency
   private readonly despawnTime = 60; // Seconds until item despawns
   private readonly initialCollectionCooldown = 1.0; // Seconds before item can be collected
+  private readonly particleGravity = -0.5; // Gravity effect on particles
+  private readonly particleInitialUpVelocity = 0.3; // Initial upward burst
+  private readonly particleHorizontalVelocity = 0.2; // Initial outward velocity
 
   constructor(game: Game) {
     this.game = game;
@@ -69,19 +72,22 @@ export class DroppedItemManager {
     const positions = new Float32Array(this.particleCount * 3);
     const colors = new Float32Array(this.particleCount * 3);
     const velocities = new Float32Array(this.particleCount * 3); // Store velocity for animation
+    const lifetimes = new Float32Array(this.particleCount); // Store lifetime for fading/reset
     const baseColor = new THREE.Color(itemColor);
 
     for (let i = 0; i < this.particleCount; i++) {
       const i3 = i * 3;
-      // Initial position spread around the orb
-      positions[i3] = (Math.random() - 0.5) * this.particleSpread;
-      positions[i3 + 1] = (Math.random() - 0.5) * this.particleSpread;
-      positions[i3 + 2] = (Math.random() - 0.5) * this.particleSpread;
+      // Initial position near the center (will burst outwards)
+      positions[i3] = (Math.random() - 0.5) * 0.1;
+      positions[i3 + 1] = (Math.random() - 0.5) * 0.1;
+      positions[i3 + 2] = (Math.random() - 0.5) * 0.1;
 
-      // Store initial velocity (e.g., outward drift)
-      velocities[i3] = (Math.random() - 0.5) * 0.1;
-      velocities[i3 + 1] = (Math.random() - 0.5) * 0.1 + 0.05; // Slight upward bias
-      velocities[i3 + 2] = (Math.random() - 0.5) * 0.1;
+      // Store initial velocity (burst outwards and upwards)
+      const angle = Math.random() * Math.PI * 2;
+      const horizontalSpeed = Math.random() * this.particleHorizontalVelocity;
+      velocities[i3] = Math.cos(angle) * horizontalSpeed;
+      velocities[i3 + 1] = Math.random() * this.particleInitialUpVelocity + 0.1; // Upward burst
+      velocities[i3 + 2] = Math.sin(angle) * horizontalSpeed;
 
       // Color with slight variation
       const particleColor = baseColor.clone();
@@ -93,18 +99,24 @@ export class DroppedItemManager {
       colors[i3] = particleColor.r;
       colors[i3 + 1] = particleColor.g;
       colors[i3 + 2] = particleColor.b;
+
+      // Assign a random lifetime (e.g., 1 to 2 seconds)
+      lifetimes[i] = 1.0 + Math.random() * 1.0;
     }
     particles.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     particles.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     particles.userData.velocities = velocities; // Attach velocities to geometry
+    particles.userData.lifetimes = lifetimes; // Attach lifetimes
+    particles.userData.currentLifetimes = lifetimes.slice(); // Track current remaining lifetime
 
     const particleMaterial = new THREE.PointsMaterial({
       size: this.particleSize,
       vertexColors: true,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.9, // Start slightly more opaque
       sizeAttenuation: true,
       depthWrite: false, // Prevent particles obscuring orb too much
+      blending: THREE.AdditiveBlending, // Brighter effect
     });
     const particleSystem = new THREE.Points(particles, particleMaterial);
 
@@ -186,23 +198,60 @@ export class DroppedItemManager {
         .array as Float32Array;
       const velocities = data.particleSystem.geometry.userData
         .velocities as Float32Array;
+      const lifetimes = data.particleSystem.geometry.userData
+        .lifetimes as Float32Array;
+      const currentLifetimes = data.particleSystem.geometry.userData
+        .currentLifetimes as Float32Array;
+      const colors = data.particleSystem.geometry.attributes.color
+        .array as Float32Array;
+
       for (let i = 0; i < this.particleCount; i++) {
         const i3 = i * 3;
-        positions[i3] += velocities[i3] * deltaTime;
-        positions[i3 + 1] += velocities[i3 + 1] * deltaTime;
-        positions[i3 + 2] += velocities[i3 + 2] * deltaTime;
 
-        // Optional: Reset particles that drift too far, or fade them
-        const distSq =
-          positions[i3] ** 2 + positions[i3 + 1] ** 2 + positions[i3 + 2] ** 2;
-        if (distSq > this.particleSpread * this.particleSpread * 1.5) {
-          // Reset to center-ish
+        // Decrease lifetime
+        currentLifetimes[i] -= deltaTime;
+
+        // If lifetime ended, reset particle
+        if (currentLifetimes[i] <= 0) {
+          // Reset position near center
           positions[i3] = (Math.random() - 0.5) * 0.1;
           positions[i3 + 1] = (Math.random() - 0.5) * 0.1;
           positions[i3 + 2] = (Math.random() - 0.5) * 0.1;
+
+          // Reset velocity
+          const angle = Math.random() * Math.PI * 2;
+          const horizontalSpeed =
+            Math.random() * this.particleHorizontalVelocity;
+          velocities[i3] = Math.cos(angle) * horizontalSpeed;
+          velocities[i3 + 1] =
+            Math.random() * this.particleInitialUpVelocity + 0.1;
+          velocities[i3 + 2] = Math.sin(angle) * horizontalSpeed;
+
+          // Reset lifetime
+          currentLifetimes[i] = lifetimes[i]; // Use original max lifetime
+
+          // Reset color alpha (if material opacity is used per-particle, which it isn't here)
+          // For PointsMaterial, opacity is uniform. We can simulate fade by color manipulation if needed.
+        } else {
+          // Apply gravity
+          velocities[i3 + 1] += this.particleGravity * deltaTime;
+
+          // Update position
+          positions[i3] += velocities[i3] * deltaTime;
+          positions[i3 + 1] += velocities[i3 + 1] * deltaTime;
+          positions[i3 + 2] += velocities[i3 + 2] * deltaTime;
+
+          // Optional: Add slight drag/damping
+          velocities[i3] *= 0.98;
+          velocities[i3 + 1] *= 0.98;
+          velocities[i3 + 2] *= 0.98;
         }
       }
       data.particleSystem.geometry.attributes.position.needsUpdate = true;
+      // Opacity is handled by the material, not per-particle here.
+      // If per-particle opacity is needed, switch to ShaderMaterial.
+      // Fade the whole system slightly over its total lifetime? Maybe not needed.
+      // data.particleSystem.material.opacity = 1.0 - (elapsedTime - data.startTime) / this.despawnTime;
 
       // --- Collection Check (Moved to InteractionSystem) ---
       // We only update animations and check for despawn here.
