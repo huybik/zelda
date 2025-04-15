@@ -1,4 +1,4 @@
-// src/systems/droppedItemManager.ts
+/* File: /src/systems/droppedItemManager.ts */
 import * as THREE from "three";
 import { Vector3 } from "three";
 import { Game } from "../main";
@@ -6,7 +6,7 @@ import { Character } from "../entities/character";
 import { getItemDefinition } from "../core/items";
 import { getTerrainHeight } from "../core/utils";
 
-interface DroppedItemData {
+export interface DroppedItemData {
   id: string; // Unique ID for this dropped item instance
   itemId: string;
   count: number;
@@ -16,6 +16,7 @@ interface DroppedItemData {
   startTime: number;
   floatOffset: number; // For sine wave animation
   collectionCooldown: number; // Prevent instant re-collection if dropped by player
+  itemGroup: THREE.Group; // Reference to the main group for position checks
 }
 
 export class DroppedItemManager {
@@ -137,8 +138,12 @@ export class DroppedItemManager {
       floatOffset: Math.random() * Math.PI * 2, // Randomize starting float phase
       collectionCooldown:
         this.game.clock!.elapsedTime + this.initialCollectionCooldown,
+      itemGroup: itemGroup, // Store reference to the group
     };
     itemGroup.userData.droppedItemId = droppedItemId; // Link group to data ID
+    itemGroup.userData.isInteractable = true; // Mark as interactable for InteractionSystem
+    itemGroup.userData.interactionType = "pickup";
+    itemGroup.userData.entityReference = droppedItemData; // Reference the data itself
     this.activeItems.set(droppedItemId, droppedItemData);
   }
 
@@ -149,12 +154,12 @@ export class DroppedItemManager {
     const itemsToRemove: string[] = [];
 
     this.activeItems.forEach((data, id) => {
-      const itemGroup = this.game.scene?.getObjectByProperty(
-        "droppedItemId",
-        id
-      ) as THREE.Group | undefined;
-      if (!itemGroup) {
-        itemsToRemove.push(id); // Group missing, mark for removal
+      const itemGroup = data.itemGroup; // Use stored reference
+      if (!itemGroup || !itemGroup.parent) {
+        // If group was removed externally, ensure cleanup
+        if (this.activeItems.has(id)) {
+          itemsToRemove.push(id);
+        }
         return;
       }
 
@@ -199,52 +204,8 @@ export class DroppedItemManager {
       }
       data.particleSystem.geometry.attributes.position.needsUpdate = true;
 
-      // --- Collection Check ---
-      if (
-        elapsedTime >= data.collectionCooldown &&
-        !this.game.activeCharacter!.isDead
-      ) {
-        const playerPos = this.game.activeCharacter!.mesh!.position;
-        const itemPos = itemGroup.position;
-        const distanceSq = playerPos.distanceToSquared(itemPos);
-
-        if (distanceSq < this.collectionRadiusSq) {
-          const addResult = this.game.activeCharacter!.inventory?.addItem(
-            data.itemId,
-            data.count
-          );
-          if (addResult && addResult.totalAdded > 0) {
-            // Item collected successfully
-            this.game.notificationManager?.createItemAddedSprite(
-              data.itemId,
-              addResult.totalAdded, // Show how many were actually added
-              itemPos.clone().add(new Vector3(0, 0.5, 0)) // Position above orb
-            );
-            this.game.logEvent(
-              this.game.activeCharacter!,
-              "collect_item",
-              `Collected ${addResult.totalAdded}x ${data.itemId}`,
-              undefined,
-              { item: data.itemId, count: addResult.totalAdded },
-              playerPos
-            );
-            itemsToRemove.push(id); // Mark for removal
-          } else {
-            // Inventory full or other add error
-            if (addResult?.totalAdded === 0 && addResult.added === 0) {
-              // Only show "Inventory Full" if truly no space
-              this.game.notificationManager?.createItemAddedSprite(
-                "Inventory Full",
-                0, // Special case for message
-                playerPos.clone().add(new Vector3(0, 1.5, 0))
-              );
-              // Prevent spamming "Inventory Full" by adding a small cooldown?
-              // Or maybe just don't try to collect again for a short time.
-              data.collectionCooldown = elapsedTime + 0.5; // Short delay before trying again
-            }
-          }
-        }
-      }
+      // --- Collection Check (Moved to InteractionSystem) ---
+      // We only update animations and check for despawn here.
     });
 
     // --- Remove Collected/Despawned Items ---
@@ -253,12 +214,96 @@ export class DroppedItemManager {
     });
   }
 
+  /**
+   * Finds the closest dropped item to the player within a given range.
+   * @param playerPosition The current position of the player.
+   * @param maxDistanceSq The maximum squared distance to check.
+   * @returns The data of the closest item, or null if none are in range.
+   */
+  findClosestItemToPlayer(
+    playerPosition: Vector3,
+    maxDistanceSq: number
+  ): DroppedItemData | null {
+    let closestItem: DroppedItemData | null = null;
+    let minDistanceSq = maxDistanceSq;
+    const now = this.game.clock?.elapsedTime ?? 0;
+
+    this.activeItems.forEach((data) => {
+      // Check collection cooldown
+      if (now < data.collectionCooldown) {
+        return;
+      }
+
+      const itemPos = data.itemGroup.position;
+      const distanceSq = playerPosition.distanceToSquared(itemPos);
+
+      if (distanceSq < minDistanceSq) {
+        minDistanceSq = distanceSq;
+        closestItem = data;
+      }
+    });
+
+    return closestItem;
+  }
+
+  /**
+   * Attempts to collect a specific dropped item.
+   * @param droppedItemId The unique ID of the dropped item instance.
+   * @param player The character attempting to collect the item.
+   * @returns True if the item was successfully collected, false otherwise.
+   */
+  collectItem(droppedItemId: string, player: Character): boolean {
+    const data = this.activeItems.get(droppedItemId);
+    if (!data || !player.inventory) {
+      return false; // Item not found or player has no inventory
+    }
+
+    const now = this.game.clock?.elapsedTime ?? 0;
+    if (now < data.collectionCooldown) {
+      return false; // Still on cooldown
+    }
+
+    const addResult = player.inventory.addItem(data.itemId, data.count);
+
+    if (addResult && addResult.totalAdded > 0) {
+      // Item collected successfully
+      this.game.notificationManager?.createItemAddedSprite(
+        data.itemId,
+        addResult.totalAdded, // Show how many were actually added
+        data.itemGroup.position.clone().add(new Vector3(0, 0.5, 0)) // Position above orb
+      );
+      this.game.logEvent(
+        player,
+        "collect_item",
+        `Collected ${addResult.totalAdded}x ${data.itemId}`,
+        undefined,
+        { item: data.itemId, count: addResult.totalAdded },
+        player.mesh!.position
+      );
+      this.removeDroppedItem(droppedItemId); // Remove from world and manager
+      return true;
+    } else {
+      // Inventory full or other add error
+      if (addResult?.totalAdded === 0 && addResult.added === 0) {
+        // Only show "Inventory Full" if truly no space
+        this.game.notificationManager?.createItemAddedSprite(
+          "Inventory Full",
+          0, // Special case for message
+          player.mesh!.position.clone().add(new Vector3(0, 1.5, 0))
+        );
+      }
+      // Add a small cooldown to prevent spamming inventory full message
+      data.collectionCooldown = now + 0.5;
+      return false;
+    }
+  }
+
   private removeDroppedItem(id: string): void {
     const data = this.activeItems.get(id);
     if (!data || !this.game.scene) return;
 
-    const itemGroup = this.game.scene.getObjectByProperty("droppedItemId", id);
-    if (itemGroup) {
+    const itemGroup = data.itemGroup; // Use stored reference
+    if (itemGroup && itemGroup.parent) {
       // Dispose geometries and materials
       itemGroup.traverse((child) => {
         if (child instanceof THREE.Mesh) {
@@ -279,7 +324,7 @@ export class DroppedItemManager {
     }
 
     this.activeItems.delete(id);
-    console.log(`Removed dropped item: ${data.itemId} (ID: ${id})`);
+    // console.log(`Removed dropped item: ${data.itemId} (ID: ${id})`);
   }
 
   dispose(): void {

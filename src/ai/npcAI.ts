@@ -87,9 +87,6 @@ export class AIController {
         this.lastApiCallTime = currentTime;
       }
     }
-    if (this.aiState !== this.previousAiState) {
-      // console.log(`AI state changed from ${this.previousAiState} to ${this.aiState}`);
-    }
 
     switch (this.aiState) {
       case "deciding":

@@ -1,3 +1,4 @@
+/* File: /src/systems/interaction.ts */
 // File: /src/systems/interaction.ts
 import {
   PerspectiveCamera,
@@ -17,6 +18,8 @@ import { Controls } from "../controls/controls";
 import { Game } from "../main";
 import { sendToGemini, generateChatPrompt } from "../ai/api";
 import { INTERACTION_DISTANCE, AIM_TOLERANCE } from "../core/constants";
+import { DroppedItemManager, DroppedItemData } from "./droppedItemManager"; // Import DroppedItemManager and Data
+import { getItemDefinition } from "../core/items"; // Import for item names
 
 export class InteractionSystem {
   player: Character;
@@ -26,10 +29,11 @@ export class InteractionSystem {
   inventory: Inventory;
   eventLog: EventLog;
   raycaster: Raycaster;
-  interactionDistance: number = INTERACTION_DISTANCE; // For 'E' key interactions (chat)
+  interactionDistance: number = INTERACTION_DISTANCE; // For 'E' key interactions (chat, pickup)
   aimTolerance: number = AIM_TOLERANCE;
-  currentTarget: any | null = null; // Can be Character, Animal, Resource Object3D
-  currentTargetMesh: Object3D | null = null;
+  currentTarget: any | null = null; // Can be Character, Animal, Resource Object3D, DroppedItemData
+  currentTargetMesh: Object3D | null = null; // Mesh for Characters/Resources
+  currentTargetType: "character" | "item" | "none" = "none"; // Track target type
   interactionPromptElement: HTMLElement | null;
   promptTimeout: ReturnType<typeof setTimeout> | null = null;
   game: Game;
@@ -40,6 +44,7 @@ export class InteractionSystem {
   boundSendMessage: (() => Promise<void>) | null = null;
   boundHandleChatKeyDown: ((e: KeyboardEvent) => void) | null = null;
   boundCloseChat: (() => void) | null = null;
+  droppedItemManager: DroppedItemManager; // Add reference
 
   private cameraDirection = new Vector3();
   private objectDirection = new Vector3();
@@ -53,7 +58,8 @@ export class InteractionSystem {
     controls: Controls,
     inventory: Inventory,
     eventLog: EventLog,
-    game: Game
+    game: Game,
+    droppedItemManager: DroppedItemManager // Inject DroppedItemManager
   ) {
     this.player = player;
     this.camera = camera;
@@ -62,6 +68,7 @@ export class InteractionSystem {
     this.inventory = inventory;
     this.eventLog = eventLog;
     this.game = game;
+    this.droppedItemManager = droppedItemManager; // Store reference
     this.raycaster = new Raycaster();
     this.interactionPromptElement =
       document.getElementById("interaction-prompt");
@@ -77,65 +84,90 @@ export class InteractionSystem {
       return;
     }
 
-    // Find target for 'E' interaction (chat)
-    const targetInfo = this.findInteractableTarget();
+    // 1. Find Character Target (Highest Priority)
+    const characterTargetInfo = this.findInteractableCharacterTarget();
 
-    // Only show prompt for things that can be interacted with via 'E' (currently only Characters for chat)
+    // 2. Find Dropped Item Target (Lower Priority)
+    const itemTargetData = this.droppedItemManager.findClosestItemToPlayer(
+      this.player.mesh!.position,
+      this.interactionDistance * this.interactionDistance // Use squared distance
+    );
+
+    let newTarget: any | null = null;
+    let newTargetMesh: Object3D | null = null;
+    let newTargetType: "character" | "item" | "none" = "none";
+    let promptText: string | null = null;
+
+    // Prioritize Character interaction
+    if (characterTargetInfo) {
+      newTarget = characterTargetInfo.instance;
+      newTargetMesh = characterTargetInfo.mesh;
+      newTargetType = "character";
+      promptText =
+        characterTargetInfo.instance.userData.prompt ||
+        (this.game.mobileControls?.isActive()
+          ? "Tap Interact"
+          : "Press E to talk");
+    } else if (itemTargetData) {
+      // If no character target, check for item target
+      newTarget = itemTargetData; // Store the data object
+      newTargetMesh = null; // No specific mesh for item target logic here
+      newTargetType = "item";
+      const itemDef = getItemDefinition(itemTargetData.itemId);
+      const itemName = itemDef ? itemDef.name : itemTargetData.itemId;
+      promptText = this.game.mobileControls?.isActive()
+        ? `Tap Interact to pick up ${itemName}`
+        : `Press E to pick up ${itemName}`;
+    }
+
+    // Update current target and prompt if changed
     if (
-      targetInfo?.instance instanceof Character && // Check if it's a Character
-      targetInfo.instance !== this.player &&
-      !targetInfo.instance.isDead // Check if alive
+      newTarget !== this.currentTarget ||
+      newTargetType !== this.currentTargetType
     ) {
-      if (this.currentTarget !== targetInfo.instance) {
-        this.currentTarget = targetInfo.instance;
-        this.currentTargetMesh = targetInfo.mesh;
-        this.showPrompt(
-          targetInfo.instance.userData.prompt ||
-            (this.game.mobileControls?.isActive()
-              ? "Tap Interact"
-              : "Press E to talk") // Changed prompt
-        );
+      this.currentTarget = newTarget;
+      this.currentTargetMesh = newTargetMesh;
+      this.currentTargetType = newTargetType;
+
+      if (promptText) {
+        this.showPrompt(promptText);
+      } else {
+        this.hidePrompt();
       }
-      // Check for 'E' key press (interact)
-      if (this.controls.moveState.interact) {
-        this.tryInteract(this.currentTarget);
-        // Reset interact state immediately after trying to prevent repeated interactions per press
-        this.controls.moveState.interact = false;
-      }
-    } else if (this.currentTarget) {
-      // Clear target if it's no longer valid for 'E' interaction
-      this.currentTarget = null;
-      this.currentTargetMesh = null;
-      this.hidePrompt();
+    }
+
+    // Check for 'E' key press (interact)
+    if (this.controls.moveState.interact && this.currentTarget) {
+      this.tryInteract(this.currentTarget, this.currentTargetType);
+      // Reset interact state immediately after trying
+      this.controls.moveState.interact = false;
     }
 
     // Attack logic is handled by Character.update based on moveState.attack
   }
 
-  findInteractableTarget(): TargetInfo | null {
+  // Renamed to specifically find Characters for 'E' interaction
+  findInteractableCharacterTarget(): TargetInfo | null {
     this.raycaster.setFromCamera(new Vector2(0, 0), this.camera);
-    this.raycaster.far = this.interactionDistance; // Use interactionDistance for 'E' key targeting
+    this.raycaster.far = this.interactionDistance;
     const playerPosition = this.player.mesh!.position;
 
-    // Filter potential targets for 'E' interaction (currently only living Characters)
     const meshesToCheck = this.interactableEntities
       .map((item) => (item as any).mesh ?? item)
       .filter((mesh): mesh is Object3D => {
         if (
           !(mesh instanceof Object3D) ||
-          !mesh.userData?.isInteractable || // Must be interactable
+          !mesh.userData?.isInteractable ||
           !mesh.visible ||
           mesh === this.player.mesh
         )
           return false;
 
         const entityRef = mesh.userData?.entityReference;
-        // Only consider living Characters for 'E' interaction
         if (!(entityRef instanceof Character) || entityRef.isDead) return false;
 
-        // Basic distance check (optional optimization)
         const distSq = playerPosition.distanceToSquared(mesh.position);
-        return distSq < this.interactionDistance * this.interactionDistance * 4; // Check slightly larger radius
+        return distSq < this.interactionDistance * this.interactionDistance * 4;
       });
 
     let closestHit: TargetInfo | null = null;
@@ -147,11 +179,10 @@ export class InteractionSystem {
         let rootInstance: any | null = null;
         let rootMesh: Object3D | null = null;
 
-        // Traverse up to find the root interactable object/entity
         while (hitObject) {
           if (
             hitObject.userData?.isInteractable &&
-            hitObject.userData?.entityReference instanceof Character // Ensure it's a Character
+            hitObject.userData?.entityReference instanceof Character
           ) {
             rootInstance = hitObject.userData.entityReference;
             rootMesh = hitObject;
@@ -160,14 +191,12 @@ export class InteractionSystem {
           hitObject = hitObject.parent;
         }
 
-        // Validate the found instance
         if (
-          rootInstance instanceof Character && // Must be a Character
+          rootInstance instanceof Character &&
           rootMesh &&
-          !rootInstance.isDead && // Must be alive
+          !rootInstance.isDead &&
           rootInstance !== this.player
         ) {
-          // Check aiming angle
           this.objectDirection
             .copy(intersect.point)
             .sub(this.camera.position)
@@ -182,24 +211,21 @@ export class InteractionSystem {
               point: intersect.point,
               distance: intersect.distance,
             };
-            break; // Found the closest valid target in the aim cone
+            break;
           }
         }
       }
     }
 
-    // If raycast fails, check nearby Characters (for proximity interaction)
     return closestHit || this.findNearbyCharacter();
   }
 
-  // Simplified nearby check specifically for Characters (for 'E' interaction)
   findNearbyCharacter(): TargetInfo | null {
     const playerPosition = this.player.mesh!.getWorldPosition(new Vector3());
     let closestDistSq = this.interactionDistance * this.interactionDistance;
     let closestInstance: Character | null = null;
 
     this.interactableEntities.forEach((item) => {
-      // Only consider living Characters
       if (
         !(item instanceof Character) ||
         item === this.player ||
@@ -220,7 +246,6 @@ export class InteractionSystem {
           .normalize();
         const angle = this.playerDirection.angleTo(this.objectDirection);
 
-        // Check if roughly in front
         if (angle < Math.PI / 2.5) {
           closestDistSq = distSq;
           closestInstance = item;
@@ -241,27 +266,40 @@ export class InteractionSystem {
     return null;
   }
 
-  tryInteract(targetInstance: any): void {
-    // This function is now primarily for 'E' key interactions (chat)
-    if (!(targetInstance instanceof Character) || targetInstance.isDead) {
-      this.showPrompt("Cannot interact with this.", 2000);
-      return;
+  tryInteract(target: any, targetType: "character" | "item" | "none"): void {
+    if (targetType === "character") {
+      if (!(target instanceof Character) || target.isDead) {
+        this.showPrompt("Cannot interact with this.", 2000);
+        return;
+      }
+      const targetPosition = target.mesh!.position;
+      const distance = this.player.mesh!.position.distanceTo(targetPosition);
+      if (distance > this.interactionDistance * 1.1) {
+        this.currentTarget = null;
+        this.currentTargetMesh = null;
+        this.currentTargetType = "none";
+        this.hidePrompt();
+        return;
+      }
+      const result = target.interact(this.player);
+      if (result) this.handleInteractionResult(result, target);
+    } else if (targetType === "item") {
+      const itemData = target as DroppedItemData;
+      const success = this.droppedItemManager.collectItem(
+        itemData.id,
+        this.player
+      );
+      if (success) {
+        // Item collected, clear target and prompt
+        this.currentTarget = null;
+        this.currentTargetMesh = null;
+        this.currentTargetType = "none";
+        this.hidePrompt();
+      } else {
+        // Collection failed (e.g., inventory full), keep prompt visible
+        // The collectItem method handles the "Inventory Full" notification
+      }
     }
-
-    const targetPosition = targetInstance.mesh!.position;
-    const distance = this.player.mesh!.position.distanceTo(targetPosition);
-
-    if (distance > this.interactionDistance * 1.1) {
-      this.currentTarget = null;
-      this.currentTargetMesh = null;
-      this.hidePrompt();
-      return;
-    }
-
-    // Call the Character's interact method (which should handle chat)
-    const result = targetInstance.interact(this.player);
-
-    if (result) this.handleInteractionResult(result, targetInstance);
   }
 
   handleInteractionResult(
@@ -400,7 +438,7 @@ export class InteractionSystem {
 
           let npcMessage = "Hmm....";
           if (responseJson) {
-            console.log(this.chatTarget.id, responseJson);
+            // console.log(this.chatTarget.id, responseJson);
             try {
               const parsedText = JSON.parse(responseJson);
               if (

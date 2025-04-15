@@ -82,7 +82,7 @@ export class Game {
   notificationManager: NotificationManager | null = null; // Add NotificationManager
   entities: Array<any> = []; // Includes Characters, Animals, Resources (Object3D)
   collidableObjects: Object3D[] = [];
-  interactableObjects: Array<any> = []; // Includes Characters, Animals, Resources (Object3D)
+  interactableObjects: Array<any> = []; // Includes Characters, Animals, Resources (Object3D), Dropped Items
   isPaused: boolean = false;
   isQuestBannerVisible: boolean = false; // Tracks if the banner UI is visible (for quests or trades)
   currentBannerType: "quest" | "trade" | "none" = "none"; // Tracks what the banner is showing
@@ -173,7 +173,7 @@ export class Game {
     this.initMobileControls();
     this.initPhysics();
     this.initEnvironment(this.models); // NPCs created here, including profession weapons
-    this.initSystems(); // TradingSystem initialized here
+    this.initSystems(); // TradingSystem, DroppedItemManager initialized here
     this.questManager.initQuests();
     this.initUI(); // UI initialized here, including InventoryDisplay
     this.setupUIControls();
@@ -457,17 +457,19 @@ export class Game {
       !this.scene
     )
       throw new Error("Cannot init systems: Core components missing.");
+
+    this.droppedItemManager = new DroppedItemManager(this); // Initialize DroppedItemManager first
     this.interactionSystem = new InteractionSystem(
       this.activeCharacter,
       this.camera,
-      this.interactableObjects,
+      this.interactableObjects, // Pass interactables (will include dropped items later)
       this.controls,
       this.inventory, // Pass player inventory
       this.activeCharacter.eventLog,
-      this
+      this,
+      this.droppedItemManager // Pass DroppedItemManager to InteractionSystem
     );
     this.tradingSystem = new TradingSystem(this); // Initialize TradingSystem
-    this.droppedItemManager = new DroppedItemManager(this); // Initialize DroppedItemManager
   }
 
   initUI(): void {
@@ -477,7 +479,7 @@ export class Game {
     this.minimap = new Minimap(
       document.getElementById("minimap-canvas") as HTMLCanvasElement,
       this.activeCharacter,
-      this.entities,
+      this.entities, // Pass entities (minimap might draw resources/animals)
       WORLD_SIZE
     );
     // Pass the game instance to InventoryDisplay
@@ -924,7 +926,7 @@ export class Game {
         entity !== this.activeCharacter // Don't respawn player here
       ) {
         const respawnDelay =
-          (entity as Character | Animal).respawnDelay ?? 30000; // Use entity specific or default
+          (entity as Character | Animal).respawnDelay ?? 20000; // Use entity specific or default
         if (now - entity.deathTimestamp > respawnDelay) {
           if (typeof (entity as any).respawn === "function") {
             (entity as Character | Animal).respawn(); // Call the specific respawn method

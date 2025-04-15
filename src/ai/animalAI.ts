@@ -92,7 +92,6 @@ export class AnimalAIController {
 
     // Log state changes (optional, for debugging)
     if (this.aiState !== this.previousAiState) {
-      // console.log(`${this.animal.name} state changed to: ${this.aiState}`);
       this.previousAiState = this.aiState;
     }
   }

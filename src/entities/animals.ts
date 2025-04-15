@@ -52,7 +52,7 @@ export class Animal extends Entity {
   isPerformingAction: boolean = false;
   skeletonRoot: Object3D | null = null; // Store the root for animation generation
   aiController: AnimalAIController | null = null; // Specific AI controller
-  respawnDelay: number = 30000; // 30 seconds respawn delay
+  respawnDelay: number = 20000; // 30 seconds respawn delay
 
   constructor(
     scene: Scene,
@@ -374,9 +374,9 @@ export class Animal extends Entity {
 
     // If a target was hit within range
     if (closestTarget && closestPoint) {
-      console.log(
-        `${this.name} attack hit ${closestTarget.name} at ${closestPoint.x.toFixed(1)},${closestPoint.y.toFixed(1)},${closestPoint.z.toFixed(1)}`
-      );
+      // console.log(
+      //   `${this.name} attack hit ${closestTarget.name} at ${closestPoint.x.toFixed(1)},${closestPoint.y.toFixed(1)},${closestPoint.z.toFixed(1)}`
+      // );
       // Apply damage
       closestTarget.takeDamage(damage, this, closestPoint); // Pass hit location
       // this.game.spawnParticleEffect(closestPoint, "red"); // Moved to takeDamage
@@ -394,7 +394,7 @@ export class Animal extends Entity {
       }
     } else {
       // Attack missed
-      console.log(`${this.name} attacked but hit nothing.`);
+      console.warn(`${this.name} attacked but hit nothing.`);
       if (this.game) {
         this.game.logEvent(
           this,

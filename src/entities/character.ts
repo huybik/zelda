@@ -88,7 +88,7 @@ export class Character extends Entity {
   isPerformingAction: boolean = false;
   skeletonRoot: Object3D | null = null;
   aiController: AIController | null;
-  respawnDelay: number = 60000; // 60 seconds respawn delay for NPCs
+  respawnDelay: number = 40000; // 60 seconds respawn delay for NPCs
 
   // Item/Equipment related properties
   rightHandBone: Bone | null = null;
@@ -912,9 +912,9 @@ export class Character extends Entity {
       }
       // --- Target is an Entity (Character or Animal) ---
       else if (closestTarget instanceof Entity) {
-        console.log(
-          `${this.name} attack hit entity ${closestTarget.name} at ${closestPoint.x.toFixed(1)},${closestPoint.y.toFixed(1)},${closestPoint.z.toFixed(1)} for ${effectiveDamage} damage.`
-        );
+        // console.log(
+        //   `${this.name} attack hit entity ${closestTarget.name} at ${closestPoint.x.toFixed(1)},${closestPoint.y.toFixed(1)},${closestPoint.z.toFixed(1)} for ${effectiveDamage} damage.`
+        // );
         closestTarget.takeDamage(effectiveDamage, this, closestPoint); // Pass hit location
         // this.game.spawnParticleEffect(closestPoint, "red"); // Moved to takeDamage
         if (this.game) {
