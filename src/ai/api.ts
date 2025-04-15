@@ -1,3 +1,4 @@
+/* File: /src/ai/api.ts */
 // File: src/ai/api.ts
 import { Vector3, Object3D } from "three";
 import { Entity } from "../entities/entitiy";
@@ -281,7 +282,7 @@ Here are the recent events you are aware of:
 ${eventLog}
 
 Based on this information, decide your next action. If player told you to do something don't ask for clarification or guidance, just do it.
-Attack target to gather resource. Trade to give or receive item from target.
+Attack target to gather resource. Trade to give or receive item from target. Follow target to stay close to them.
 
 Respond ONLY with a valid JSON object using one of the following formats:
 
@@ -309,8 +310,15 @@ Respond ONLY with a valid JSON object using one of the following formats:
   "intent": "brief reason for trade in ${language}"
 }
 
+4. Follow:
+{
+  "action": "follow",
+  "target_id": "target_character_id_here",
+  "intent": "brief reason for following in ${language}"
+}
+
 Choose only ONE action format. Ensure item IDs in trade are valid (e.g., 'wood', 'stone', 'herb', 'meat', 'potion', 'axe', 'pickaxe', 'sword', 'coin').
-Intent should be less than 10 words, response only in ${language} and not dual language.
+Intent should be less than 10 words, response only in ${language}.
 
 `.trim();
   return prompt;

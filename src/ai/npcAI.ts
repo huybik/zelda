@@ -1,5 +1,4 @@
 /* File: /src/ai/npcAI.ts */
-// File: src/ai/npcAI.ts
 import { Vector3, Object3D } from "three";
 import { Entity } from "../entities/entitiy";
 import { Character } from "../entities/character";
@@ -22,13 +21,15 @@ export class AIController {
   actionTimer: number = 5;
   interactionDistance: number = 3; // Distance for chat/trade
   attackDistance: number = 2; // Distance for attacking entities/resources
+  followDistance: number = 5; // Desired distance when following
+  stoppingDistance: number = 3; // Distance to stop when following/moving to target
   searchRadius: number;
   roamRadius: number;
   target: Entity | Object3D | null = null; // Target can be Entity or resource Object3D
   observation: Observation | null = null;
   persona: string = "";
   currentIntent: string = "";
-  targetAction: string | null = null; // "attack", "chat", "trade"
+  targetAction: string | null = null; // "attack", "chat", "trade", "follow"
   message: string | null = null;
   tradeItemsGive: InventoryItem[] = []; // Items NPC wants to give
   tradeItemsReceive: InventoryItem[] = []; // Items NPC wants to receive
@@ -102,7 +103,7 @@ export class AIController {
             .sub(this.character.mesh!.position);
           direction.y = 0;
           const distance = direction.length();
-          if (distance > 0.5) {
+          if (distance > this.stoppingDistance) {
             direction.normalize();
             this.character.lookAt(
               this.character.mesh!.position.clone().add(direction)
@@ -145,7 +146,9 @@ export class AIController {
           const requiredDistance =
             this.targetAction === "attack"
               ? this.attackDistance
-              : this.interactionDistance; // Use interactionDistance for chat/trade
+              : this.targetAction === "follow"
+                ? this.followDistance // Use followDistance for follow action
+                : this.interactionDistance; // Use interactionDistance for chat/trade
 
           if (distance > requiredDistance) {
             direction.normalize();
@@ -155,18 +158,16 @@ export class AIController {
             moveState.forward = 1;
             moveState.attack = false;
           } else {
-            // Reached target
+            // Reached target or close enough for action
             this.character.lookAt(targetPosition);
             moveState.forward = 0;
 
             if (this.targetAction === "attack") {
               moveState.attack = true;
-
               const targetStillValid =
                 this.target instanceof Entity
                   ? !this.target.isDead
                   : this.target.visible && this.target.userData.isInteractable;
-
               if (!targetStillValid || distance > this.searchRadius) {
                 this.handleTargetLostOrDepleted();
                 moveState.attack = false;
@@ -194,22 +195,24 @@ export class AIController {
                 );
               }
               handleChatResponse(this.target, this.character, this.message);
-
               this.resetStateAfterAction();
             } else if (
               this.targetAction === "trade" &&
               this.target instanceof Character &&
               this.character.game?.tradingSystem
             ) {
-              // Request trade UI instead of executing directly
+              // Request trade UI
               this.character.game.tradingSystem.requestTradeUI(
                 this.character,
                 this.target,
                 this.tradeItemsGive,
                 this.tradeItemsReceive
               );
-              // Reset state immediately after requesting the trade UI
               this.resetStateAfterAction();
+            } else if (this.targetAction === "follow") {
+              // Transition to the 'following' state once close enough
+              this.aiState = "following";
+              this.destination = null; // Clear any previous destination
             }
           }
         } else {
@@ -217,6 +220,48 @@ export class AIController {
           this.resetStateAfterAction();
         }
         break;
+
+      case "following":
+        if (
+          !this.target ||
+          !(this.target instanceof Character) ||
+          this.target.isDead
+        ) {
+          // Target lost or invalid
+          this.resetStateAfterAction();
+          break;
+        }
+        const targetPositionFollow = this.target.mesh!.position;
+        const directionFollow = targetPositionFollow
+          .clone()
+          .sub(this.character.mesh!.position);
+        directionFollow.y = 0;
+        const distanceFollow = directionFollow.length();
+
+        // Check if target moved too far away (leash)
+        if (distanceFollow > this.followDistance * 5) {
+          console.log(
+            `${this.character.name} lost follow target ${this.target.name} (too far).`
+          );
+          this.resetStateAfterAction();
+          break;
+        }
+
+        this.character.lookAt(targetPositionFollow); // Always look at target
+
+        if (distanceFollow > this.followDistance) {
+          // Move towards target if too far
+          moveState.forward = 1;
+        } else if (distanceFollow < this.stoppingDistance) {
+          // Move slightly back if too close (optional, can cause jittering)
+          // moveState.forward = -0.5;
+          moveState.forward = 0; // Stop if close enough
+        } else {
+          // Within follow range, stop moving
+          moveState.forward = 0;
+        }
+        break;
+
       default:
         console.warn(`Unhandled AI state: ${this.aiState}`);
         this.aiState = "idle";
@@ -235,6 +280,7 @@ export class AIController {
     this.message = null;
     this.tradeItemsGive = [];
     this.tradeItemsReceive = [];
+    this.persistentAction = null; // Clear persistent action when resetting
     this.actionTimer = 3 + Math.random() * 4; // Short cooldown after action
   }
 
@@ -332,6 +378,9 @@ export class AIController {
   }
 
   async decideNextAction(): Promise<void> {
+    // Don't decide if already following or deciding
+    if (this.aiState === "following" || this.aiState === "deciding") return;
+
     this.aiState = "deciding";
 
     const prompt = generatePrompt(this);
@@ -381,7 +430,9 @@ export class AIController {
     this.message = null;
     this.tradeItemsGive = [];
     this.tradeItemsReceive = [];
+    this.persistentAction = null; // Clear persistent action on fallback
     this.currentIntent = "Exploring";
+    this.character.updateIntentDisplay(this.currentIntent);
   }
 
   setActionFromAPI(actionData: {
@@ -402,7 +453,7 @@ export class AIController {
     this.message = null;
     this.tradeItemsGive = [];
     this.tradeItemsReceive = [];
-    this.persistentAction = null;
+    this.persistentAction = null; // Reset persistent action by default
 
     this.actionTimer = 5 + Math.random() * 5;
 
@@ -454,9 +505,11 @@ export class AIController {
               this.handleTargetLostOrDepleted();
             }
           } else {
+            // If it's not a known resource/animal type but still a target
             this.target = foundTarget;
             this.targetAction = "attack";
             this.aiState = "movingToTarget";
+            // No persistent action set if type is unknown
           }
         }
       } else {
@@ -494,6 +547,22 @@ export class AIController {
         }
       } else {
         this.handleTargetLostOrDepleted();
+      }
+    } else if (action === "follow" && target_id) {
+      const targetEntity = this.character.game?.entities.find(
+        (e) => e.id === target_id && e instanceof Character && !e.isDead
+      );
+      if (targetEntity) {
+        this.target = targetEntity;
+        this.targetAction = "follow"; // Set the action type
+        this.aiState = "movingToTarget"; // Start by moving towards the target
+        // Following is inherently persistent until target lost or new action decided
+        // No need for separate persistentAction object for follow
+      } else {
+        console.warn(
+          `${this.character.name} tried to follow invalid target ${target_id}. Falling back.`
+        );
+        this.fallbackToDefaultBehavior();
       }
     } else {
       // Default to idle or roaming if action is invalid or "idle"
