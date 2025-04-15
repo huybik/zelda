@@ -563,7 +563,7 @@ export class Game {
         }
       }
     }
-    // console.log("Game Paused:", this.isPaused);
+    console.log("Game Paused:", this.isPaused); // dont remove this
   }
 
   // Checks if any UI element that requires pausing is open
