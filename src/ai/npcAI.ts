@@ -34,7 +34,7 @@ export class AIController {
   tradeItemsGive: InventoryItem[] = []; // Items NPC wants to give
   tradeItemsReceive: InventoryItem[] = []; // Items NPC wants to receive
   private lastApiCallTime: number = 0;
-  private apiCallCooldown: number = 20000;
+  private apiCallCooldown: number = 30000;
   lastObservation: Observation | null = null;
   // Updated persistentAction to support both targetType and targetId
   persistentAction: {
