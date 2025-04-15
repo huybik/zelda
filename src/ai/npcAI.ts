@@ -44,7 +44,7 @@ export class AIController {
   } | null = null;
   private chatDecisionTimer: ReturnType<typeof setTimeout> | null = null;
   private lastAffectedTime: number = 0;
-  private affectedCooldown: number = 10000;
+  private affectedCooldown: number = 20000;
 
   constructor(character: Character) {
     this.character = character;
@@ -345,9 +345,8 @@ export class AIController {
 
   private isAffectedByEntities(): boolean {
     const currentTime = Date.now();
-    const affectedCooldown = 5000;
 
-    if (currentTime < this.lastAffectedTime + affectedCooldown) {
+    if (currentTime < this.lastAffectedTime + this.affectedCooldown) {
       return false;
     }
 

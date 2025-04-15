@@ -932,7 +932,7 @@ export class Character extends Entity {
       // Attack missed or hit nothing
       if (this.userData.isNPC) {
         // Log error specifically for NPC misses
-        console.log(`NPC Attack Fail: ${this.name} attacked but hit nothing.`);
+        console.warn(`NPC Attack Fail: ${this.name} attacked but hit nothing.`);
         if (this.game) {
           this.game.logEvent(
             this,
@@ -940,19 +940,6 @@ export class Character extends Entity {
             `${this.name} attacked but missed.`,
             undefined,
             { reason: "No target in range/LOS" },
-            this.mesh!.position
-          );
-        }
-      } else {
-        // Log player miss (optional)
-        console.log(`${this.name} attacked but hit nothing.`);
-        if (this.game) {
-          this.game.logEvent(
-            this,
-            "attack_miss",
-            `${this.name} attacked but missed.`,
-            undefined,
-            {},
             this.mesh!.position
           );
         }
