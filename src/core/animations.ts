@@ -1,3 +1,4 @@
+/* File: src/core/animations.ts */
 // File: src/core/animations.ts
 import * as THREE from "three";
 import {
@@ -10,6 +11,7 @@ import {
   Quaternion,
   Object3D,
   Bone,
+  Group, // Added Group
 } from "three";
 
 interface BoneRegexMap {
@@ -735,4 +737,46 @@ export function createDeadAnimation(
 
   const clip = new AnimationClip("Dead_Generated", duration, tracks);
   return clip;
+}
+
+// --- Tree Fall Animation ---
+export function createTreeFallAnimation(
+  treeGroup: Group,
+  duration: number = 1.5
+): AnimationClip {
+  const tracks: KeyframeTrack[] = [];
+
+  // Initial rotation (should be identity if not already rotated)
+  const qInitial = new Quaternion().copy(treeGroup.quaternion);
+
+  // Target rotation (fall over, e.g., 90 degrees around X or Z axis)
+  // Randomize fall direction slightly
+  const fallAxis =
+    Math.random() > 0.5 ? new Vector3(1, 0, 0) : new Vector3(0, 0, 1);
+  const fallAngle = (Math.PI / 2) * (0.9 + Math.random() * 0.15); // Fall almost 90 degrees
+  const qFall = new Quaternion().setFromAxisAngle(fallAxis, fallAngle);
+  const qTarget = qInitial.clone().multiply(qFall);
+
+  // Keyframe times
+  const times = [0, duration * 0.8, duration]; // Start, almost fallen, fully fallen (slight ease out)
+
+  // Create the track
+  tracks.push(
+    new QuaternionKeyframeTrack(`.quaternion`, times, [
+      ...qInitial.toArray(),
+      ...qTarget.toArray(), // Use slerp for smoother interpolation if needed, but direct target is often fine
+      ...qTarget.toArray(),
+    ])
+  );
+
+  // Optional: Add slight downward movement if desired
+  // const posInitial = new Vector3().copy(treeGroup.position);
+  // const posFallen = posInitial.clone().add(new Vector3(0, -0.2, 0)); // Sink slightly
+  // tracks.push(new VectorKeyframeTrack('.position', times, [
+  //     ...posInitial.toArray(),
+  //     ...posFallen.toArray(),
+  //     ...posFallen.toArray()
+  // ]));
+
+  return new AnimationClip("TreeFall_Generated", duration, tracks);
 }

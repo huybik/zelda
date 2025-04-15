@@ -1,4 +1,4 @@
-/* File: /src/main.ts */
+/* File: src/main.ts */
 import * as THREE from "three";
 import {
   Scene,
@@ -855,7 +855,7 @@ export class Game {
       // Update physics (collisions) after player movement
       this.physics!.update(deltaTime);
 
-      // Update other entities (NPCs, Animals)
+      // Update other entities (NPCs, Animals, Falling Trees)
       this.entities.forEach((entity) => {
         if (entity === this.activeCharacter) return; // Skip player
 
@@ -885,9 +885,42 @@ export class Game {
           // Update Animal entity state every frame (movement/animation based on AI state)
           entity.update(deltaTime, { collidables: this.collidableObjects });
         } else if (
+          entity instanceof Group &&
+          entity.userData?.mixer &&
+          entity.userData?.isFalling
+        ) {
+          // Update falling tree animation
+          entity.userData.mixer.update(deltaTime);
+          // Check if animation finished
+          if (
+            !entity.userData.fallAction.isRunning() &&
+            entity.userData.isFalling
+          ) {
+            entity.userData.isFalling = false;
+            entity.visible = false;
+            entity.userData.isCollidable = false;
+            entity.userData.isInteractable = false;
+            // Start respawn timer
+            const respawnTime = entity.userData.respawnTime || 20000;
+            const maxHealth = entity.userData.maxHealth;
+            setTimeout(() => {
+              if (entity && entity.userData) {
+                entity.visible = true;
+                entity.userData.isCollidable = true;
+                entity.userData.isInteractable = true;
+                entity.userData.health = maxHealth;
+                // Reset rotation after respawn
+                entity.rotation.set(0, 0, 0);
+                entity.quaternion.set(0, 0, 0, 1);
+                // Update bounding box? Maybe not needed if it didn't change.
+              }
+            }, respawnTime);
+          }
+        } else if (
           entity.update &&
           !(entity instanceof Character) &&
-          !(entity instanceof Animal)
+          !(entity instanceof Animal) &&
+          !(entity instanceof Group && entity.userData?.mixer) // Don't double-update trees
         ) {
           // Update other simple entities if they have an update method
           entity.update(deltaTime);

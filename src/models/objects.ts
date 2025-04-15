@@ -1,4 +1,4 @@
-/* File: /src/models/objects.ts */
+/* File: src/models/objects.ts */
 import {
   Vector3,
   Mesh,
@@ -17,10 +17,13 @@ import {
   DoubleSide,
   Raycaster,
   Quaternion,
+  AnimationMixer, // Added AnimationMixer
+  LoopOnce, // Added LoopOnce
 } from "three";
 import { Character } from "../entities/character";
 import { Inventory, InteractionResult, randomFloat } from "../core/utils";
 import { Colors } from "../core/constants";
+import { createTreeFallAnimation } from "../core/animations"; // Import the fall animation
 
 const treeTrunkMat = new MeshLambertMaterial({ color: Colors.PASTEL_BROWN });
 const treeFoliageMat = new MeshLambertMaterial({ color: Colors.PASTEL_GREEN });
@@ -183,6 +186,13 @@ export function createTree(position: Vector3): Group {
   trunkMesh.updateWorldMatrix(true, false); // Ensure trunk matrix is updated relative to group
   trunkBox.setFromObject(trunkMesh); // Calculate box in group's local space (at y=0)
 
+  // --- Add Animation Mixer and Fall Action ---
+  const mixer = new AnimationMixer(treeGroup);
+  const fallClip = createTreeFallAnimation(treeGroup, 1.5); // 1.5 second fall duration
+  const fallAction = mixer.clipAction(fallClip);
+  fallAction.setLoop(LoopOnce, 1);
+  fallAction.clampWhenFinished = true;
+
   treeGroup.userData = {
     isCollidable: true,
     isInteractable: true, // Can be targeted for attack
@@ -194,6 +204,9 @@ export function createTree(position: Vector3): Group {
     respawnTime: 20000,
     entityReference: treeGroup, // Reference to the Group itself
     boundingBox: trunkBox, // Store the trunk-based bounding box
+    mixer: mixer, // Store the mixer
+    fallAction: fallAction, // Store the fall action
+    isFalling: false, // Track if the fall animation is playing
   };
 
   return treeGroup;

@@ -1,4 +1,4 @@
-/* File: /src/entities/character.ts */
+/* File: src/entities/character.ts */
 import {
   Scene,
   Vector3,
@@ -740,11 +740,10 @@ export class Character extends Entity {
         return false;
       // Check if entity is dead
       if (item instanceof Entity && item.isDead) return false;
-      // Check if resource is depleted
+      // Check if resource is depleted or falling
       if (
         targetMesh.userData.resource &&
-        targetMesh.userData.health !== undefined &&
-        targetMesh.userData.health <= 0
+        (targetMesh.userData.health <= 0 || targetMesh.userData.isFalling)
       )
         return false;
       return true;
@@ -906,8 +905,19 @@ export class Character extends Entity {
               }
             }
 
-            // Handle resource depletion and respawn timer
-            if (targetMesh.userData.isDepletable) {
+            // Handle resource depletion and respawn timer (now handled in main update loop after animation)
+            // Play fall animation if it's a tree
+            if (
+              targetMesh.userData.resource === "wood" &&
+              targetMesh.userData.mixer &&
+              targetMesh.userData.fallAction &&
+              !targetMesh.userData.isFalling
+            ) {
+              targetMesh.userData.isFalling = true;
+              targetMesh.userData.fallAction.reset().play();
+              // Respawn timer and visibility/collision changes are handled in main.ts update loop
+            } else if (targetMesh.userData.isDepletable) {
+              // For non-trees, handle depletion immediately (no animation)
               targetMesh.userData.isInteractable = false;
               targetMesh.userData.isCollidable = false;
               targetMesh.visible = false;
