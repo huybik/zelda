@@ -76,7 +76,9 @@ export class AIController {
     const currentTime = Date.now();
     this.actionTimer -= deltaTime;
     const timeSinceLastCall = currentTime - this.lastApiCallTime;
-    const canCallApi = timeSinceLastCall >= this.apiCallCooldown;
+    const canCallApi =
+      timeSinceLastCall >=
+      this.apiCallCooldown + (Math.random() * 10000 - 5000);
 
     if (this.actionTimer <= 0 && this.chatDecisionTimer === null) {
       this.actionTimer = 5 + Math.random() * 5;
