@@ -54,6 +54,7 @@ import {
   isConsumable,
   EquippedItem, // Added item types
   Profession, // Added Profession enum
+  ProfessionStartingWeapon,
 } from "../core/items";
 import { loadModels } from "../core/assetLoader"; // Added weapon loader
 import { Animal } from "./animals";
@@ -86,8 +87,8 @@ export class Character extends Entity {
   actionType: string = "none"; // "attack", "chat", "none"
   isPerformingAction: boolean = false;
   skeletonRoot: Object3D | null = null;
-  deathTimestamp: number | null = null;
   aiController: AIController | null;
+  respawnDelay: number = 60000; // 60 seconds respawn delay for NPCs
 
   // Item/Equipment related properties
   rightHandBone: Bone | null = null;
@@ -116,6 +117,7 @@ export class Character extends Entity {
     this.userData.isInteractable = true;
     this.userData.interactionType = "talk";
     this.userData.isNPC = true; // Default to NPC, override for player
+    this.homePosition = position.clone(); // Store initial position for respawn
     this.maxHealth = 100;
     this.health = this.maxHealth;
     this.maxStamina = 100;
@@ -1152,11 +1154,38 @@ export class Character extends Entity {
   die(attacker: Entity | null = null): void {
     if (this.isDead) return;
 
-    // Unequip weapon visually on death
+    const deathPosition = this.mesh!.position.clone(); // Store position before super.die() potentially changes things
+
+    // --- Drop Inventory ---
+    if (this.inventory && this.game) {
+      const equippedWeaponId = this.equippedWeapon?.definition.id;
+      const itemsToDrop: { id: string; count: number }[] = [];
+      const indicesToRemove: number[] = [];
+
+      this.inventory.items.forEach((item, index) => {
+        if (item && item.id !== equippedWeaponId) {
+          itemsToDrop.push({ id: item.id, count: item.count });
+          indicesToRemove.push(index);
+        }
+      });
+
+      // Drop items into the world
+      itemsToDrop.forEach((drop) => {
+        this.game!.dropItem(drop.id, drop.count, deathPosition);
+      });
+
+      // Clear dropped items from inventory (iterate backwards to avoid index issues)
+      indicesToRemove.sort((a, b) => b - a); // Sort descending
+      indicesToRemove.forEach((index) => {
+        this.inventory!.items[index] = null;
+      });
+      this.inventory.notifyChange(); // Update UI if open
+    }
+
+    // Unequip weapon visually (model is removed, but item remains in inventory if it wasn't dropped)
     this.unequipWeapon();
 
     super.die(attacker); // Sets this.isDead = true, stops velocity, etc.
-    this.deathTimestamp = performance.now();
 
     // AI specific state change
     if (this.aiController) this.aiController.aiState = "dead";
@@ -1184,7 +1213,7 @@ export class Character extends Entity {
         message,
         undefined,
         details,
-        this.mesh!.position.clone()
+        deathPosition
       );
       if (attacker instanceof Character) {
         const defeatMessage = `${attacker.name} defeated ${this.name}.`;
@@ -1197,18 +1226,23 @@ export class Character extends Entity {
           attacker.mesh!.position
         );
       }
-      // Drop inventory items? (Optional)
-      // this.dropInventory();
     }
   }
 
-  respawn(position: Vector3): void {
-    // Reset state before calling super.respawn if it exists, or handle here
+  respawn(): void {
+    if (!this.homePosition || !this.scene) {
+      console.warn(
+        `Cannot respawn ${this.name}: Missing home position or scene.`
+      );
+      return;
+    }
+
+    // Reset state
     this.health = this.maxHealth * 0.75;
     this.stamina = this.maxStamina;
     this.velocity.set(0, 0, 0);
-    this.isDead = false; // Critical: Set isDead back to false
-    this.deathTimestamp = null; // Reset death timestamp
+    this.isDead = false;
+    this.deathTimestamp = null;
     this.isExhausted = false;
     this.isPerformingAction = false;
     this.actionType = "none";
@@ -1216,40 +1250,80 @@ export class Character extends Entity {
     this.equippedWeapon = null; // Ensure weapon is unequipped on respawn
 
     // Reset position and collision state
-    this.setPosition(position);
+    const respawnY = getTerrainHeight(
+      this.scene,
+      this.homePosition.x,
+      this.homePosition.z
+    );
+    this.setPosition(this.homePosition.clone().setY(respawnY));
     this.userData.isCollidable = true;
     this.userData.isInteractable = true;
+    this.mesh!.visible = true; // Make sure mesh is visible
 
-    // Reset AI state if it's an NPC respawning (though usually only player respawns)
+    // Reset AI state if it's an NPC respawning
     if (this.aiController) {
+      this.aiController.homePosition.copy(this.homePosition); // Ensure AI home is updated
       this.aiController.aiState = "idle";
       this.aiController.previousAiState = "idle";
       this.aiController.destination = null;
       this.aiController.target = null;
       this.aiController.targetAction = null;
       this.aiController.message = null;
+      this.aiController.persistentAction = null; // Clear persistent action
+      this.aiController.currentIntent = "Recovering...";
+      this.updateIntentDisplay(this.aiController.currentIntent);
     }
 
     // Reset animations
-    this.mixer.stopAllAction(); // Stop everything first
+    this.mixer.stopAllAction();
     if (this.idleAction) {
-      this.switchAction(this.idleAction); // Switch back to idle
+      this.switchAction(this.idleAction);
     } else {
       console.error(`Character ${this.name} cannot respawn to idle animation!`);
     }
 
+    // Re-equip starting weapon for NPCs
+    if (this.userData.isNPC) {
+      const startingWeaponId = ProfessionStartingWeapon[this.profession];
+      if (startingWeaponId && this.inventory) {
+        // Check if they still have it (it shouldn't have been dropped)
+        if (this.inventory.countItem(startingWeaponId) > 0) {
+          const weaponDef = getItemDefinition(startingWeaponId);
+          if (weaponDef && isWeapon(weaponDef)) {
+            requestAnimationFrame(() => {
+              this.equipWeapon(weaponDef);
+            });
+          }
+        } else {
+          // If they somehow lost it, give it back
+          const addResult = this.inventory.addItem(startingWeaponId, 1);
+          if (addResult.totalAdded > 0) {
+            const weaponDef = getItemDefinition(startingWeaponId);
+            if (weaponDef && isWeapon(weaponDef)) {
+              requestAnimationFrame(() => {
+                this.equipWeapon(weaponDef);
+              });
+            }
+          }
+        }
+      }
+    }
+
     // Logging
-    if (this.game)
+    if (this.game) {
       this.game.logEvent(
         this,
         "respawn",
-        `${this.name} feels slightly disoriented but alive.`,
+        `${this.name} respawned.`,
         undefined,
         {},
-        position
+        this.mesh!.position.clone()
       );
+    }
 
     this.updateBoundingBox();
+    this.initNameDisplay(); // Re-initialize name display
+    if (this.aiController) this.initIntentDisplay(); // Re-initialize intent display for NPCs
   }
 
   interact(player: Character): InteractionResult | null {

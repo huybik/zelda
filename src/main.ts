@@ -59,6 +59,7 @@ import {
   Profession, // Import Profession
   ProfessionStartingWeapon, // Import starting weapon map
 } from "./core/items";
+import { DroppedItemManager } from "./systems/droppedItemManager.ts"; // Import DroppedItemManager
 
 export class Game {
   scene: Scene | null = null;
@@ -73,6 +74,7 @@ export class Game {
   inventory: Inventory | null = null; // This will be the PLAYER's inventory instance
   interactionSystem: InteractionSystem | null = null;
   tradingSystem: TradingSystem | null = null; // Add TradingSystem
+  droppedItemManager: DroppedItemManager | null = null; // Add DroppedItemManager
   hud: HUD | null = null;
   minimap: Minimap | null = null;
   inventoryDisplay: InventoryDisplay | null = null;
@@ -451,7 +453,8 @@ export class Game {
       !this.activeCharacter ||
       !this.camera ||
       !this.controls ||
-      !this.inventory
+      !this.inventory ||
+      !this.scene
     )
       throw new Error("Cannot init systems: Core components missing.");
     this.interactionSystem = new InteractionSystem(
@@ -464,6 +467,7 @@ export class Game {
       this
     );
     this.tradingSystem = new TradingSystem(this); // Initialize TradingSystem
+    this.droppedItemManager = new DroppedItemManager(this); // Initialize DroppedItemManager
   }
 
   initUI(): void {
@@ -894,7 +898,8 @@ export class Game {
       this.portalManager.animatePortals();
       this.portalManager.checkPortalCollisions();
       updateParticleEffects(this, elapsedTime); // Update particle effects
-      this.checkDeadEntityRemoval(); // Check for removing dead entities
+      this.droppedItemManager?.update(deltaTime); // Update dropped items
+      this.checkRespawn(); // Check for respawning entities
 
       // Check player death
       if (this.activeCharacter.isDead) this.respawnPlayer();
@@ -910,57 +915,47 @@ export class Game {
     this.renderer.render(this.scene, this.camera);
   }
 
-  checkDeadEntityRemoval(): void {
+  checkRespawn(): void {
     const now = performance.now();
-    const removalDelay = 7000; // 7 seconds
-    const entitiesToRemove: Entity[] = [];
-
     for (const entity of this.entities) {
-      // Check for dead non-player entities with a death timestamp
       if (
         entity.isDead &&
-        entity !== this.activeCharacter &&
-        entity.deathTimestamp !== null
+        entity.deathTimestamp !== null &&
+        entity !== this.activeCharacter // Don't respawn player here
       ) {
-        const timeSinceDeath = now - entity.deathTimestamp;
-        if (timeSinceDeath > removalDelay) {
-          entitiesToRemove.push(entity);
+        const respawnDelay =
+          (entity as Character | Animal).respawnDelay ?? 30000; // Use entity specific or default
+        if (now - entity.deathTimestamp > respawnDelay) {
+          if (typeof (entity as any).respawn === "function") {
+            (entity as Character | Animal).respawn(); // Call the specific respawn method
+          } else {
+            console.warn(
+              `Entity ${entity.name} is dead but has no respawn method.`
+            );
+            // Optionally remove the entity permanently here if it shouldn't respawn
+            // this.removeEntity(entity);
+          }
         }
       }
     }
+  }
 
-    if (entitiesToRemove.length > 0) {
-      for (const entityToRemove of entitiesToRemove) {
-        console.log(
-          `Removing dead entity: ${entityToRemove.name} after timeout.`
-        );
-
-        // Remove from collidables
-        const collidableIndex = this.collidableObjects.findIndex(
-          (obj) => obj === entityToRemove.mesh
-        );
-        if (collidableIndex > -1)
-          this.collidableObjects.splice(collidableIndex, 1);
-
-        // Remove from interactables
-        const interactableIndex = this.interactableObjects.findIndex(
-          (obj) => obj === entityToRemove
-        );
-        if (interactableIndex > -1)
-          this.interactableObjects.splice(interactableIndex, 1);
-
-        // Call entity's destroy method (cleans up mesh, etc.)
-        entityToRemove.destroy?.();
-
-        // Remove from main entities list
-        const entityIndex = this.entities.findIndex(
-          (e) => e === entityToRemove
-        );
-        if (entityIndex > -1) this.entities.splice(entityIndex, 1);
-      }
-      // Update minimap's entity list reference if needed (or minimap filters internally)
-      if (this.minimap) this.minimap.entities = this.entities;
-    }
+  // Helper to remove entity completely (if needed, e.g., non-respawnable)
+  removeEntity(entityToRemove: Entity): void {
+    console.log(`Removing entity permanently: ${entityToRemove.name}.`);
+    const collidableIndex = this.collidableObjects.findIndex(
+      (obj) => obj === entityToRemove.mesh
+    );
+    if (collidableIndex > -1) this.collidableObjects.splice(collidableIndex, 1);
+    const interactableIndex = this.interactableObjects.findIndex(
+      (obj) => obj === entityToRemove
+    );
+    if (interactableIndex > -1)
+      this.interactableObjects.splice(interactableIndex, 1);
+    entityToRemove.destroy?.();
+    const entityIndex = this.entities.findIndex((e) => e === entityToRemove);
+    if (entityIndex > -1) this.entities.splice(entityIndex, 1);
+    if (this.minimap) this.minimap.entities = this.entities;
   }
 
   spawnParticleEffect(position: Vector3, colorName: "red" | "green"): void {
@@ -986,9 +981,8 @@ export class Game {
         .clone()
         .add(new Vector3(0, 0, 3)); // Near start portal
     }
-    respawnPos.y = getTerrainHeight(this.scene, respawnPos.x, respawnPos.z);
 
-    this.activeCharacter.respawn(respawnPos);
+    this.activeCharacter.respawn();
     this.setPauseState(false); // Unpause after respawn
   }
 
@@ -1134,6 +1128,20 @@ export class Game {
   }
 
   /**
+   * Creates a dropped item orb in the world.
+   * @param itemId The ID of the item to drop.
+   * @param count The number of items in the stack.
+   * @param position The world position to drop the item at.
+   */
+  dropItem(itemId: string, count: number, position: Vector3): void {
+    if (!this.droppedItemManager) {
+      console.error("DroppedItemManager not initialized.");
+      return;
+    }
+    this.droppedItemManager.createDroppedItem(itemId, count, position);
+  }
+
+  /**
    * Executes a trade between two characters based on IDs and item lists.
    * This is intended to be called by the AIController after receiving an API response.
    * @param initiatorId The ID of the character initiating the trade.
@@ -1192,6 +1200,7 @@ export class Game {
     this.inventoryDisplay?.destroy(); // Clean up inventory display listeners
     this.journalDisplay = null; // Assuming journal doesn't need complex cleanup
     this.notificationManager?.dispose(); // Dispose notification manager
+    this.droppedItemManager?.dispose(); // Dispose dropped item manager
     this.entities.forEach((entity) => entity.destroy?.()); // Call destroy on entities that have it
     this.scene?.traverse((object) => {
       if (object instanceof THREE.Mesh) {
@@ -1223,6 +1232,7 @@ export class Game {
     this.interactableObjects = [];
     this.particleEffects = [];
     this.tradingSystem = null; // Nullify trading system
+    this.droppedItemManager = null;
     console.log("Game destroyed.");
   }
 }

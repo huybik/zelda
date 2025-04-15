@@ -50,6 +50,7 @@ export interface ItemDefinition {
   type: ItemType;
   stackable: boolean;
   maxStack: number;
+  color?: number; // Optional color hint for effects/orbs
 }
 
 // Interface for Weapons and Tools that can be equipped
@@ -98,6 +99,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     type: ItemType.Resource,
     stackable: true,
     maxStack: 99,
+    color: 0x8b4513, // Brown
   },
   stone: {
     id: "stone",
@@ -107,6 +109,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     type: ItemType.Resource,
     stackable: true,
     maxStack: 99,
+    color: 0x808080, // Grey
   },
   // Consumables
   herb: {
@@ -118,6 +121,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     stackable: true,
     maxStack: 30,
     healAmount: 10, // Specific to ConsumableDefinition
+    color: 0x228b22, // Forest Green
   },
   meat: {
     id: "meat",
@@ -125,10 +129,11 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     description:
       "Raw meat obtained from animals. Cooking might enhance its effects.",
     icon: "meat.jpeg",
-    type: ItemType.Consumable,
+    type: ItemType.Consumable, // Could also be Resource if used in crafting
     stackable: true,
     maxStack: 20,
     healAmount: 5, // Specific to ConsumableDefinition
+    color: 0xff4500, // Orangey-Red
   },
   potion: {
     id: "potion",
@@ -139,6 +144,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     stackable: true,
     maxStack: 10,
     healAmount: 50, // Specific to ConsumableDefinition
+    color: 0xff00ff, // Magenta/Pink
   },
   // Tools (also act as weapons)
   axe: {
@@ -153,6 +159,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     damage: 8,
     equipSlot: EquipSlot.RightHand,
     modelFileName: "axe.glb", // Specific to WeaponDefinition
+    color: 0xadd8e6, // Light Blue (generic equipment color)
   },
   pickaxe: {
     id: "pickaxe",
@@ -166,6 +173,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     damage: 7,
     equipSlot: EquipSlot.RightHand,
     modelFileName: "pickaxe.glb", // Specific to WeaponDefinition
+    color: 0xadd8e6, // Light Blue
   },
   // Weapons
   sword: {
@@ -180,6 +188,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     damage: 12,
     equipSlot: EquipSlot.RightHand,
     modelFileName: "sword.glb", // Specific to WeaponDefinition
+    color: 0xadd8e6, // Light Blue
   },
   // Currency
   coin: {
@@ -190,6 +199,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     type: ItemType.Currency,
     stackable: true,
     maxStack: 9999, // Use a large number for stack limit
+    color: 0xffd700, // Gold
   },
 };
 

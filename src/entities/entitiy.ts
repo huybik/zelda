@@ -47,6 +47,7 @@ export class Entity {
   aiController: AIController | AnimalAIController | null = null;
   rayCaster: Raycaster | null = null; // Raycaster can be null initially
   deathTimestamp: number | null = null;
+  homePosition: Vector3 | null = null; // Added home position for respawning
 
   constructor(scene: Scene, position: Vector3, name: string = "Entity") {
     this.id = `${name}_${getNextEntityId()}`;
@@ -54,6 +55,7 @@ export class Entity {
     this.name = name;
     this.mesh = new Group();
     this.mesh.position.copy(position);
+    this.homePosition = position.clone(); // Initialize home position
     this.velocity = new Vector3();
     this.boundingBox = new Box3();
     this.health = 100;
@@ -80,7 +82,7 @@ export class Entity {
 
   initNameDisplay(): void {
     // Allow for NPCs and Animals, but not the player
-    if (this.userData.isPlayer) return;
+    if (this.userData.isPlayer || !this.mesh) return;
 
     if (!this.nameCanvas) {
       this.nameCanvas = document.createElement("canvas");
@@ -204,6 +206,7 @@ export class Entity {
     this.userData.isCollidable = false; // Make non-collidable
     this.userData.isInteractable = false; // Make non-interactable
     this.deathTimestamp = performance.now(); // Record time of death
+    this.mesh!.visible = false; // Hide mesh immediately on death
 
     // Stop AI updates
     if (this.aiController) {

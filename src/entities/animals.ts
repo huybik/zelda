@@ -51,8 +51,8 @@ export class Animal extends Entity {
   actionType: string = "none";
   isPerformingAction: boolean = false;
   skeletonRoot: Object3D | null = null; // Store the root for animation generation
-  deathTimestamp: number | null = null;
   aiController: AnimalAIController | null = null; // Specific AI controller
+  respawnDelay: number = 30000; // 30 seconds respawn delay
 
   constructor(
     scene: Scene,
@@ -70,6 +70,7 @@ export class Animal extends Entity {
     this.userData.isAnimal = true;
     this.userData.animalType = animalType;
     this.userData.isAggressive = animalType === "Wolf"; // Example property
+    this.homePosition = position.clone(); // Store initial position for respawn
 
     this.maxHealth = animalType === "Wolf" ? 80 : 50; // Example health
     this.health = this.maxHealth;
@@ -388,7 +389,7 @@ export class Animal extends Entity {
           `${this.name} attacked ${closestTarget.name}.`,
           closestTarget,
           { damage: damage },
-          this.mesh.position
+          this.mesh!.position
         );
       }
     } else {
@@ -401,7 +402,7 @@ export class Animal extends Entity {
           `${this.name} attacked but missed.`,
           undefined,
           { reason: "No target in range/LOS" },
-          this.mesh.position
+          this.mesh!.position
         );
       }
     }
@@ -529,8 +530,9 @@ export class Animal extends Entity {
   die(attacker: Entity | null = null): void {
     if (this.isDead) return;
 
+    const deathPosition = this.mesh!.position.clone(); // Store position before super.die() potentially changes things
+
     super.die(attacker); // Sets this.isDead = true, stops velocity, etc.
-    this.deathTimestamp = performance.now();
 
     // AI specific state change
     if (this.aiController) this.aiController.setState("dead"); // Use setState
@@ -557,36 +559,82 @@ export class Animal extends Entity {
         message,
         undefined,
         details,
-        this.mesh!.position.clone()
+        deathPosition
       );
-      // Could add loot drop logic here
-      if (attacker instanceof Character) {
-        let itemId = "";
-        let count = 0;
-        if (this.animalType === "Wolf") {
-          itemId = "meat"; // Example loot
-          count = MathUtils.randInt(1, 3);
-        } else if (this.animalType === "Deer") {
-          itemId = "meat"; // Example loot
-          count = MathUtils.randInt(2, 5);
-        }
-        if (itemId && count > 0) {
-          const addResult = attacker.inventory?.addItem(itemId, count);
-          if (addResult && addResult.added > 0) {
-            // Use the new sprite notification
-            this.game.notificationManager?.createItemAddedSprite(
-              itemId,
-              addResult.added,
-              this.mesh!.position.clone().add(new Vector3(0, 0.5, 0)) // Position above animal
-            );
-          } else {
-            // Log player inventory full? (Optional)
-          }
-        }
-      } else if (attacker instanceof Character) {
-        // NPC attacker loot logic (if any) - no notification
-        // attacker.inventory?.addItem(...)
+
+      // --- Drop Loot ---
+      let itemId = "meat";
+      let count = 0;
+      if (this.animalType === "Wolf") {
+        count = MathUtils.randInt(1, 2);
+      } else if (this.animalType === "Deer") {
+        count = MathUtils.randInt(2, 4);
+      }
+
+      if (itemId && count > 0) {
+        // Drop the item into the world using the game's manager
+        this.game.dropItem(itemId, count, deathPosition);
+        console.log(
+          `${this.name} dropped ${count}x ${itemId} at ${deathPosition.x.toFixed(1)}, ${deathPosition.y.toFixed(1)}, ${deathPosition.z.toFixed(1)}`
+        );
       }
     }
+  }
+
+  respawn(): void {
+    if (!this.homePosition || !this.scene) {
+      console.warn(
+        `Cannot respawn ${this.name}: Missing home position or scene.`
+      );
+      return;
+    }
+
+    // Reset state
+    this.health = this.maxHealth;
+    this.velocity.set(0, 0, 0);
+    this.isDead = false;
+    this.deathTimestamp = null;
+    this.isPerformingAction = false;
+    this.actionType = "none";
+
+    // Reset position to home position + terrain height
+    const respawnY = getTerrainHeight(
+      this.scene,
+      this.homePosition.x,
+      this.homePosition.z
+    );
+    this.setPosition(this.homePosition.clone().setY(respawnY));
+    this.userData.isCollidable = true;
+    this.userData.isInteractable = true;
+    this.mesh!.visible = true; // Make sure mesh is visible
+
+    // Reset AI state
+    if (this.aiController) {
+      this.aiController.homePosition.copy(this.homePosition); // Ensure AI home is updated
+      this.aiController.setState("idle");
+    }
+
+    // Reset animations
+    this.mixer.stopAllAction();
+    if (this.idleAction) {
+      this.switchAction(this.idleAction);
+    } else {
+      console.error(`Animal ${this.name} cannot respawn to idle animation!`);
+    }
+
+    // Logging
+    if (this.game) {
+      this.game.logEvent(
+        this,
+        "respawn",
+        `${this.name} respawned.`,
+        undefined,
+        {},
+        this.mesh!.position.clone()
+      );
+    }
+
+    this.updateBoundingBox();
+    this.initNameDisplay(); // Re-initialize name display
   }
 }

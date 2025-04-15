@@ -66,6 +66,7 @@ export function populateEnvironment(
       charInventory
     );
     character.mesh!.position.y = getTerrainHeight(scene, pos.x, pos.z);
+    character.homePosition = character.mesh!.position.clone(); // Set home position after terrain height adjustment
     character.game = gameInstance;
     character.profession = profession; // Assign profession
 
@@ -79,6 +80,9 @@ export function populateEnvironment(
       character.userData.isNPC = true;
       if (!character.aiController)
         console.warn(`NPC ${name} created without AIController!`);
+      else {
+        character.aiController.homePosition = character.homePosition.clone(); // Ensure AI home position is set
+      }
 
       // Give starting weapon based on profession for NPCs
       const startingWeaponId = ProfessionStartingWeapon[profession];
@@ -229,6 +233,7 @@ export function populateEnvironment(
         model.animations // Share animations
       );
       animal.game = gameInstance;
+      // animal.homePosition is set in constructor
 
       entities.push(animal);
       collidableObjects.push(animal.mesh!);
