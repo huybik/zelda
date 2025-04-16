@@ -44,7 +44,7 @@ export class AIController {
   } | null = null;
   private chatDecisionTimer: ReturnType<typeof setTimeout> | null = null;
   private lastAffectedTime: number = 0;
-  private affectedCooldown: number = 20000;
+  private affectedCooldown: number = 15000;
   public lastLoggedAttackTargetId: string | null = null; // Track last logged attack target
 
   constructor(character: Character) {
