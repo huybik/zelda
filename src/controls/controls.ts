@@ -30,6 +30,7 @@ export class Controls {
   boundOnMouseUp: (event: MouseEvent) => void;
   boundOnMouseMove: (event: MouseEvent) => void;
   boundOnClick: (event: MouseEvent) => void;
+  boundOnWheel: (event: WheelEvent) => void; // Added wheel listener
   boundOnPointerLockChange: () => void;
   boundOnPointerLockError: () => void;
 
@@ -50,6 +51,7 @@ export class Controls {
     this.boundOnMouseUp = this.onMouseUp.bind(this);
     this.boundOnMouseMove = this.onMouseMove.bind(this);
     this.boundOnClick = this.onClick.bind(this);
+    this.boundOnWheel = this.onWheel.bind(this); // Bind wheel listener
     this.boundOnPointerLockChange = this.onPointerLockChange.bind(this);
     this.boundOnPointerLockError = this.onPointerLockError.bind(this);
 
@@ -63,6 +65,7 @@ export class Controls {
       document.addEventListener("mousedown", this.boundOnMouseDown, false);
       document.addEventListener("mouseup", this.boundOnMouseUp, false);
       document.addEventListener("mousemove", this.boundOnMouseMove, false);
+      document.addEventListener("wheel", this.boundOnWheel, false); // Add wheel listener
       this.domElement.addEventListener("click", this.boundOnClick, false);
       document.addEventListener(
         "pointerlockchange",
@@ -221,6 +224,13 @@ export class Controls {
     }
   }
 
+  onWheel(event: WheelEvent): void {
+    if (this.game?.mobileControls?.isActive() || !this.cameraController) return;
+    // Normalize wheel delta
+    const delta = Math.sign(event.deltaY);
+    this.cameraController.handleZoom(delta);
+  }
+
   onClick(event: MouseEvent): void {
     if (this.game?.mobileControls?.isActive()) return;
     const targetElement = event.target as HTMLElement;
@@ -282,6 +292,7 @@ export class Controls {
       document.removeEventListener("mousedown", this.boundOnMouseDown);
       document.removeEventListener("mouseup", this.boundOnMouseUp);
       document.removeEventListener("mousemove", this.boundOnMouseMove);
+      document.removeEventListener("wheel", this.boundOnWheel); // Remove wheel listener
       this.domElement.removeEventListener("click", this.boundOnClick);
       document.removeEventListener(
         "pointerlockchange",

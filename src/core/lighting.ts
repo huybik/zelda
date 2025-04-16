@@ -1,3 +1,4 @@
+/* File: /src/core/lighting.ts */
 // File: /src/core/lighting.ts
 import { Scene, AmbientLight, DirectionalLight, HemisphereLight } from "three";
 
@@ -13,8 +14,9 @@ export function setupLighting(scene: Scene): void {
   directionalLight.shadow.mapSize.height = 2048;
   directionalLight.shadow.camera.near = 10;
   directionalLight.shadow.camera.far = 500;
-  // Adjusted shadow camera frustum size
-  const shadowCamSize = 100; // Reduced size for more focused shadows
+  // Adjusted shadow camera frustum size - This might need dynamic adjustment
+  // if the orthographic camera zooms significantly. Start with a reasonable default.
+  const shadowCamSize = 50; // Adjust based on typical orthographic view size
   directionalLight.shadow.camera.left = -shadowCamSize;
   directionalLight.shadow.camera.right = shadowCamSize;
   directionalLight.shadow.camera.top = shadowCamSize;

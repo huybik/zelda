@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import {
   Scene,
-  PerspectiveCamera,
+  OrthographicCamera,
   WebGLRenderer,
   Clock,
   Vector3,
@@ -65,7 +65,7 @@ import { UIManager } from "./ui/uiManager.ts"; // Import UIManager
 export class Game {
   scene: Scene | null = null;
   renderer: WebGLRenderer | null = null;
-  camera: PerspectiveCamera | null = null;
+  camera: OrthographicCamera | null = null; // Changed to OrthographicCamera
   clock: Clock | null = null;
   activeCharacter: Character | null = null;
   thirdPersonCamera: ThirdPersonCamera | null = null;
@@ -125,7 +125,7 @@ export class Game {
     this.clock = new Clock();
     this.initRenderer();
     this.initScene();
-    this.initCamera();
+    this.initCamera(); // Creates OrthographicCamera now
     this.initInventory();
     this.initAudio();
 
@@ -221,6 +221,8 @@ export class Game {
       this.boundHandleVisibilityChange
     );
 
+    window.addEventListener("resize", this.onWindowResize.bind(this)); // Add resize listener
+
     this.renderer!.setAnimationLoop(this.update.bind(this));
   }
 
@@ -296,12 +298,17 @@ export class Game {
   }
 
   initCamera(): void {
-    this.camera = new PerspectiveCamera(
-      75,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      2000
+    const aspect = window.innerWidth / window.innerHeight;
+    const frustumSize = 10; // Initial view size (half-height)
+    this.camera = new OrthographicCamera(
+      (frustumSize * aspect) / -2,
+      (frustumSize * aspect) / 2,
+      frustumSize / 2,
+      frustumSize / -2,
+      0.1, // Near plane
+      1000 // Far plane
     );
+    // Initial position and lookAt will be set by ThirdPersonCamera
   }
 
   initInventory(): void {
@@ -433,7 +440,7 @@ export class Game {
     this.combatSystem = new CombatSystem(this);
     this.interactionSystem = new InteractionSystem(
       this.activeCharacter,
-      this.camera,
+      this.camera, // Pass OrthographicCamera
       this.interactableObjects,
       this.controls,
       this.inventory,
@@ -461,7 +468,7 @@ export class Game {
     );
     this.notificationManager = new NotificationManager(
       this.scene,
-      this.camera,
+      this.camera, // Pass OrthographicCamera
       document.getElementById("ui-container")!
     );
     this.uiManager = new UIManager(this); // Initialize UIManager
@@ -865,9 +872,10 @@ export class Game {
   }
 
   onWindowResize(): void {
-    if (this.camera && this.renderer) {
-      this.camera.aspect = window.innerWidth / window.innerHeight;
-      this.camera.updateProjectionMatrix();
+    if (this.camera && this.renderer && this.thirdPersonCamera) {
+      const newAspect = window.innerWidth / window.innerHeight;
+      this.thirdPersonCamera.setAspect(newAspect); // Inform camera controller
+      // The camera controller will update the camera's frustum in its next update() call
       this.renderer.setSize(window.innerWidth, window.innerHeight);
     }
   }
@@ -966,6 +974,7 @@ export class Game {
   }
 
   destroy(): void {
+    window.removeEventListener("resize", this.onWindowResize.bind(this)); // Remove resize listener
     document.removeEventListener(
       "visibilitychange",
       this.boundHandleVisibilityChange

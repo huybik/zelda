@@ -12,7 +12,7 @@ interface ActiveSprite {
 
 export class NotificationManager {
   private scene: THREE.Scene;
-  private camera: THREE.PerspectiveCamera;
+  private camera: THREE.OrthographicCamera; // Changed to OrthographicCamera
   private activeSprites: ActiveSprite[] = []; // Combined array for all sprites
 
   private readonly spriteDuration = 2; // seconds
@@ -24,7 +24,7 @@ export class NotificationManager {
 
   constructor(
     scene: THREE.Scene,
-    camera: THREE.PerspectiveCamera,
+    camera: THREE.OrthographicCamera, // Changed to OrthographicCamera
     uiContainer: HTMLElement // Keep uiContainer for potential future HTML notifications
   ) {
     this.scene = scene;
@@ -126,18 +126,18 @@ export class NotificationManager {
     const material = new THREE.SpriteMaterial({
       map: texture,
       transparent: true,
-      depthTest: true,
+      depthTest: true, // Keep depth test for orthographic
       depthWrite: false,
-      sizeAttenuation: true,
+      sizeAttenuation: false, // Disable size attenuation for orthographic
     });
 
     const sprite = new THREE.Sprite(material);
+    sprite.userData.isCollidable = false; // Sprites are not collidable
+    sprite.userData.isInteractable = false;
+    // Scale based on camera zoom level for consistent screen size
+    const scaleFactor = this.camera.top * 2 * 0.05; // Adjust 0.05 for desired screen size percentage
     const aspectRatio = canvas.width / canvas.height;
-    sprite.scale.set(
-      this.spriteScale * aspectRatio,
-      this.spriteScale,
-      this.spriteScale
-    );
+    sprite.scale.set(scaleFactor * aspectRatio, scaleFactor, 1);
 
     // Apply randomization to the initial position
     const randomOffsetX = (Math.random() - 0.5) * this.spritePositionRandomness;
@@ -172,6 +172,11 @@ export class NotificationManager {
       const data = this.activeSprites[i];
       const elapsedTime = now - data.startTime;
       const progress = Math.min(1.0, elapsedTime / this.spriteDuration);
+
+      // Update scale based on camera zoom
+      const scaleFactor = this.camera.top * 2 * 0.05;
+      const aspectRatio = data.texture.image.width / data.texture.image.height;
+      data.sprite.scale.set(scaleFactor * aspectRatio, scaleFactor, 1);
 
       if (progress >= 1.0) {
         // Remove sprite

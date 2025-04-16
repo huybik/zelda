@@ -1,4 +1,4 @@
-/* File: /src/entities/entity.ts */
+/* File: /src/entities/entitiy.ts */
 import {
   Scene,
   Vector3,
@@ -107,6 +107,8 @@ export abstract class Entity {
     if (!this.nameSprite) {
       const material = new SpriteMaterial({ map: this.nameTexture });
       this.nameSprite = new Sprite(material);
+      this.nameSprite.userData.isCollidable = false; // Sprites are not collidable
+      this.nameSprite.userData.isInteractable = false;
       const aspectRatio = this.nameCanvas.width / this.nameCanvas.height;
       this.nameSprite.scale.set(aspectRatio * 0.3, 0.3, 1);
       // Position above the entity based on its height
@@ -139,10 +141,14 @@ export abstract class Entity {
   removeDisplays(): void {
     if (this.intentSprite && this.mesh) {
       this.mesh.remove(this.intentSprite);
+      this.intentSprite.material.dispose();
+      this.intentSprite.material.map?.dispose();
       this.intentSprite = null;
     }
     if (this.nameSprite && this.mesh) {
       this.mesh.remove(this.nameSprite);
+      this.nameSprite.material.dispose();
+      this.nameSprite.material.map?.dispose();
       this.nameSprite = null;
     }
   }

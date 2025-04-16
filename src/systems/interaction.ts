@@ -1,7 +1,7 @@
 /* File: /src/systems/interaction.ts */
 // File: /src/systems/interaction.ts
 import {
-  PerspectiveCamera,
+  OrthographicCamera,
   Object3D,
   Vector3,
   Raycaster,
@@ -23,7 +23,7 @@ import { getItemDefinition } from "../core/items"; // Import for item names
 
 export class InteractionSystem {
   player: Character;
-  camera: PerspectiveCamera;
+  camera: OrthographicCamera; // Changed to OrthographicCamera
   interactableEntities: Array<any>; // Includes Characters, Animals, Resources
   controls: Controls;
   inventory: Inventory;
@@ -53,7 +53,7 @@ export class InteractionSystem {
 
   constructor(
     player: Character,
-    camera: PerspectiveCamera,
+    camera: OrthographicCamera, // Changed to OrthographicCamera
     interactableEntities: Array<any>,
     controls: Controls,
     inventory: Inventory,
@@ -148,8 +148,10 @@ export class InteractionSystem {
 
   // Renamed to specifically find Characters for 'E' interaction
   findInteractableCharacterTarget(): TargetInfo | null {
-    this.raycaster.setFromCamera(new Vector2(0, 0), this.camera);
-    this.raycaster.far = this.interactionDistance;
+    // Raycasting from screen center for Orthographic camera
+    const pointer = new Vector2(0, 0); // Center of the screen
+    this.raycaster.setFromCamera(pointer, this.camera);
+    this.raycaster.far = this.interactionDistance * 2; // Increase range slightly for ortho?
     const playerPosition = this.player.mesh!.position;
 
     const meshesToCheck = this.interactableEntities
@@ -166,8 +168,13 @@ export class InteractionSystem {
         const entityRef = mesh.userData?.entityReference;
         if (!(entityRef instanceof Character) || entityRef.isDead) return false;
 
-        const distSq = playerPosition.distanceToSquared(mesh.position);
-        return distSq < this.interactionDistance * this.interactionDistance * 4;
+        // Check distance in XZ plane for orthographic relevance
+        const dx = playerPosition.x - mesh.position.x;
+        const dz = playerPosition.z - mesh.position.z;
+        const distSqXZ = dx * dx + dz * dz;
+        return (
+          distSqXZ < this.interactionDistance * this.interactionDistance * 4
+        );
       });
 
     let closestHit: TargetInfo | null = null;
@@ -197,26 +204,23 @@ export class InteractionSystem {
           !rootInstance.isDead &&
           rootInstance !== this.player
         ) {
-          this.objectDirection
-            .copy(intersect.point)
-            .sub(this.camera.position)
-            .normalize();
-          this.camera.getWorldDirection(this.cameraDirection);
-          const angle = this.cameraDirection.angleTo(this.objectDirection);
-
-          if (angle < this.aimTolerance) {
+          // Angle check might be less relevant for orthographic center-screen raycast
+          // but keep distance check
+          const distSq = playerPosition.distanceToSquared(rootMesh.position);
+          if (distSq < this.interactionDistance * this.interactionDistance) {
             closestHit = {
               mesh: rootMesh,
               instance: rootInstance,
               point: intersect.point,
-              distance: intersect.distance,
+              distance: intersect.distance, // Raycaster distance
             };
-            break;
+            break; // Take the first valid hit from center ray
           }
         }
       }
     }
 
+    // Fallback to nearby check if raycast fails
     return closestHit || this.findNearbyCharacter();
   }
 
@@ -239,17 +243,9 @@ export class InteractionSystem {
       const distSq = playerPosition.distanceToSquared(this.objectPosition);
 
       if (distSq < closestDistSq) {
-        this.player.mesh!.getWorldDirection(this.playerDirection);
-        this.objectDirection
-          .copy(this.objectPosition)
-          .sub(playerPosition)
-          .normalize();
-        const angle = this.playerDirection.angleTo(this.objectDirection);
-
-        if (angle < Math.PI / 2.5) {
-          closestDistSq = distSq;
-          closestInstance = item;
-        }
+        // Simplified check for orthographic: just check if within distance
+        closestDistSq = distSq;
+        closestInstance = item;
       }
     });
 
