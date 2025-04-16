@@ -385,7 +385,7 @@ canvas {
 }
 
 #inventory-display {
-  bottom: 20px;
+  bottom: 10%;
   left: 50%;
   transform: translateX(-50%) scale(1);
   width: 85%;
