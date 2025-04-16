@@ -680,6 +680,7 @@ export class Game {
         button.textContent = option.name;
         button.classList.add("reward-button"); // Add class for styling
         button.title = option.description; // Tooltip
+        button.dataset.rewardId = option.id; // Store ID for handler lookup
 
         const handler = () => {
           this.handleRewardSelection(option.id); // Pass selected option ID
@@ -1064,6 +1065,11 @@ export class Game {
 
       if (shouldUpdateAiLogic) {
         this.lastAiUpdateTime = currentTime;
+      }
+
+      // Check for continuous attack input
+      if (this.controls?.moveState.attack || this.mobileControls?.attackHeld) {
+        this.handlePlayerAttackInput();
       }
 
       // Update active character (player)

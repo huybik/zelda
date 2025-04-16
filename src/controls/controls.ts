@@ -19,7 +19,7 @@ export class Controls {
     jump: false,
     sprint: false,
     interact: false,
-    attack: false, // Keep for potential animation blending or state checks
+    attack: false, // State indicating if attack input is active
   };
   keyDownListeners: Record<string, Array<() => void>> = {};
   mouseClickListeners: Record<number, Array<(event: MouseEvent) => void>> = {};
@@ -130,7 +130,8 @@ export class Controls {
       this.mouse.buttons = {};
       this.mouse.dx = 0;
       this.mouse.dy = 0;
-      this.updateContinuousMoveState();
+      this.updateContinuousMoveState(); // Reset movement states
+      this.moveState.attack = false; // Ensure attack state is reset
       if (!this.game?.isUIPaused()) {
         this.game?.setPauseState(true);
       }
@@ -154,8 +155,7 @@ export class Controls {
     this.keyDownListeners[keyCode]?.forEach((cb) => cb());
     if (keyCode === "KeyE") this.moveState.interact = true;
     if (keyCode === "KeyF") {
-      this.moveState.attack = true; // Keep state for potential blending/checks
-      this.game?.handlePlayerAttackInput(); // Trigger attack sequence
+      this.moveState.attack = true; // Set attack state
     }
     if (keyCode === "Escape") this.handleEscapeKey();
     this.updateContinuousMoveState();
@@ -198,8 +198,7 @@ export class Controls {
     this.mouseClickListeners[event.button]?.forEach((cb) => cb(event));
     // Handle left mouse click (button 0) for attack
     if (event.button === 0 && this.isPointerLocked) {
-      this.moveState.attack = true; // Keep state for potential blending/checks
-      this.game?.handlePlayerAttackInput(); // Trigger attack sequence
+      this.moveState.attack = true; // Set attack state
     }
   }
 
@@ -251,6 +250,7 @@ export class Controls {
       this.moveState.forward = (W ? 1 : 0) - (S ? 1 : 0);
       this.moveState.right = (A ? 1 : 0) - (D ? 1 : 0);
       this.moveState.sprint = Sprint ?? false;
+      // Attack state is now managed by key/mouse down/up events directly
     }
   }
 

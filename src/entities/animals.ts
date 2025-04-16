@@ -1,4 +1,4 @@
-/* File: /src/entities/animal.ts */
+/* File: /src/entities/animals.ts */
 import {
   Scene,
   Vector3,
@@ -49,13 +49,13 @@ export class Animal extends Entity {
   attackTriggered: boolean = false;
   currentAction?: AnimationAction;
   actionType: string = "none";
-  isPerformingAction: boolean = false;
+  // isPerformingAction: boolean = false; // Inherited from Entity
   skeletonRoot: Object3D | null = null; // Store the root for animation generation
   aiController: AnimalAIController | null = null; // Specific AI controller
   respawnDelay: number = 20000; // 30 seconds respawn delay
-  lastAttacker: Entity | null = null; // Track the last attacker
-  attackCooldown: number = 1.5; // Cooldown in seconds between attacks
-  lastAttackTime: number = 0; // Timestamp of the last attack start
+  // lastAttacker: Entity | null = null; // Inherited from Entity
+  // attackCooldown: number = 1.5; // Inherited from Entity
+  // lastAttackTime: number = 0; // Inherited from Entity
 
   constructor(
     scene: Scene,

@@ -4,9 +4,8 @@ import { Game } from "../main";
 import { Entity } from "../entities/entitiy";
 import { Character } from "../entities/character";
 import { Animal } from "../entities/animals";
-import { getItemDefinition } from "../core/items";
+import { getItemDefinition, Profession } from "../core/items";
 import { MathUtils } from "three";
-import { Profession } from "../core/items";
 
 export class CombatSystem {
   private game: Game;
@@ -19,14 +18,12 @@ export class CombatSystem {
 
   /**
    * Initiates an attack sequence for an entity.
+   * Plays the attack animation regardless of target presence (if cooldown allows).
    * If no target is provided (player attack), it finds the nearest valid target.
    * @param attacker The entity initiating the attack.
    * @param target Optional: The specific target to attack (used by AI).
    */
-  initiateAttack(
-    attacker: Character | Animal,
-    target?: Entity | Object3D
-  ): void {
+  initiateAttack(attacker: Entity, target?: Entity | Object3D): void {
     if (attacker.isDead || attacker.isPerformingAction || !this.game.clock) {
       return;
     }
@@ -38,6 +35,10 @@ export class CombatSystem {
       return; // Still on cooldown
     }
 
+    // Start the attack animation and set cooldown immediately
+    attacker.lastAttackTime = now;
+    attacker.playAttackAnimation(); // Trigger the animation in the entity
+
     let finalTarget: Entity | Object3D | null = target ?? null;
 
     // If no target provided (player attack), find the nearest one
@@ -45,28 +46,20 @@ export class CombatSystem {
       finalTarget = this.findNearestTarget(attacker, attacker.getAttackRange());
     }
 
-    if (!finalTarget) {
-      // console.log(`${attacker.name} initiated attack but found no target.`);
-      // Optionally play a miss animation or sound here
-      // For now, just reset cooldown slightly to prevent spamming misses
-      attacker.lastAttackTime = now - attacker.attackCooldown * 0.5; // Allow trying again sooner
-      return;
+    // If a target exists (either provided or found), execute the attack logic
+    if (finalTarget) {
+      // Make attacker look at the target just before executing damage
+      const targetPosition =
+        finalTarget instanceof Entity
+          ? finalTarget.mesh!.position
+          : finalTarget.position;
+      attacker.lookAt(targetPosition);
+
+      // Execute the attack logic (damage, effects)
+      this.executeAttack(attacker, finalTarget);
+    } else {
+      // Animation is already playing due to the call before target check.
     }
-
-    // Make attacker look at the target
-    const targetPosition =
-      finalTarget instanceof Entity
-        ? finalTarget.mesh!.position
-        : finalTarget.position;
-    attacker.lookAt(targetPosition);
-
-    // Start the attack
-    attacker.lastAttackTime = now;
-    attacker.playAttackAnimation(); // Trigger the animation in the entity
-
-    // Execute the attack logic (damage, effects) immediately after starting animation
-    // In a more complex system, this might be delayed or tied to animation frames
-    this.executeAttack(attacker, finalTarget);
   }
 
   /**
@@ -134,12 +127,13 @@ export class CombatSystem {
    * @param attacker The attacking entity.
    * @param target The target entity or resource object.
    */
-  executeAttack(attacker: Character | Animal, target: Entity | Object3D): void {
+  executeAttack(attacker: Entity, target: Entity | Object3D): void {
     if (attacker.isDead || !this.game.clock) return;
 
     const baseDamage = attacker.getAttackDamage();
     const targetMesh = (target as any).mesh ?? target;
     const targetPosition = targetMesh.getWorldPosition(new Vector3()); // Position for effects
+    const attackerPosition = attacker.mesh!.position.clone(); // Attacker position for number display
 
     // --- Calculate Damage Modifiers ---
     let damageMultiplier = 1.0;
@@ -216,10 +210,15 @@ export class CombatSystem {
     }
 
     // --- Effects and Logging ---
+    // Spawn damage number near the attacker
+    const numberSpawnPosition = attackerPosition.add(
+      new Vector3(0, attacker.userData.height * 0.8, 0)
+    );
     this.game.notificationManager?.createAttackNumberSprite(
       effectiveDamage,
-      targetPosition
+      numberSpawnPosition
     );
+    // Spawn particle effect at the target
     this.game.spawnParticleEffect(targetPosition, "red");
 
     // Log the hit
@@ -276,7 +275,7 @@ export class CombatSystem {
             gatherer,
             "gather_complete",
             `${gatherer.name} gathered ${addResult.totalAdded} ${itemGrant.id}.`,
-            resourceMesh.userData.name || resourceMesh.userData.id,
+            resourceMesh.name || resourceMesh.id,
             { resource: itemGrant.id },
             position
           );
@@ -285,7 +284,7 @@ export class CombatSystem {
             gatherer,
             "gather_fail",
             `${gatherer.name}'s inventory full, could not gather ${itemGrant.count} ${itemGrant.id}.`,
-            resourceMesh.userData.name || resourceMesh.userData.id,
+            resourceMesh.name || resourceMesh.id,
             { resource: itemGrant.id },
             position
           );
@@ -299,7 +298,7 @@ export class CombatSystem {
         gatherer,
         "destroy_resource",
         `${gatherer.name} destroyed a ${resource}.`,
-        resourceMesh.userData.name || resourceMesh.id,
+        resourceMesh.name || resourceMesh.id,
         { resource: resource },
         position
       );

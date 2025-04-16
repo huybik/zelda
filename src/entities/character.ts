@@ -93,7 +93,7 @@ export class Character extends Entity {
   lastAttacker: Entity | null = null; // Track the last attacker
   bonusDamage: number = 0; // Flat bonus damage from upgrades
   attackCooldown: number = 0.8; // Cooldown in seconds between attacks
-  lastAttackTime: number = 0; // Timestamp of the last attack start
+  lastAttackTime: number = -1; // Timestamp of the last attack start, init to allow first attack
 
   // Item/Equipment related properties
   rightHandBone: Bone | null = null;

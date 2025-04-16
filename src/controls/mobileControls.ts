@@ -24,7 +24,7 @@ export class MobileControls {
   private attackButton: HTMLElement | null = null;
   private inventoryButton: HTMLElement | null = null;
   private journalButton: HTMLElement | null = null;
-  private attackHeld: boolean = false;
+  public attackHeld: boolean = false; // Public to be checked by Game loop
   private interactHeld: boolean = false;
 
   private boundHandleCameraTouchStart: (event: TouchEvent) => void;
@@ -220,10 +220,9 @@ export class MobileControls {
       "touchstart",
       (e) => {
         e.preventDefault();
-        this.attackHeld = true;
+        this.attackHeld = true; // Set held state
         this.attackButton?.classList.add("active");
-        this.controls.moveState.attack = true; // Set attack state
-        this.game.handlePlayerAttackInput(); // Trigger attack sequence
+        // Attack trigger is now handled by the game loop checking attackHeld
       },
       { passive: false }
     );
@@ -231,9 +230,8 @@ export class MobileControls {
       "touchend",
       (e) => {
         e.preventDefault();
-        this.attackHeld = false;
+        this.attackHeld = false; // Reset held state
         this.attackButton?.classList.remove("active");
-        this.controls.moveState.attack = false; // Reset attack state
       },
       { passive: false }
     );
@@ -292,9 +290,7 @@ export class MobileControls {
       Math.min(1, this.controls.moveState.right)
     );
     this.controls.moveState.sprint = false;
-    // Interact and Attack states are set directly by button events now
-    // this.controls.moveState.interact = this.interactHeld;
-    // this.controls.moveState.attack = this.attackHeld;
+    // Attack state is no longer set directly here; game loop checks attackHeld
     this.controls.moveState.jump = false;
     const touchCameraSensitivity = 0.3;
     const touchPlayerRotationSensitivity = 0.2;

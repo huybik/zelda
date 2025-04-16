@@ -1,4 +1,4 @@
-/* File: /src/entities/entitiy.ts */
+/* File: /src/entities/entity.ts */
 import {
   Scene,
   Vector3,
@@ -10,6 +10,7 @@ import {
   Sprite,
   SpriteMaterial,
   Raycaster, // Import Raycaster
+  AnimationAction, // Added AnimationAction
 } from "three";
 import {
   EntityUserData,
@@ -23,7 +24,7 @@ import type { AIController } from "../ai/npcAI";
 import type { AnimalAIController } from "../ai/animalAI"; // Import Animal AI
 import { CHARACTER_HEIGHT, CHARACTER_RADIUS } from "../core/constants";
 
-export class Entity {
+export abstract class Entity {
   id: string;
   mesh: Group | null;
   scene: Scene | null;
@@ -50,6 +51,11 @@ export class Entity {
   homePosition: Vector3 | null = null; // Added home position for respawning
   lastAttacker: Entity | null = null; // Track the last entity that attacked this one
 
+  // Action/Animation related properties (common to Character and Animal)
+  isPerformingAction: boolean = false;
+  attackCooldown: number = 1.0; // Default cooldown
+  lastAttackTime: number = -1; // Initialize to allow first attack
+
   constructor(scene: Scene, position: Vector3, name: string = "Entity") {
     this.id = `${name}_${getNextEntityId()}`;
     this.scene = scene;
@@ -71,6 +77,8 @@ export class Entity {
       isCollidable: true,
       isInteractable: false, // Default to false, set by subclasses
       id: this.id,
+      height: CHARACTER_HEIGHT, // Default height
+      radius: CHARACTER_RADIUS, // Default radius
     };
     if (this.mesh) {
       this.mesh.userData = this.userData;
@@ -79,7 +87,11 @@ export class Entity {
     }
   }
 
-  update(deltaTime: number, options: UpdateOptions = {}): void {}
+  // Abstract methods or common implementations for subclasses
+  abstract update(deltaTime: number, options?: UpdateOptions): void;
+  abstract playAttackAnimation(): void;
+  abstract getAttackDamage(): number;
+  abstract getAttackRange(): number;
 
   initNameDisplay(): void {
     // Allow for NPCs and Animals, but not the player
