@@ -13,7 +13,7 @@ import {
   Group,
   AnimationClip,
   Box3,
-  MathUtils, // Added MathUtils
+  MathUtils,
 } from "three";
 import WebGL from "three/examples/jsm/capabilities/WebGL.js";
 import { Entity } from "./entities/entitiy";
@@ -28,15 +28,13 @@ import { HUD } from "./ui/hud";
 import { InventoryDisplay } from "./ui/inventory";
 import { JournalDisplay } from "./ui/journal";
 import { Minimap } from "./ui/minimap";
-import { NotificationManager } from "./ui/notificationManager"; // Import NotificationManager
+import { NotificationManager } from "./ui/notificationManager";
 import {
   Inventory,
   getTerrainHeight,
   Quest,
-  InventoryItem, // Added InventoryItem
+  InventoryItem,
   EventEntry,
-  QuestRewardType, // Import QuestRewardType
-  QuestRewardOption, // Import QuestRewardOption
 } from "./core/utils.ts";
 import { WORLD_SIZE, TERRAIN_SEGMENTS } from "./core/constants";
 import { loadModels } from "./core/assetLoader";
@@ -53,16 +51,16 @@ import { AnimalAIController } from "./ai/animalAI.ts";
 import { LandingPage } from "./ui/landingPage.ts";
 import { QuestManager } from "./core/questManager.ts";
 import { PortalManager } from "./objects/portalManagement";
-import { TradingSystem } from "./systems/tradingSystem.ts"; // Import TradingSystem
-import { CombatSystem } from "./systems/combatSystem.ts"; // Import CombatSystem
+import { TradingSystem } from "./systems/tradingSystem.ts";
+import { CombatSystem } from "./systems/combatSystem.ts";
 import {
   getItemDefinition,
-  WeaponDefinition,
   isWeapon,
-  Profession, // Import Profession
-  ProfessionStartingWeapon, // Import starting weapon map
+  Profession,
+  ProfessionStartingWeapon,
 } from "./core/items";
-import { DroppedItemManager } from "./systems/droppedItemManager.ts"; // Import DroppedItemManager
+import { DroppedItemManager } from "./systems/droppedItemManager.ts";
+import { UIManager } from "./ui/uiManager.ts"; // Import UIManager
 
 export class Game {
   scene: Scene | null = null;
@@ -74,22 +72,22 @@ export class Game {
   controls: Controls | null = null;
   mobileControls: MobileControls | null = null;
   physics: Physics | null = null;
-  combatSystem: CombatSystem | null = null; // Add CombatSystem
-  inventory: Inventory | null = null; // This will be the PLAYER's inventory instance
+  combatSystem: CombatSystem | null = null;
+  inventory: Inventory | null = null;
   interactionSystem: InteractionSystem | null = null;
-  tradingSystem: TradingSystem | null = null; // Add TradingSystem
-  droppedItemManager: DroppedItemManager | null = null; // Add DroppedItemManager
+  tradingSystem: TradingSystem | null = null;
+  droppedItemManager: DroppedItemManager | null = null;
   hud: HUD | null = null;
   minimap: Minimap | null = null;
   inventoryDisplay: InventoryDisplay | null = null;
   journalDisplay: JournalDisplay | null = null;
-  notificationManager: NotificationManager | null = null; // Add NotificationManager
-  entities: Array<any> = []; // Includes Characters, Animals, Resources (Object3D)
+  notificationManager: NotificationManager | null = null;
+  uiManager: UIManager | null = null; // Add UIManager
+  entities: Array<any> = [];
   collidableObjects: Object3D[] = [];
-  interactableObjects: Array<any> = []; // Includes Characters, Animals, Resources (Object3D), Dropped Items
+  interactableObjects: Array<any> = [];
   isPaused: boolean = false;
-  isQuestBannerVisible: boolean = false; // Tracks if the banner UI is visible (for quests or trades)
-  currentBannerType: "quest" | "trade" | "none" = "none"; // Tracks what the banner is showing
+  // Removed banner state, managed by UIManager now
   intentContainer: HTMLElement | null = null;
   particleEffects: Group[] = [];
   audioElement: HTMLAudioElement | null = null;
@@ -101,42 +99,19 @@ export class Game {
   wasPausedBeforeVisibilityChange: boolean = false;
   worldSize: number = WORLD_SIZE;
   language: string = "en";
-  playerProfession: Profession = Profession.None; // Store player's chosen profession
+  playerProfession: Profession = Profession.None;
   isGameStarted: boolean = false;
   private landingPage: LandingPage | null = null;
   public portalManager: PortalManager;
-  public wolfKillCount: number = 0; // Track wolf kills for quest
-  public characterSwitchingEnabled: boolean = false; // Track if switching is enabled
+  public wolfKillCount: number = 0;
+  public characterSwitchingEnabled: boolean = false;
 
   private lastAiUpdateTime: number = 0;
-  private aiUpdateInterval: number = 0.2; // Update AI logic 5 times per second
+  private aiUpdateInterval: number = 0.2;
   private lastQuestCheckTime: number = 0;
-  private questCheckInterval: number = 0.5; // Check quest completion twice per second
+  private questCheckInterval: number = 0.5;
 
-  // Banner UI Elements
-  private questBannerElement: HTMLElement | null = null;
-  private questBannerTitle: HTMLElement | null = null;
-  private questBannerDesc: HTMLElement | null = null;
-  private questBannerButtonContainer: HTMLElement | null = null; // Container for buttons
-  private questBannerOkButton: HTMLButtonElement | null = null;
-  private questBannerAcceptButton: HTMLButtonElement | null = null;
-  private questBannerDeclineButton: HTMLButtonElement | null = null;
-  private questBannerRewardButtons: HTMLButtonElement[] = []; // For dynamic reward buttons
-
-  // Store current banner handlers to remove them later
-  private boundBannerOkClickHandler: (() => void) | null = null;
-  private boundBannerAcceptClickHandler: (() => void) | null = null;
-  private boundBannerDeclineClickHandler: (() => void) | null = null;
-  private boundRewardButtonHandlers: Map<string, () => void> = new Map(); // Store reward button handlers
-
-  // Store current trade details if a trade banner is shown
-  private currentTradeInitiator: Character | null = null;
-  private currentTradeTarget: Character | null = null;
-  private currentTradeGiveItems: InventoryItem[] = [];
-  private currentTradeReceiveItems: InventoryItem[] = [];
-
-  // Store current quest for reward handling
-  private currentQuestForReward: Quest | null = null;
+  // Removed banner elements and handlers, moved to UIManager
 
   public models!: Record<string, { scene: Group; animations: AnimationClip[] }>;
 
@@ -151,7 +126,7 @@ export class Game {
     this.initRenderer();
     this.initScene();
     this.initCamera();
-    this.initInventory(); // Player inventory created here
+    this.initInventory();
     this.initAudio();
 
     const modelPaths = {
@@ -159,7 +134,6 @@ export class Game {
       tavernMan: "assets/tavernman.glb",
       oldMan: "assets/oldman.glb",
       woman: "assets/woman.glb",
-      // Add weapon models if not loaded elsewhere
       sword: "assets/items/weapons/sword.glb",
       axe: "assets/items/weapons/axe.glb",
       pickaxe: "assets/items/weapons/pickaxe.glb",
@@ -173,28 +147,26 @@ export class Game {
       "selectedProfession"
     ) as Profession | null;
     this.language = savedLang || "en";
-    this.playerProfession = savedProfession || Profession.Hunter; // Default if not saved
+    this.playerProfession = savedProfession || Profession.Hunter;
 
     const urlParams = new URLSearchParams(window.location.search);
     this.hasEnteredFromPortal = urlParams.get("portal") === "true";
     this.startPortalRefUrl = urlParams.get("ref");
     this.startPortalOriginalParams = urlParams;
 
-    // Player initialized here, inventory is passed
     this.initPlayer(this.models, savedName || "Player");
-    // Set player profession AFTER initialization
     if (this.activeCharacter) {
-      this.activeCharacter.professions.add(this.playerProfession); // Add initial profession
-      this.activeCharacter.profession = this.playerProfession; // Set primary
+      this.activeCharacter.professions.add(this.playerProfession);
+      this.activeCharacter.profession = this.playerProfession;
     }
 
     this.initControls();
     this.initMobileControls();
     this.initPhysics();
-    this.initEnvironment(this.models); // NPCs created here, including profession weapons
-    this.initSystems(); // TradingSystem, DroppedItemManager, CombatSystem initialized here
+    this.initEnvironment(this.models);
+    this.initSystems(); // Includes TradingSystem, DroppedItemManager, CombatSystem
     this.questManager.initQuests();
-    this.initUI(); // UI initialized here, including InventoryDisplay
+    this.initUI(); // Includes UIManager
     this.setupUIControls();
     this.portalManager.initPortals(
       this.scene!,
@@ -202,7 +174,7 @@ export class Game {
       this.startPortalRefUrl,
       this.startPortalOriginalParams
     );
-    // Look away from start portal if entered from one
+
     if (
       this.hasEnteredFromPortal &&
       this.portalManager.startPortal &&
@@ -214,17 +186,17 @@ export class Game {
           .add(new Vector3(0, 0, 10))
       );
     }
-    // Set portals for minimap
+
     if (this.minimap) {
       this.minimap.setPortals(
         this.portalManager.exitPortal?.group || null,
         this.portalManager.startPortal?.group || null
       );
     }
-    // Initialize displays for all entities AFTER they are created
+
     this.entities.forEach((entity) => {
       if (entity instanceof Character || entity instanceof Animal) {
-        entity.game = this; // Ensure game reference is set
+        entity.game = this;
         if (entity instanceof Character) {
           entity.initIntentDisplay();
           entity.initNameDisplay();
@@ -234,26 +206,11 @@ export class Game {
       }
     });
 
-    // Find Quest Banner elements
-    this.questBannerElement = document.getElementById("quest-detail-banner");
-    this.questBannerTitle = document.getElementById("quest-banner-title");
-    this.questBannerDesc = document.getElementById("quest-banner-description");
-    this.questBannerButtonContainer = document.getElementById(
-      "quest-banner-buttons"
-    );
-    this.questBannerOkButton = document.getElementById(
-      "quest-banner-ok"
-    ) as HTMLButtonElement;
-    this.questBannerAcceptButton = document.getElementById(
-      "quest-banner-accept"
-    ) as HTMLButtonElement;
-    this.questBannerDeclineButton = document.getElementById(
-      "quest-banner-decline"
-    ) as HTMLButtonElement;
+    // UIManager initialization moved to initUI
+    // Removed banner element finding here
 
-    // Setup Landing Page LAST, it will handle initial pause state
     this.landingPage = new LandingPage(this);
-    this.landingPage.setup(savedName, savedLang, savedProfession); // Pass saved profession
+    this.landingPage.setup(savedName, savedLang, savedProfession);
 
     document.addEventListener(
       "pointerlockchange",
@@ -282,7 +239,7 @@ export class Game {
   }
 
   handleVisibilityChange(): void {
-    if (!this.mobileControls?.isActive()) return; // Only apply for mobile
+    if (!this.mobileControls?.isActive()) return;
     if (document.visibilityState === "hidden") {
       this.wasPausedBeforeVisibilityChange = this.isPaused;
       this.setPauseState(true);
@@ -308,7 +265,7 @@ export class Game {
           "Game kept paused (mobile) on visibility change because it was already paused."
         );
       }
-      this.wasPausedBeforeVisibilityChange = false; // Reset flag
+      this.wasPausedBeforeVisibilityChange = false;
     }
   }
 
@@ -348,8 +305,7 @@ export class Game {
   }
 
   initInventory(): void {
-    // Creates the inventory instance that the player will use
-    this.inventory = new Inventory(20); // Example size 20
+    this.inventory = new Inventory(20);
   }
 
   initAudio(): void {
@@ -363,7 +319,7 @@ export class Game {
     playerName: string
   ): void {
     let playerSpawnPos = new Vector3(0, 0, 5);
-    if (this.hasEnteredFromPortal) playerSpawnPos = new Vector3(0, 0, 15); // Adjust spawn if from portal
+    if (this.hasEnteredFromPortal) playerSpawnPos = new Vector3(0, 0, 15);
     playerSpawnPos.y = getTerrainHeight(
       this.scene!,
       playerSpawnPos.x,
@@ -373,27 +329,25 @@ export class Game {
     const playerModelData = models.player;
     if (!playerModelData) throw new Error("Player model not loaded!");
 
-    // Pass the game's inventory instance to the player character
     this.activeCharacter = new Character(
       this.scene!,
       playerSpawnPos,
       playerName,
-      playerModelData.scene, // Pass the cloned scene
+      playerModelData.scene,
       playerModelData.animations,
-      this.inventory! // Assign the game's inventory instance
+      this.inventory!
     );
     this.activeCharacter.userData.isPlayer = true;
-    this.activeCharacter.userData.isInteractable = true; // Player can be target of interaction? Maybe not needed.
+    this.activeCharacter.userData.isInteractable = true;
     this.activeCharacter.userData.isNPC = false;
     if (this.activeCharacter.aiController)
-      this.activeCharacter.aiController = null; // Remove AI for player
+      this.activeCharacter.aiController = null;
 
     this.entities.push(this.activeCharacter);
     this.collidableObjects.push(this.activeCharacter.mesh!);
-    this.interactableObjects.push(this.activeCharacter); // Add player to interactables if needed (e.g., for targeting)
+    this.interactableObjects.push(this.activeCharacter);
   }
 
-  /** Gives the starting weapon to the player based on their chosen profession. */
   giveStartingWeapon(): void {
     if (!this.activeCharacter || !this.activeCharacter.inventory) return;
 
@@ -407,10 +361,8 @@ export class Game {
         console.log(
           `Gave starting weapon ${startingWeaponId} to player for profession ${this.playerProfession}.`
         );
-        // Optionally equip it immediately
         const weaponDef = getItemDefinition(startingWeaponId);
         if (weaponDef && isWeapon(weaponDef)) {
-          // Use requestAnimationFrame to delay slightly, ensuring bones are ready.
           requestAnimationFrame(() => {
             this.activeCharacter?.equipWeapon(weaponDef);
           });
@@ -461,7 +413,7 @@ export class Game {
       this.collidableObjects,
       this.interactableObjects,
       this.entities,
-      this.inventory, // Pass player inventory (though NPCs don't use it here)
+      this.inventory,
       models,
       this
     );
@@ -477,19 +429,19 @@ export class Game {
     )
       throw new Error("Cannot init systems: Core components missing.");
 
-    this.droppedItemManager = new DroppedItemManager(this); // Initialize DroppedItemManager first
-    this.combatSystem = new CombatSystem(this); // Initialize CombatSystem
+    this.droppedItemManager = new DroppedItemManager(this);
+    this.combatSystem = new CombatSystem(this);
     this.interactionSystem = new InteractionSystem(
       this.activeCharacter,
       this.camera,
-      this.interactableObjects, // Pass interactables (will include dropped items later)
+      this.interactableObjects,
       this.controls,
-      this.inventory, // Pass player inventory
+      this.inventory,
       this.activeCharacter.eventLog,
       this,
-      this.droppedItemManager // Pass DroppedItemManager to InteractionSystem
+      this.droppedItemManager
     );
-    this.tradingSystem = new TradingSystem(this); // Initialize TradingSystem
+    this.tradingSystem = new TradingSystem(this);
   }
 
   initUI(): void {
@@ -499,21 +451,21 @@ export class Game {
     this.minimap = new Minimap(
       document.getElementById("minimap-canvas") as HTMLCanvasElement,
       this.activeCharacter,
-      this.entities, // Pass entities (minimap might draw resources/animals)
+      this.entities,
       WORLD_SIZE
     );
-    // Pass the game instance to InventoryDisplay
     this.inventoryDisplay = new InventoryDisplay(this.inventory, this);
     this.journalDisplay = new JournalDisplay(
       this.activeCharacter.eventLog,
       this
     );
-    // Initialize NotificationManager
     this.notificationManager = new NotificationManager(
       this.scene,
       this.camera,
       document.getElementById("ui-container")!
     );
+    this.uiManager = new UIManager(this); // Initialize UIManager
+    this.uiManager.init(); // Call UIManager's init to get elements
   }
 
   setupUIControls(): void {
@@ -521,26 +473,27 @@ export class Game {
       !this.controls ||
       !this.inventoryDisplay ||
       !this.journalDisplay ||
-      !this.interactionSystem
+      !this.interactionSystem ||
+      !this.uiManager // Check for uiManager
     )
       return;
 
     this.controls.addKeyDownListener("KeyI", () => {
-      if (this.interactionSystem?.isChatOpen || this.isQuestBannerVisible)
+      if (this.interactionSystem?.isChatOpen || this.uiManager?.isBannerVisible)
         return;
-      this.journalDisplay!.hide(); // Close journal if open
+      this.journalDisplay!.hide();
       this.inventoryDisplay!.toggle();
       this.setPauseState(this.inventoryDisplay!.isOpen);
     });
     this.controls.addKeyDownListener("KeyJ", () => {
-      if (this.interactionSystem?.isChatOpen || this.isQuestBannerVisible)
+      if (this.interactionSystem?.isChatOpen || this.uiManager?.isBannerVisible)
         return;
-      this.inventoryDisplay!.hide(); // Close inventory if open
+      this.inventoryDisplay!.hide();
       this.journalDisplay!.toggle();
-      // Pause state is handled by journalDisplay show/hide methods
+      // Pause state handled by journalDisplay
     });
     this.controls.addKeyDownListener("KeyC", () => {
-      if (this.isPaused || !this.characterSwitchingEnabled) return; // Prevent switching when paused or disabled
+      if (this.isPaused || !this.characterSwitchingEnabled) return;
       if (
         this.interactionSystem!.currentTarget instanceof Character &&
         this.interactionSystem!.currentTarget !== this.activeCharacter
@@ -548,15 +501,11 @@ export class Game {
         this.switchControlTo(this.interactionSystem!.currentTarget);
       }
     });
-
-    // Click/Double-click is now handled within InventoryDisplay using event delegation
-    // No need for a specific mouse listener here for inventory slots.
   }
 
   setPauseState(paused: boolean): void {
     if (this.isPaused === paused) return;
 
-    // Special check for landing page: if landing page is visible, always pause.
     const landingPageVisible = !document
       .getElementById("landing-page")
       ?.classList.contains("hidden");
@@ -564,477 +513,84 @@ export class Game {
       paused = true;
     }
 
-    // Prevent unpausing if a UI element requires it
     if (!paused && this.isUIPaused()) {
       console.log("Attempted to unpause, but UI requires pause.");
-      return; // Do not unpause if a UI element requires it
+      return;
     }
 
     this.isPaused = paused;
 
-    // Handle pointer lock for non-mobile
     if (!this.mobileControls?.isActive()) {
       if (this.isPaused) {
         if (this.controls?.isPointerLocked) this.controls.unlockPointer();
       } else {
-        // Only attempt to lock pointer if no UI requires pause and pointer isn't already locked
         if (!this.isUIPaused() && !document.pointerLockElement) {
           this.controls?.lockPointer();
         }
       }
     }
-    console.log("Game Paused:", this.isPaused); // dont remove this
+    console.log("Game Paused:", this.isPaused);
   }
 
-  // Checks if any UI element that requires pausing is open
   isUIPaused(): boolean {
-    return (
-      this.inventoryDisplay?.isOpen ||
-      this.journalDisplay?.isOpen ||
-      this.interactionSystem?.isChatOpen ||
-      this.isQuestBannerVisible // Check the generic banner visibility flag
-    );
+    // Delegate check to UIManager
+    return this.uiManager?.isUIPaused() ?? false;
   }
 
-  /**
-   * Shows the quest/trade banner UI. Handles different button configurations.
-   * @param title The title for the banner.
-   * @param description The description text or HTML.
-   * @param type The type of banner ('quest' or 'trade').
-   * @param quest The quest associated with this banner (for reward handling).
-   * @param onOk Optional handler for the OK button (for simple quests/info).
-   * @param onAccept Optional handler for the Accept button (for trades).
-   * @param onDecline Optional handler for the Decline button (for trades).
-   * @param rewardOptions Optional array of reward choices.
-   */
-  private showBanner(
-    title: string,
-    description: string, // Can be HTML
-    type: "quest" | "trade",
-    quest: Quest | null = null, // Pass the quest object
-    onOk?: () => void,
-    onAccept?: () => void,
-    onDecline?: () => void,
-    rewardOptions?: QuestRewardOption[]
-  ): void {
-    if (
-      !this.questBannerElement ||
-      !this.questBannerTitle ||
-      !this.questBannerDesc ||
-      !this.questBannerButtonContainer ||
-      !this.questBannerOkButton ||
-      !this.questBannerAcceptButton ||
-      !this.questBannerDeclineButton
-    )
-      return;
+  // Removed banner methods, now handled by UIManager
+  // showBanner, removeBannerListeners, hideQuestBanner,
+  // showQuestCompletionBanner, handleRewardSelection,
+  // showTradeNotification, handleTradeAccept, handleTradeDecline
 
-    // --- Clean up previous listeners and buttons ---
-    this.removeBannerListeners();
-    this.questBannerButtonContainer.innerHTML = ""; // Clear previous buttons
-
-    // --- Store Quest Context ---
-    this.currentQuestForReward = quest;
-
-    // --- Configure Banner Content ---
-    this.questBannerTitle.textContent = title;
-    this.questBannerDesc.innerHTML = description; // Use innerHTML for potential reward formatting
-    this.currentBannerType = type;
-
-    // --- Configure Buttons ---
-    if (type === "trade") {
-      // Add Accept/Decline buttons for trades
-      this.questBannerButtonContainer.appendChild(this.questBannerAcceptButton);
-      this.questBannerButtonContainer.appendChild(
-        this.questBannerDeclineButton
-      );
-      this.questBannerAcceptButton.classList.remove("hidden");
-      this.questBannerDeclineButton.classList.remove("hidden");
-
-      if (onAccept) {
-        this.boundBannerAcceptClickHandler = () => {
-          onAccept();
-          this.hideQuestBanner(); // Hide after action
-        };
-        this.questBannerAcceptButton.addEventListener(
-          "click",
-          this.boundBannerAcceptClickHandler
-        );
-      }
-      if (onDecline) {
-        this.boundBannerDeclineClickHandler = () => {
-          onDecline();
-          this.hideQuestBanner(); // Hide after action
-        };
-        this.questBannerDeclineButton.addEventListener(
-          "click",
-          this.boundBannerDeclineClickHandler
-        );
-      }
-    } else if (type === "quest" && rewardOptions && rewardOptions.length > 0) {
-      // Add reward choice buttons for quests
-      this.questBannerRewardButtons = []; // Clear previous reward buttons array
-      this.boundRewardButtonHandlers.clear(); // Clear previous handlers map
-
-      rewardOptions.forEach((option) => {
-        const button = document.createElement("button");
-        button.textContent = option.name;
-        button.classList.add("reward-button"); // Add class for styling
-        button.title = option.description; // Tooltip
-        button.dataset.rewardId = option.id; // Store ID for handler lookup
-
-        const handler = () => {
-          this.handleRewardSelection(option.id); // Pass selected option ID
-          this.hideQuestBanner();
-        };
-        this.boundRewardButtonHandlers.set(option.id, handler); // Store handler
-        button.addEventListener("click", handler);
-
-        this.questBannerButtonContainer?.appendChild(button);
-        this.questBannerRewardButtons.push(button);
-      });
-    } else {
-      // Default: Show OK button for simple quests/info
-      this.questBannerButtonContainer.appendChild(this.questBannerOkButton);
-      this.questBannerOkButton.classList.remove("hidden");
-
-      if (onOk) {
-        this.boundBannerOkClickHandler = () => {
-          onOk();
-          this.hideQuestBanner(); // Hide after action
-        };
-        this.questBannerOkButton.addEventListener(
-          "click",
-          this.boundBannerOkClickHandler
-        );
-      } else {
-        // Default OK action if no specific handler provided
-        this.boundBannerOkClickHandler = () => this.hideQuestBanner();
-        this.questBannerOkButton.addEventListener(
-          "click",
-          this.boundBannerOkClickHandler
-        );
-      }
-    }
-
-    // --- Show Banner and Pause ---
-    this.questBannerElement.classList.remove("hidden");
-    this.isQuestBannerVisible = true;
-    this.setPauseState(true); // Pause the game
-  }
-
-  /** Removes all active banner button listeners. */
-  private removeBannerListeners(): void {
-    if (this.boundBannerOkClickHandler && this.questBannerOkButton) {
-      this.questBannerOkButton.removeEventListener(
-        "click",
-        this.boundBannerOkClickHandler
-      );
-    }
-    if (this.boundBannerAcceptClickHandler && this.questBannerAcceptButton) {
-      this.questBannerAcceptButton.removeEventListener(
-        "click",
-        this.boundBannerAcceptClickHandler
-      );
-    }
-    if (this.boundBannerDeclineClickHandler && this.questBannerDeclineButton) {
-      this.questBannerDeclineButton.removeEventListener(
-        "click",
-        this.boundBannerDeclineClickHandler
-      );
-    }
-    // Remove reward button listeners
-    this.questBannerRewardButtons.forEach((button) => {
-      const optionId = button.dataset.rewardId; // Assuming you set data-reward-id when creating
-      const handler = this.boundRewardButtonHandlers.get(optionId || "");
-      if (handler) {
-        button.removeEventListener("click", handler);
-      }
-    });
-
-    this.boundBannerOkClickHandler = null;
-    this.boundBannerAcceptClickHandler = null;
-    this.boundBannerDeclineClickHandler = null;
-    this.questBannerRewardButtons = [];
-    this.boundRewardButtonHandlers.clear();
-  }
-
-  /** Hides the quest/trade banner and unpauses the game. */
-  hideQuestBanner(): void {
-    if (!this.questBannerElement || !this.isQuestBannerVisible) return;
-
-    this.removeBannerListeners(); // Clean up listeners
-    this.questBannerElement.classList.add("hidden");
-    this.isQuestBannerVisible = false;
-    this.currentBannerType = "none";
-    this.currentTradeInitiator = null; // Clear trade context
-    this.currentTradeTarget = null;
-    this.currentTradeGiveItems = [];
-    this.currentTradeReceiveItems = [];
-    this.currentQuestForReward = null; // Clear quest context
-    this.setPauseState(false); // Unpause the game (if no other UI requires pause)
-  }
-
-  /**
-   * Shows a quest notification or completion banner.
-   * @param quest The quest to display.
-   */
+  // Wrapper methods to call UIManager
   showQuestCompletionBanner(quest: Quest): void {
-    const title = quest.isCompleted
-      ? `Quest Completed: ${quest.name}`
-      : `Quest: ${quest.name}`;
-    let description = quest.description;
-
-    // Add reward info to description if completed
-    if (quest.isCompleted) {
-      description += "<br><br><strong>Reward:</strong> ";
-      switch (quest.rewardType) {
-        case QuestRewardType.WEAPON_CHOICE:
-          description += "Choose your reward below.";
-          break;
-        case QuestRewardType.WEAPON_UPGRADE:
-          description += `Weapon Damage +${quest.rewardData || "?"}`;
-          break;
-        case QuestRewardType.ENABLE_MECHANIC:
-          description += `Mechanic Unlocked: ${quest.rewardData || "Unknown"}`;
-          if (quest.rewardData === "character_switching") {
-            description += " (Press 'C' near an NPC to switch)";
-          }
-          break;
-        case QuestRewardType.ADD_PROFESSION:
-          description += `New Profession: ${quest.rewardData || "Unknown"}`;
-          break;
-        default:
-          description += "Claim your reward!";
-      }
-    }
-
-    // Show the banner
-    this.showBanner(
-      title,
-      description,
-      "quest",
-      quest, // Pass the quest object
-      () => this.handleRewardSelection(), // OK button handler (for non-choice rewards)
-      undefined, // No Accept handler
-      undefined, // No Decline handler
-      quest.isCompleted ? quest.rewardOptions : undefined // Pass reward options only if completed
-    );
+    this.uiManager?.showQuestCompletionBanner(quest);
   }
 
-  /** Handles the reward selection or acknowledgement. */
-  handleRewardSelection(selectedOptionId?: string): void {
-    const quest = this.currentQuestForReward;
-    if (!quest || !quest.isCompleted || !this.activeCharacter) {
-      console.warn("Cannot handle reward: No active quest or player.");
-      return;
-    }
-
-    console.log(
-      `Handling reward for quest: ${quest.name}, Option: ${selectedOptionId}`
-    );
-
-    switch (quest.rewardType) {
-      case QuestRewardType.WEAPON_CHOICE:
-        if (!selectedOptionId) {
-          console.warn(
-            "Weapon choice reward selected but no option ID provided."
-          );
-          return;
-        }
-        if (selectedOptionId === "new_sword") {
-          // Give a new sword (replace or add?) - Let's add for now
-          const addResult = this.activeCharacter.inventory?.addItem("sword", 1);
-          if (addResult?.totalAdded) {
-            this.notificationManager?.createItemAddedSprite(
-              "sword",
-              1,
-              this.activeCharacter.mesh!.position
-            );
-            this.logEvent(
-              this.activeCharacter,
-              "reward_received",
-              `Received reward: New Sword`,
-              undefined,
-              { quest: quest.name, reward: "New Sword" },
-              this.activeCharacter.mesh!.position
-            );
-          } else {
-            this.logEvent(
-              this.activeCharacter,
-              "reward_fail",
-              `Failed to receive reward: New Sword (Inventory Full?)`,
-              undefined,
-              { quest: quest.name, reward: "New Sword" },
-              this.activeCharacter.mesh!.position
-            );
-          }
-        } else if (selectedOptionId === "upgrade_damage") {
-          this.activeCharacter.upgradeWeaponDamage(5); // Example upgrade amount
-          this.logEvent(
-            this.activeCharacter,
-            "reward_received",
-            `Received reward: Damage Upgrade`,
-            undefined,
-            { quest: quest.name, reward: "Damage Upgrade" },
-            this.activeCharacter.mesh!.position
-          );
-        }
-        break;
-
-      case QuestRewardType.WEAPON_UPGRADE:
-        const upgradeAmount = (quest.rewardData as number) || 5; // Default upgrade
-        this.activeCharacter.upgradeWeaponDamage(upgradeAmount);
-        this.logEvent(
-          this.activeCharacter,
-          "reward_received",
-          `Received reward: Damage Upgrade (+${upgradeAmount})`,
-          undefined,
-          { quest: quest.name, reward: `Damage Upgrade +${upgradeAmount}` },
-          this.activeCharacter.mesh!.position
-        );
-        break;
-
-      case QuestRewardType.ENABLE_MECHANIC:
-        if (quest.rewardData === "character_switching") {
-          this.characterSwitchingEnabled = true;
-          console.log("Character switching enabled!");
-          this.logEvent(
-            this.activeCharacter,
-            "reward_received",
-            `Received reward: Character Switching Unlocked`,
-            undefined,
-            { quest: quest.name, reward: "Character Switching" },
-            this.activeCharacter.mesh!.position
-          );
-        }
-        break;
-
-      case QuestRewardType.ADD_PROFESSION:
-        const professionToAdd = quest.rewardData as Profession | undefined;
-        if (professionToAdd) {
-          this.activeCharacter.addProfession(professionToAdd);
-          this.logEvent(
-            this.activeCharacter,
-            "reward_received",
-            `Received reward: Profession - ${professionToAdd}`,
-            undefined,
-            { quest: quest.name, reward: `Profession: ${professionToAdd}` },
-            this.activeCharacter.mesh!.position
-          );
-        }
-        break;
-    }
-
-    // Quest is now fully handled, maybe mark it differently?
-    // For now, just ensure banner closes.
-  }
-
-  /**
-   * Shows a trade offer notification banner.
-   * @param initiator The NPC initiating the trade.
-   * @param target The Player receiving the offer.
-   * @param itemsToGive Items the NPC wants to give (Player receives).
-   * @param itemsToReceive Items the NPC wants to receive (Player gives).
-   */
   showTradeNotification(
     initiator: Character,
     target: Character,
     itemsToGive: InventoryItem[],
     itemsToReceive: InventoryItem[]
   ): void {
-    if (!this.tradingSystem) return;
-
-    // Store trade details for handlers
-    this.currentTradeInitiator = initiator;
-    this.currentTradeTarget = target;
-    this.currentTradeGiveItems = [...itemsToGive];
-    this.currentTradeReceiveItems = [...itemsToReceive];
-
-    const title = `Trade Offer from ${initiator.name}`;
-
-    // Helper to format items with names
-    const formatItems = (items: InventoryItem[]) =>
-      items
-        .map((i) => {
-          const def = getItemDefinition(i.id);
-          return `${i.count}x ${def ? def.name : i.id}`; // Use name if available
-        })
-        .join(", ") || "Nothing";
-
-    // Create HTML description with colored spans
-    const giveDesc = formatItems(itemsToGive); // Items NPC gives (Player receives)
-    const receiveDesc = formatItems(itemsToReceive); // Items NPC receives (Player gives)
-
-    const descriptionHTML = `
-            You Receive: <span class="trade-item-receive">${giveDesc}</span>
-            <br>
-            You Give: <span class="trade-item-give">${receiveDesc}</span>
-        `;
-
-    this.showBanner(
-      title,
-      descriptionHTML, // Pass HTML string
-      "trade",
-      null, // No quest object for trades
-      undefined, // No OK handler for trades
-      () => this.handleTradeAccept(), // Accept handler
-      () => this.handleTradeDecline() // Decline handler
+    this.uiManager?.showTradeNotification(
+      initiator,
+      target,
+      itemsToGive,
+      itemsToReceive
     );
   }
 
-  /** Handles the logic when the player clicks "Accept" on a trade offer. */
   handleTradeAccept(): void {
-    if (
-      !this.tradingSystem ||
-      !this.currentTradeInitiator ||
-      !this.currentTradeTarget
-    )
-      return;
-
-    const success = this.tradingSystem.executeTrade(
-      this.currentTradeInitiator,
-      this.currentTradeTarget,
-      this.currentTradeGiveItems,
-      this.currentTradeReceiveItems
-    );
-
-    if (success) {
-      // Optionally show a success message (though item sprites might be enough)
-      console.log("Trade accepted and executed successfully.");
-    } else {
-      // Failure message is handled within executeTrade/notificationManager
-      console.log("Trade accepted but failed during execution.");
-    }
-    // hideQuestBanner is called automatically by showBanner's button handlers
+    this.uiManager?.handleTradeAccept();
   }
 
-  /** Handles the logic when the player clicks "Decline" on a trade offer. */
   handleTradeDecline(): void {
-    if (
-      !this.tradingSystem ||
-      !this.currentTradeInitiator ||
-      !this.currentTradeTarget
-    )
-      return;
+    this.uiManager?.handleTradeDecline();
+  }
 
-    this.tradingSystem.declineTrade(
-      this.currentTradeInitiator,
-      this.currentTradeTarget
-    );
-    // hideQuestBanner is called automatically by showBanner's button handlers
+  hideQuestBanner(): void {
+    this.uiManager?.hideBanner();
+  }
+
+  // Getter for UIManager's banner visibility state
+  get isQuestBannerVisible(): boolean {
+    return this.uiManager?.isBannerVisible ?? false;
+  }
+
+  // Getter for UIManager's banner type state
+  get currentBannerType(): "quest" | "trade" | "none" {
+    return this.uiManager?.currentBannerType ?? "none";
   }
 
   start(): void {
     console.log(
       "Game initialized. Waiting for user to start via landing page."
     );
-    // Actual start logic is triggered by the landing page button click
   }
 
-  /** Handles player attack input from Controls. */
   handlePlayerAttackInput(): void {
     if (this.isPaused || !this.activeCharacter || !this.combatSystem) return;
-    // CombatSystem.initiateAttack handles cooldown checks and target finding
     this.combatSystem.initiateAttack(this.activeCharacter);
   }
 
@@ -1049,14 +605,12 @@ export class Game {
     )
       return;
 
-    const deltaTime = Math.min(this.clock.getDelta(), 0.05); // Clamp delta time
+    const deltaTime = Math.min(this.clock.getDelta(), 0.05);
     const elapsedTime = this.clock.elapsedTime;
 
-    // Update controls first
+    this.controls!.update(deltaTime);
     this.mobileControls?.update(deltaTime);
-    this.controls!.update(deltaTime); // Base controls update handles mouse movement for camera
 
-    // --- Game Logic Update (conditional on pause state) ---
     if (!this.isPaused) {
       const currentTime = this.clock.elapsedTime;
       const timeSinceLastAiUpdate = currentTime - this.lastAiUpdateTime;
@@ -1067,35 +621,29 @@ export class Game {
         this.lastAiUpdateTime = currentTime;
       }
 
-      // Check for continuous attack input
       if (this.controls?.moveState.attack || this.mobileControls?.attackHeld) {
         this.handlePlayerAttackInput();
       }
 
-      // Update active character (player)
       this.activeCharacter.update(deltaTime, {
         moveState: this.controls!.moveState,
         collidables: this.collidableObjects,
       });
 
-      // Update physics (collisions) after player movement
       this.physics!.update(deltaTime);
 
-      // Update other entities (NPCs, Animals, Falling Trees)
       this.entities.forEach((entity) => {
-        if (entity === this.activeCharacter) return; // Skip player
+        if (entity === this.activeCharacter) return;
 
         if (
           entity instanceof Character &&
           entity.aiController instanceof AIController
         ) {
-          // Update NPC AI logic at intervals
           if (shouldUpdateAiLogic) {
             entity.moveState = entity.aiController.computeAIMoveState(
               timeSinceLastAiUpdate
-            ); // AI computes its desired move state
+            );
           }
-          // Update NPC entity state every frame using its current moveState
           entity.update(deltaTime, {
             moveState: entity.moveState,
             collidables: this.collidableObjects,
@@ -1104,20 +652,16 @@ export class Game {
           entity instanceof Animal &&
           entity.aiController instanceof AnimalAIController
         ) {
-          // Update Animal AI logic at intervals
           if (shouldUpdateAiLogic) {
-            entity.aiController.updateLogic(timeSinceLastAiUpdate); // AI updates its internal state/target
+            entity.aiController.updateLogic(timeSinceLastAiUpdate);
           }
-          // Update Animal entity state every frame (movement/animation based on AI state)
           entity.update(deltaTime, { collidables: this.collidableObjects });
         } else if (
           entity instanceof Group &&
           entity.userData?.mixer &&
           entity.userData?.isFalling
         ) {
-          // Update falling tree animation
           entity.userData.mixer.update(deltaTime);
-          // Check if animation finished
           if (
             !entity.userData.fallAction.isRunning() &&
             entity.userData.isFalling
@@ -1126,7 +670,6 @@ export class Game {
             entity.visible = false;
             entity.userData.isCollidable = false;
             entity.userData.isInteractable = false;
-            // Start respawn timer
             const respawnTime = entity.userData.respawnTime || 20000;
             const maxHealth = entity.userData.maxHealth;
             setTimeout(() => {
@@ -1135,10 +678,8 @@ export class Game {
                 entity.userData.isCollidable = true;
                 entity.userData.isInteractable = true;
                 entity.userData.health = maxHealth;
-                // Reset rotation after respawn
                 entity.rotation.set(0, 0, 0);
                 entity.quaternion.set(0, 0, 0, 1);
-                // Update bounding box? Maybe not needed if it didn't change.
               }
             }, respawnTime);
           }
@@ -1146,40 +687,33 @@ export class Game {
           entity.update &&
           !(entity instanceof Character) &&
           !(entity instanceof Animal) &&
-          !(entity instanceof Group && entity.userData?.mixer) // Don't double-update trees
+          !(entity instanceof Group && entity.userData?.mixer)
         ) {
-          // Update other simple entities if they have an update method
           entity.update(deltaTime);
         }
       });
 
-      // Update systems
-      this.combatSystem?.update(deltaTime); // Update combat system (if needed)
+      this.combatSystem?.update(deltaTime);
       this.interactionSystem!.update(deltaTime);
-      this.thirdPersonCamera!.update(deltaTime, this.collidableObjects); // Update camera after all movements
+      this.thirdPersonCamera!.update(deltaTime, this.collidableObjects);
       this.portalManager.animatePortals();
       this.portalManager.checkPortalCollisions();
-      updateParticleEffects(this, elapsedTime); // Update particle effects
-      this.droppedItemManager?.update(deltaTime); // Update dropped items
-      this.checkRespawn(); // Check for respawning entities
+      updateParticleEffects(this, elapsedTime);
+      this.droppedItemManager?.update(deltaTime);
+      this.checkRespawn();
 
-      // Check quest completion periodically
       if (currentTime - this.lastQuestCheckTime > this.questCheckInterval) {
         this.questManager.checkAllQuestsCompletion();
         this.lastQuestCheckTime = currentTime;
       }
 
-      // Check player death
       if (this.activeCharacter.isDead) this.respawnPlayer();
-    } // End if (!this.isPaused)
+    }
 
-    // --- UI Update (always update) ---
     this.hud!.update();
     this.minimap!.update();
-    this.notificationManager?.update(deltaTime); // Update notifications regardless of pause state
-    // Inventory and Journal displays update themselves internally when shown/data changes
+    this.notificationManager?.update(deltaTime);
 
-    // --- Render ---
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -1189,26 +723,23 @@ export class Game {
       if (
         entity.isDead &&
         entity.deathTimestamp !== null &&
-        entity !== this.activeCharacter // Don't respawn player here
+        entity !== this.activeCharacter
       ) {
         const respawnDelay =
-          (entity as Character | Animal).respawnDelay ?? 20000; // Use entity specific or default
+          (entity as Character | Animal).respawnDelay ?? 20000;
         if (now - entity.deathTimestamp > respawnDelay) {
           if (typeof (entity as any).respawn === "function") {
-            (entity as Character | Animal).respawn(); // Call the specific respawn method
+            (entity as Character | Animal).respawn();
           } else {
             console.warn(
               `Entity ${entity.name} is dead but has no respawn method.`
             );
-            // Optionally remove the entity permanently here if it shouldn't respawn
-            // this.removeEntity(entity);
           }
         }
       }
     }
   }
 
-  // Helper to remove entity completely (if needed, e.g., non-respawnable)
   removeEntity(entityToRemove: Entity): void {
     console.log(`Removing entity permanently: ${entityToRemove.name}.`);
     const collidableIndex = this.collidableObjects.findIndex(
@@ -1242,23 +773,21 @@ export class Game {
       this.activeCharacter.mesh!.position
     );
 
-    // Reset quest counters tied to player survival
-    this.wolfKillCount = 0; // Reset wolf kill count on player death
+    this.wolfKillCount = 0;
     const wolfQuest = this.questManager.getQuestById("wolf_slayer");
     if (wolfQuest && !wolfQuest.isCompleted) {
       wolfQuest.objectives.forEach((obj) => (obj.currentCount = 0));
     }
 
-    // Define a safe respawn point (e.g., near village center or start portal)
-    let respawnPos = new Vector3(0, 0, 10); // Example near village
+    let respawnPos = new Vector3(0, 0, 10);
     if (this.portalManager.startPortal) {
       respawnPos = this.portalManager.startPortal.group.position
         .clone()
-        .add(new Vector3(0, 0, 3)); // Near start portal
+        .add(new Vector3(0, 0, 3));
     }
 
     this.activeCharacter.respawn();
-    this.setPauseState(false); // Unpause after respawn
+    this.setPauseState(false);
   }
 
   switchControlTo(targetCharacter: Character): void {
@@ -1266,14 +795,13 @@ export class Game {
       targetCharacter === this.activeCharacter ||
       !targetCharacter.mesh ||
       targetCharacter.isDead ||
-      !this.characterSwitchingEnabled // Check if mechanic is enabled
+      !this.characterSwitchingEnabled
     )
       return;
 
     const oldPlayer = this.activeCharacter!;
     const newPlayer = targetCharacter;
 
-    // --- Logging ---
     const switchMessage = `Switched control to ${newPlayer.name}.`;
     this.logEvent(
       oldPlayer,
@@ -1292,32 +820,28 @@ export class Game {
       newPlayer.mesh!.position
     );
 
-    // --- Transfer Player Status ---
     oldPlayer.userData.isPlayer = false;
     oldPlayer.userData.isNPC = true;
     newPlayer.userData.isPlayer = true;
     newPlayer.userData.isNPC = false;
 
-    // --- AI Handling ---
     if (!oldPlayer.aiController) {
       console.warn(
         `Creating AIController for ${oldPlayer.name} on switch-out.`
       );
       oldPlayer.aiController = new AIController(oldPlayer);
-      oldPlayer.aiController.persona = oldPlayer.persona; // Ensure persona is set
+      oldPlayer.aiController.persona = oldPlayer.persona;
     }
     if (oldPlayer.aiController instanceof AIController) {
-      oldPlayer.aiController.aiState = "idle"; // Reset AI state
+      oldPlayer.aiController.aiState = "idle";
       oldPlayer.aiController.previousAiState = "idle";
     }
-    if (newPlayer.aiController) newPlayer.aiController = null; // Remove AI from new player
+    if (newPlayer.aiController) newPlayer.aiController = null;
 
-    // --- UI/Display Handling ---
-    oldPlayer.initIntentDisplay(); // Show intent bubble for old player (now NPC)
-    oldPlayer.initNameDisplay(); // Show name for old player
-    newPlayer.removeDisplays(); // Hide intent/name bubble for new player
+    oldPlayer.initIntentDisplay();
+    oldPlayer.initNameDisplay();
+    newPlayer.removeDisplays();
 
-    // --- System Updates ---
     this.activeCharacter = newPlayer;
     this.controls!.player = newPlayer;
     this.thirdPersonCamera!.target = newPlayer.mesh!;
@@ -1326,19 +850,16 @@ export class Game {
     this.hud!.player = newPlayer;
     this.minimap!.player = newPlayer;
 
-    // --- Inventory & Logs ---
-    // Player inventory stays with the character instance. Update game references.
-    this.inventory = newPlayer.inventory; // Update game's reference to the active inventory
-    this.inventoryDisplay!.setInventory(this.inventory!); // Update display's reference
+    this.inventory = newPlayer.inventory;
+    this.inventoryDisplay!.setInventory(this.inventory!);
     this.interactionSystem!.inventory = newPlayer.inventory!;
-    this.interactionSystem!.eventLog = newPlayer.eventLog; // Update interaction system log ref
-    this.journalDisplay!.setEventLog(newPlayer.eventLog); // Update journal display log ref
+    this.interactionSystem!.eventLog = newPlayer.eventLog;
+    this.journalDisplay!.setEventLog(newPlayer.eventLog);
 
-    // --- Reset UI States ---
     this.inventoryDisplay!.hide();
     this.journalDisplay!.hide();
     this.interactionSystem!.closeChatInterface();
-    this.setPauseState(false); // Ensure game is unpaused after switch
+    this.setPauseState(false);
 
     console.log(`Control switched to: ${newPlayer.name}`);
   }
@@ -1355,7 +876,7 @@ export class Game {
     actor: Entity | string,
     action: string,
     message: string,
-    target?: Entity | string | Object3D, // Allow Object3D for resources
+    target?: Entity | string | Object3D,
     details: Record<string, any> = {},
     location?: Vector3
   ): void {
@@ -1377,8 +898,8 @@ export class Game {
       targetId = target.id;
       targetName = target.name;
     } else if (target instanceof Object3D) {
-      targetId = target.uuid; // Use UUID for generic objects
-      targetName = target.name || target.userData?.resource || "Object"; // Use name, resource, or default
+      targetId = target.uuid;
+      targetName = target.name || target.userData?.resource || "Object";
     }
 
     const eventEntry: EventEntry = {
@@ -1390,25 +911,16 @@ export class Game {
       targetId,
       targetName,
       details,
-      location: location?.clone(), // Clone location if provided
+      location: location?.clone(),
     };
 
-    // Log to all character event logs
     this.entities.forEach((entity) => {
       if (entity instanceof Character && entity.eventLog) {
         entity.eventLog.addEntry(eventEntry);
       }
     });
-    // Optionally log to a global game log here if needed
-    // console.log(`[${timestamp}] ${message}`);
   }
 
-  /**
-   * Creates a dropped item orb in the world.
-   * @param itemId The ID of the item to drop.
-   * @param count The number of items in the stack.
-   * @param position The world position to drop the item at.
-   */
   dropItem(itemId: string, count: number, position: Vector3): void {
     if (!this.droppedItemManager) {
       console.error("DroppedItemManager not initialized.");
@@ -1417,15 +929,6 @@ export class Game {
     this.droppedItemManager.createDroppedItem(itemId, count, position);
   }
 
-  /**
-   * Executes a trade between two characters based on IDs and item lists.
-   * This is intended to be called by the AIController after receiving an API response.
-   * @param initiatorId The ID of the character initiating the trade.
-   * @param targetId The ID of the character receiving the trade proposal.
-   * @param itemsToGive An array of items the initiator wants to give.
-   * @param itemsToReceive An array of items the initiator wants to receive.
-   * @returns True if the trade was successful, false otherwise.
-   */
   executeTrade(
     initiatorId: string,
     targetId: string,
@@ -1451,9 +954,6 @@ export class Game {
       return false;
     }
 
-    // This method is now deprecated for direct AI calls.
-    // AI should call requestTradeUI, and player actions call executeTrade/declineTrade.
-    // For now, let's assume this might be called internally or for testing.
     console.warn(
       "Game.executeTrade called directly. Use TradingSystem methods instead."
     );
@@ -1473,11 +973,11 @@ export class Game {
     this.renderer?.setAnimationLoop(null);
     this.controls?.dispose();
     this.mobileControls?.destroy();
-    this.inventoryDisplay?.destroy(); // Clean up inventory display listeners
-    this.journalDisplay = null; // Assuming journal doesn't need complex cleanup
-    this.notificationManager?.dispose(); // Dispose notification manager
-    this.droppedItemManager?.dispose(); // Dispose dropped item manager
-    this.entities.forEach((entity) => entity.destroy?.()); // Call destroy on entities that have it
+    this.inventoryDisplay?.destroy();
+    this.journalDisplay = null;
+    this.notificationManager?.dispose();
+    this.droppedItemManager?.dispose();
+    this.entities.forEach((entity) => entity.destroy?.());
     this.scene?.traverse((object) => {
       if (object instanceof THREE.Mesh) {
         object.geometry?.dispose();
@@ -1497,7 +997,6 @@ export class Game {
       gameContainer.removeChild(this.renderer.domElement);
     }
 
-    // Nullify major references
     this.scene = null;
     this.renderer = null;
     this.camera = null;
@@ -1507,14 +1006,14 @@ export class Game {
     this.collidableObjects = [];
     this.interactableObjects = [];
     this.particleEffects = [];
-    this.tradingSystem = null; // Nullify trading system
+    this.tradingSystem = null;
     this.droppedItemManager = null;
-    this.combatSystem = null; // Nullify combat system
+    this.combatSystem = null;
+    this.uiManager = null; // Nullify UIManager
     console.log("Game destroyed.");
   }
 }
 
-// --- Global Access & Initialization ---
 declare global {
   interface Window {
     game: Game;
@@ -1524,17 +1023,9 @@ declare global {
 if (WebGL.isWebGL2Available()) {
   async function startGame() {
     const gameInstance = new Game();
-    window.game = gameInstance; // Make accessible globally for debugging
+    window.game = gameInstance;
     try {
       await gameInstance.init();
-      // gameInstance.start(); // Start logic is now within init/landing page
-      const onResize = () => gameInstance.onWindowResize();
-      window.addEventListener("resize", onResize, false);
-      // Cleanup on page unload
-      window.addEventListener("beforeunload", () => {
-        window.removeEventListener("resize", onResize);
-        gameInstance.destroy();
-      });
     } catch (error) {
       console.error("Failed to initialize game:", error);
       const errorElement = document.createElement("div");
@@ -1542,7 +1033,6 @@ if (WebGL.isWebGL2Available()) {
       errorElement.style.color = "red";
       errorElement.style.padding = "20px";
       document.body.appendChild(errorElement);
-      // Hide landing page if it exists on error
       document.getElementById("landing-page")?.classList.add("hidden");
     }
   }

@@ -79,9 +79,10 @@ export class JournalDisplay {
   }
 
   onQuestClick(quest: Quest): void {
-    if (this.game && quest) {
+    // Use UIManager to show the banner
+    if (this.game?.uiManager && quest) {
       // this.hide(); // Optionally hide journal when showing banner
-      this.game.showQuestCompletionBanner(quest); // Show quest detail banner
+      this.game.uiManager.showQuestCompletionBanner(quest);
     }
   }
 
