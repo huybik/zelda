@@ -1,4 +1,5 @@
-import { EventLog, EventEntry, Quest } from "../core/utils";
+/* File: /src/ui/journal.ts */
+import { EventLog, EventEntry, Quest, QuestObjective } from "../core/utils";
 import { Game } from "../main";
 
 export class JournalDisplay {
@@ -25,26 +26,62 @@ export class JournalDisplay {
 
   updateQuests(): void {
     if (!this.isOpen || !this.questListElement) return;
-    this.questListElement.innerHTML = "";
-    this.game?.questManager.quests?.forEach((quest) => {
+    this.questListElement.innerHTML = ""; // Clear previous entries
+
+    if (
+      !this.game?.questManager?.quests ||
+      this.game.questManager.quests.length === 0
+    ) {
       const li = document.createElement("li");
-      li.textContent = `${quest.name}: ${quest.isCompleted ? "Completed" : "In Progress"}`;
-      li.dataset.questId = quest.id;
-      li.classList.add("quest-item");
+      li.textContent = "No active quests.";
+      li.style.fontStyle = "italic";
+      this.questListElement.appendChild(li);
+      return;
+    }
+
+    this.game.questManager.quests.forEach((quest) => {
+      const questContainer = document.createElement("li");
+      questContainer.classList.add("quest-item-container");
       if (quest.isCompleted) {
-        li.classList.add("quest-completed");
+        questContainer.classList.add("quest-completed");
       }
-      li.addEventListener("click", (event) => {
-        this.onQuestClick(quest);
+
+      const questTitle = document.createElement("div");
+      questTitle.textContent = `${quest.name} ${quest.isCompleted ? "(Completed)" : ""}`;
+      questTitle.classList.add("quest-title");
+      questTitle.dataset.questId = quest.id; // Add ID for click handling
+      questTitle.addEventListener("click", () => this.onQuestClick(quest)); // Add click listener to title
+
+      const objectivesList = document.createElement("ul");
+      objectivesList.classList.add("quest-objectives-list");
+
+      quest.objectives.forEach((obj) => {
+        const objLi = document.createElement("li");
+        objLi.classList.add("quest-objective");
+        if (obj.isCompleted) {
+          objLi.classList.add("objective-completed");
+        }
+        // Format objective progress
+        let progressText = "";
+        if (obj.requiredCount > 1) {
+          progressText = ` (${obj.currentCount} / ${obj.requiredCount})`;
+        } else if (obj.requiredCount === 1) {
+          progressText = obj.isCompleted ? " (Done)" : " (Pending)";
+        }
+        objLi.textContent = `- ${obj.description}${progressText}`;
+        objectivesList.appendChild(objLi);
       });
-      this.questListElement!.appendChild(li);
+
+      questContainer.appendChild(questTitle);
+      questContainer.appendChild(objectivesList);
+      this.questListElement?.appendChild(questContainer);
     });
   }
 
   onQuestClick(quest: Quest): void {
     if (this.game && quest) {
-      // this.hide(); // Hide journal
-      this.game.showQuestBanner(quest); // Show quest detail
+      // this.hide(); // Optionally hide journal when showing banner
+      this.game.showQuestCompletionBanner(quest); // Show quest detail banner
     }
   }
 
@@ -64,12 +101,14 @@ export class JournalDisplay {
     if (!this.isOpen || !this.eventListElement) return;
     this.eventListElement.innerHTML =
       entries.length === 0 ? "<li>No events recorded yet.</li>" : "";
-    entries.forEach((entry) => {
+    // Display latest events first
+    [...entries].reverse().forEach((entry) => {
       const li = document.createElement("li");
       li.textContent = `[${entry.timestamp}] ${entry.message}`;
       this.eventListElement!.appendChild(li);
     });
-    this.eventListElement.scrollTop = this.eventListElement.scrollHeight;
+    // No auto-scroll needed if showing latest first
+    // this.eventListElement.scrollTop = 0;
   }
 
   toggle(): void {
@@ -80,7 +119,7 @@ export class JournalDisplay {
     if (!this.displayElement || this.isOpen) return;
     this.isOpen = true;
     this.updateEvents(this.eventLog.entries);
-    this.updateQuests();
+    this.updateQuests(); // Update quests when showing
     this.displayElement.classList.remove("hidden");
     this.game.setPauseState(true);
   }

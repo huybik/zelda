@@ -53,6 +53,7 @@ export class Animal extends Entity {
   skeletonRoot: Object3D | null = null; // Store the root for animation generation
   aiController: AnimalAIController | null = null; // Specific AI controller
   respawnDelay: number = 20000; // 30 seconds respawn delay
+  lastAttacker: Entity | null = null; // Track the last attacker
 
   constructor(
     scene: Scene,
@@ -534,6 +535,7 @@ export class Animal extends Entity {
     if (this.isDead) return;
 
     const deathPosition = this.mesh!.position.clone(); // Store position before super.die() potentially changes things
+    this.lastAttacker = attacker; // Store the attacker
 
     super.die(attacker); // Sets this.isDead = true, stops velocity, etc.
 
@@ -564,6 +566,12 @@ export class Animal extends Entity {
         details,
         deathPosition
       );
+
+      // Increment kill count if it's a wolf
+      if (this.animalType === "Wolf") {
+        this.game.wolfKillCount++;
+        console.log(`Wolf kill count: ${this.game.wolfKillCount}`);
+      }
 
       // --- Drop Loot ---
       let itemId = "meat";
@@ -599,6 +607,7 @@ export class Animal extends Entity {
     this.deathTimestamp = null;
     this.isPerformingAction = false;
     this.actionType = "none";
+    this.lastAttacker = null; // Reset attacker on respawn
 
     // Reset position to home position + terrain height
     const respawnY = getTerrainHeight(

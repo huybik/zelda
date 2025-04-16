@@ -264,7 +264,7 @@ export class LandingPage {
       // Show the first quest banner instead of welcome banner
       const firstQuest = this.game.questManager.quests?.[0];
       if (firstQuest) {
-        this.game.showQuestNotification(firstQuest);
+        this.game.showQuestCompletionBanner(firstQuest);
       } else {
         // If no quests, just unpause
         this.game.setPauseState(false);

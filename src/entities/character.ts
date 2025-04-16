@@ -82,13 +82,16 @@ export class Character extends Entity {
   attackTriggered: boolean = false;
   inventory: Inventory | null;
   persona: string = "";
-  profession: Profession = Profession.None; // Added profession property
+  professions: Set<Profession> = new Set(); // Store multiple professions
+  profession: Profession = Profession.None; // Keep primary for compatibility/display?
   currentAction?: AnimationAction;
   actionType: string = "none"; // "attack", "chat", "none"
   isPerformingAction: boolean = false;
   skeletonRoot: Object3D | null = null;
   aiController: AIController | null;
   respawnDelay: number = 40000; // 60 seconds respawn delay for NPCs
+  lastAttacker: Entity | null = null; // Track the last attacker
+  bonusDamage: number = 0; // Flat bonus damage from upgrades
 
   // Item/Equipment related properties
   rightHandBone: Bone | null = null;
@@ -797,7 +800,8 @@ export class Character extends Entity {
         else if (weaponDef.id === "axe")
           efficientProfession = Profession.Farmer;
 
-        if (this.profession === efficientProfession) {
+        // Check if ANY of the character's professions match the efficient one
+        if (efficientProfession && this.professions.has(efficientProfession)) {
           damageMultiplier *= 2.0; // 100% bonus
         }
       }
@@ -815,10 +819,11 @@ export class Character extends Entity {
         damageMultiplier *= 2.0;
       }
 
+      // 3. Add bonus damage from upgrades
       const effectiveDamage = Math.max(
         1,
-        Math.round(baseDamage * damageMultiplier)
-      ); // Ensure at least 1 damage
+        Math.round(baseDamage * damageMultiplier) + this.bonusDamage // Add flat bonus damage
+      );
 
       // --- Apply Damage ---
       // --- Target is a Resource ---
@@ -1173,6 +1178,7 @@ export class Character extends Entity {
     if (this.isDead) return;
 
     const deathPosition = this.mesh!.position.clone(); // Store position before super.die() potentially changes things
+    this.lastAttacker = attacker; // Store the attacker
 
     // --- Drop Inventory ---
     if (this.inventory && this.game) {
@@ -1266,6 +1272,7 @@ export class Character extends Entity {
     this.actionType = "none";
     this.attackTriggered = false;
     this.equippedWeapon = null; // Ensure weapon is unequipped on respawn
+    this.lastAttacker = null; // Reset attacker on respawn
 
     // Reset position and collision state
     const respawnY = getTerrainHeight(
@@ -1358,5 +1365,42 @@ export class Character extends Entity {
       );
     // Only allow chat interaction via 'E' key
     return { type: "chat" };
+  }
+
+  /** Adds a profession to the character's set of professions. */
+  addProfession(profession: Profession): void {
+    if (profession !== Profession.None) {
+      this.professions.add(profession);
+      console.log(`${this.name} gained profession: ${profession}`);
+      // Optionally update primary profession if it was None
+      if (this.profession === Profession.None) {
+        this.profession = profession;
+      }
+      // Log the event
+      this.game?.logEvent(
+        this,
+        "gain_profession",
+        `${this.name} gained the ${profession} profession.`,
+        undefined,
+        { profession: profession },
+        this.mesh?.position
+      );
+    }
+  }
+
+  /** Upgrades the character's bonus damage. */
+  upgradeWeaponDamage(amount: number): void {
+    this.bonusDamage += amount;
+    console.log(
+      `${this.name}'s bonus damage increased by ${amount} to ${this.bonusDamage}.`
+    );
+    this.game?.logEvent(
+      this,
+      "upgrade_damage",
+      `${this.name}'s damage was upgraded by ${amount}.`,
+      undefined,
+      { amount: amount, totalBonus: this.bonusDamage },
+      this.mesh?.position
+    );
   }
 }

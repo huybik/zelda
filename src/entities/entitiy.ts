@@ -48,6 +48,7 @@ export class Entity {
   rayCaster: Raycaster | null = null; // Raycaster can be null initially
   deathTimestamp: number | null = null;
   homePosition: Vector3 | null = null; // Added home position for respawning
+  lastAttacker: Entity | null = null; // Track the last entity that attacked this one
 
   constructor(scene: Scene, position: Vector3, name: string = "Entity") {
     this.id = `${name}_${getNextEntityId()}`;
@@ -168,6 +169,7 @@ export class Entity {
   ): void {
     if (this.isDead || amount <= 0) return;
     this.health = Math.max(0, this.health - amount);
+    this.lastAttacker = attacker; // Store the attacker
 
     // Use provided hitPosition or estimate based on bounding box center
     const displayPosition =
@@ -207,6 +209,7 @@ export class Entity {
     this.userData.isInteractable = false; // Make non-interactable
     this.deathTimestamp = performance.now(); // Record time of death
     this.mesh!.visible = false; // Hide mesh immediately on death
+    this.lastAttacker = attacker; // Store attacker info
 
     // Stop AI updates
     if (this.aiController) {

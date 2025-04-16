@@ -385,7 +385,7 @@ canvas {
 }
 
 #inventory-display {
-  bottom: 10%;
+  bottom: 20px;
   left: 50%;
   transform: translateX(-50%) scale(1);
   width: 85%;
@@ -626,22 +626,56 @@ canvas {
 }
 
 /* Quest Log Specific */
-li.quest-item {
+li.quest-item-container {
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #ccc;
+}
+li.quest-item-container:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.quest-title {
+  font-weight: bold;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: color 0.15s ease;
+  margin-bottom: 5px;
 }
-li.quest-item:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+.quest-title:hover {
+  color: #007bff;
 }
-li.quest-completed {
+
+.quest-objectives-list {
+  list-style: none;
+  padding-left: 15px;
+  margin: 0;
+}
+
+.quest-objective {
+  font-size: 0.9em;
+  color: #444;
+  margin-bottom: 3px !important; /* Reduce spacing */
+  padding-bottom: 0 !important; /* Remove padding */
+  border-bottom: none !important; /* Remove border */
+}
+
+.objective-completed {
+  text-decoration: line-through;
+  color: #777;
+}
+
+li.quest-completed .quest-title {
   color: #555;
   font-style: italic;
-  text-decoration: line-through;
-  opacity: 0.7;
   cursor: default;
 }
-li.quest-completed:hover {
-  background-color: transparent;
+li.quest-completed .quest-title:hover {
+  color: #555;
+}
+li.quest-completed .quest-objective {
+  color: #888;
 }
 
 /* --- Chat Interface --- */
@@ -751,13 +785,15 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   transform: translate(-50%, -50%);
   width: 90%;
   max-width: 500px;
-  background-color: rgba(50, 50, 70, 0.7); /* Darker background */
+  background-color: rgba(50, 50, 70, 0.9); /* Slightly more opaque */
   color: #eee;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
   text-align: center;
   transition:
     opacity 0.3s ease-out,
     visibility 0s 0s;
+  border-radius: 8px; /* Match other panels */
+  padding: 25px; /* More padding */
 }
 
 #quest-detail-banner.hidden {
@@ -778,7 +814,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   color: #fff;
 }
 
-#quest-detail-banner p {
+#quest-detail-banner #quest-banner-description {
   margin-bottom: 25px;
   font-size: 1em;
   line-height: 1.5;
@@ -799,10 +835,13 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   display: flex;
   justify-content: center;
   gap: 15px; /* Space between buttons */
+  flex-wrap: wrap; /* Allow buttons to wrap on smaller screens */
 }
 
 #quest-banner-ok,
-.trade-button {
+.trade-button,
+.reward-button {
+  /* Common button styles */
   padding: 10px 25px;
   font-size: 1.1em;
   color: white;
@@ -810,6 +849,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   border-radius: 5px;
   cursor: pointer;
   transition: background-color 0.2s ease;
+  margin: 5px; /* Add margin for wrapping */
 }
 
 #quest-banner-ok {
@@ -831,6 +871,13 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
 }
 .trade-button.decline:hover {
   background-color: #da190b;
+}
+
+.reward-button {
+  background-color: #ff9800; /* Orange for rewards */
+}
+.reward-button:hover {
+  background-color: #f57c00;
 }
 
 /* --- Mobile Controls --- */
@@ -1023,11 +1070,12 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   #quest-detail-banner h3 {
     font-size: 1.2em;
   }
-  #quest-detail-banner p {
+  #quest-detail-banner #quest-banner-description {
     font-size: 0.95em;
   }
   #quest-banner-ok,
-  .trade-button {
+  .trade-button,
+  .reward-button {
     padding: 8px 20px;
     font-size: 1em;
   }

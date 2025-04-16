@@ -1,4 +1,4 @@
-/* File: src/main.ts */
+/* File: /src/main.ts */
 import * as THREE from "three";
 import {
   Scene,
@@ -35,6 +35,8 @@ import {
   Quest,
   InventoryItem, // Added InventoryItem
   EventEntry,
+  QuestRewardType, // Import QuestRewardType
+  QuestRewardOption, // Import QuestRewardOption
 } from "./core/utils.ts";
 import { WORLD_SIZE, TERRAIN_SEGMENTS } from "./core/constants";
 import { loadModels } from "./core/assetLoader";
@@ -101,9 +103,13 @@ export class Game {
   isGameStarted: boolean = false;
   private landingPage: LandingPage | null = null;
   public portalManager: PortalManager;
+  public wolfKillCount: number = 0; // Track wolf kills for quest
+  public characterSwitchingEnabled: boolean = false; // Track if switching is enabled
 
   private lastAiUpdateTime: number = 0;
   private aiUpdateInterval: number = 0.2; // Update AI logic 5 times per second
+  private lastQuestCheckTime: number = 0;
+  private questCheckInterval: number = 0.5; // Check quest completion twice per second
 
   // Banner UI Elements
   private questBannerElement: HTMLElement | null = null;
@@ -113,17 +119,22 @@ export class Game {
   private questBannerOkButton: HTMLButtonElement | null = null;
   private questBannerAcceptButton: HTMLButtonElement | null = null;
   private questBannerDeclineButton: HTMLButtonElement | null = null;
+  private questBannerRewardButtons: HTMLButtonElement[] = []; // For dynamic reward buttons
 
   // Store current banner handlers to remove them later
   private boundBannerOkClickHandler: (() => void) | null = null;
   private boundBannerAcceptClickHandler: (() => void) | null = null;
   private boundBannerDeclineClickHandler: (() => void) | null = null;
+  private boundRewardButtonHandlers: Map<string, () => void> = new Map(); // Store reward button handlers
 
   // Store current trade details if a trade banner is shown
   private currentTradeInitiator: Character | null = null;
   private currentTradeTarget: Character | null = null;
   private currentTradeGiveItems: InventoryItem[] = [];
   private currentTradeReceiveItems: InventoryItem[] = [];
+
+  // Store current quest for reward handling
+  private currentQuestForReward: Quest | null = null;
 
   public models!: Record<string, { scene: Group; animations: AnimationClip[] }>;
 
@@ -146,6 +157,10 @@ export class Game {
       tavernMan: "assets/tavernman.glb",
       oldMan: "assets/oldman.glb",
       woman: "assets/woman.glb",
+      // Add weapon models if not loaded elsewhere
+      sword: "assets/items/weapons/sword.glb",
+      axe: "assets/items/weapons/axe.glb",
+      pickaxe: "assets/items/weapons/pickaxe.glb",
     };
 
     this.models = await loadModels(modelPaths);
@@ -166,8 +181,10 @@ export class Game {
     // Player initialized here, inventory is passed
     this.initPlayer(this.models, savedName || "Player");
     // Set player profession AFTER initialization
-    if (this.activeCharacter)
-      this.activeCharacter.profession = this.playerProfession;
+    if (this.activeCharacter) {
+      this.activeCharacter.professions.add(this.playerProfession); // Add initial profession
+      this.activeCharacter.profession = this.playerProfession; // Set primary
+    }
 
     this.initControls();
     this.initMobileControls();
@@ -520,7 +537,7 @@ export class Game {
       // Pause state is handled by journalDisplay show/hide methods
     });
     this.controls.addKeyDownListener("KeyC", () => {
-      if (this.isPaused) return; // Prevent switching when paused
+      if (this.isPaused || !this.characterSwitchingEnabled) return; // Prevent switching when paused or disabled
       if (
         this.interactionSystem!.currentTarget instanceof Character &&
         this.interactionSystem!.currentTarget !== this.activeCharacter
@@ -577,21 +594,25 @@ export class Game {
   }
 
   /**
-   * Shows the quest/trade banner UI.
+   * Shows the quest/trade banner UI. Handles different button configurations.
    * @param title The title for the banner.
    * @param description The description text or HTML.
    * @param type The type of banner ('quest' or 'trade').
-   * @param onOk Optional handler for the OK button (for quests).
+   * @param quest The quest associated with this banner (for reward handling).
+   * @param onOk Optional handler for the OK button (for simple quests/info).
    * @param onAccept Optional handler for the Accept button (for trades).
    * @param onDecline Optional handler for the Decline button (for trades).
+   * @param rewardOptions Optional array of reward choices.
    */
   private showBanner(
     title: string,
     description: string, // Can be HTML
     type: "quest" | "trade",
+    quest: Quest | null = null, // Pass the quest object
     onOk?: () => void,
     onAccept?: () => void,
-    onDecline?: () => void
+    onDecline?: () => void,
+    rewardOptions?: QuestRewardOption[]
   ): void {
     if (
       !this.questBannerElement ||
@@ -604,18 +625,25 @@ export class Game {
     )
       return;
 
-    // --- Clean up previous listeners ---
+    // --- Clean up previous listeners and buttons ---
     this.removeBannerListeners();
+    this.questBannerButtonContainer.innerHTML = ""; // Clear previous buttons
+
+    // --- Store Quest Context ---
+    this.currentQuestForReward = quest;
 
     // --- Configure Banner Content ---
     this.questBannerTitle.textContent = title;
-    // Use innerHTML to render potential HTML in description (for trade items)
-    this.questBannerDesc.innerHTML = description;
+    this.questBannerDesc.innerHTML = description; // Use innerHTML for potential reward formatting
     this.currentBannerType = type;
 
     // --- Configure Buttons ---
     if (type === "trade") {
-      this.questBannerOkButton.classList.add("hidden");
+      // Add Accept/Decline buttons for trades
+      this.questBannerButtonContainer.appendChild(this.questBannerAcceptButton);
+      this.questBannerButtonContainer.appendChild(
+        this.questBannerDeclineButton
+      );
       this.questBannerAcceptButton.classList.remove("hidden");
       this.questBannerDeclineButton.classList.remove("hidden");
 
@@ -639,17 +667,44 @@ export class Game {
           this.boundBannerDeclineClickHandler
         );
       }
+    } else if (type === "quest" && rewardOptions && rewardOptions.length > 0) {
+      // Add reward choice buttons for quests
+      this.questBannerRewardButtons = []; // Clear previous reward buttons array
+      this.boundRewardButtonHandlers.clear(); // Clear previous handlers map
+
+      rewardOptions.forEach((option) => {
+        const button = document.createElement("button");
+        button.textContent = option.name;
+        button.classList.add("reward-button"); // Add class for styling
+        button.title = option.description; // Tooltip
+
+        const handler = () => {
+          this.handleRewardSelection(option.id); // Pass selected option ID
+          this.hideQuestBanner();
+        };
+        this.boundRewardButtonHandlers.set(option.id, handler); // Store handler
+        button.addEventListener("click", handler);
+
+        this.questBannerButtonContainer?.appendChild(button);
+        this.questBannerRewardButtons.push(button);
+      });
     } else {
-      // Quest or other notification type
+      // Default: Show OK button for simple quests/info
+      this.questBannerButtonContainer.appendChild(this.questBannerOkButton);
       this.questBannerOkButton.classList.remove("hidden");
-      this.questBannerAcceptButton.classList.add("hidden");
-      this.questBannerDeclineButton.classList.add("hidden");
 
       if (onOk) {
         this.boundBannerOkClickHandler = () => {
           onOk();
           this.hideQuestBanner(); // Hide after action
         };
+        this.questBannerOkButton.addEventListener(
+          "click",
+          this.boundBannerOkClickHandler
+        );
+      } else {
+        // Default OK action if no specific handler provided
+        this.boundBannerOkClickHandler = () => this.hideQuestBanner();
         this.questBannerOkButton.addEventListener(
           "click",
           this.boundBannerOkClickHandler
@@ -683,9 +738,20 @@ export class Game {
         this.boundBannerDeclineClickHandler
       );
     }
+    // Remove reward button listeners
+    this.questBannerRewardButtons.forEach((button) => {
+      const optionId = button.dataset.rewardId; // Assuming you set data-reward-id when creating
+      const handler = this.boundRewardButtonHandlers.get(optionId || "");
+      if (handler) {
+        button.removeEventListener("click", handler);
+      }
+    });
+
     this.boundBannerOkClickHandler = null;
     this.boundBannerAcceptClickHandler = null;
     this.boundBannerDeclineClickHandler = null;
+    this.questBannerRewardButtons = [];
+    this.boundRewardButtonHandlers.clear();
   }
 
   /** Hides the quest/trade banner and unpauses the game. */
@@ -700,20 +766,163 @@ export class Game {
     this.currentTradeTarget = null;
     this.currentTradeGiveItems = [];
     this.currentTradeReceiveItems = [];
+    this.currentQuestForReward = null; // Clear quest context
     this.setPauseState(false); // Unpause the game (if no other UI requires pause)
   }
 
   /**
-   * Shows a quest notification banner.
+   * Shows a quest notification or completion banner.
    * @param quest The quest to display.
-   * @param isCompletion Whether this is a completion notification.
    */
-  showQuestNotification(quest: Quest, isCompletion: boolean = false): void {
-    const title = isCompletion ? `Quest Completed: ${quest.name}` : quest.name;
-    this.showBanner(title, quest.description, "quest", () => {
-      // Optional: Add logic for when OK is clicked on a quest banner
-      console.log(`Quest banner acknowledged: ${quest.name}`);
-    });
+  showQuestCompletionBanner(quest: Quest): void {
+    const title = quest.isCompleted
+      ? `Quest Completed: ${quest.name}`
+      : `Quest: ${quest.name}`;
+    let description = quest.description;
+
+    // Add reward info to description if completed
+    if (quest.isCompleted) {
+      description += "<br><br><strong>Reward:</strong> ";
+      switch (quest.rewardType) {
+        case QuestRewardType.WEAPON_CHOICE:
+          description += "Choose your reward below.";
+          break;
+        case QuestRewardType.WEAPON_UPGRADE:
+          description += `Weapon Damage +${quest.rewardData || "?"}`;
+          break;
+        case QuestRewardType.ENABLE_MECHANIC:
+          description += `Mechanic Unlocked: ${quest.rewardData || "Unknown"}`;
+          if (quest.rewardData === "character_switching") {
+            description += " (Press 'C' near an NPC to switch)";
+          }
+          break;
+        case QuestRewardType.ADD_PROFESSION:
+          description += `New Profession: ${quest.rewardData || "Unknown"}`;
+          break;
+        default:
+          description += "Claim your reward!";
+      }
+    }
+
+    // Show the banner
+    this.showBanner(
+      title,
+      description,
+      "quest",
+      quest, // Pass the quest object
+      () => this.handleRewardSelection(), // OK button handler (for non-choice rewards)
+      undefined, // No Accept handler
+      undefined, // No Decline handler
+      quest.isCompleted ? quest.rewardOptions : undefined // Pass reward options only if completed
+    );
+  }
+
+  /** Handles the reward selection or acknowledgement. */
+  handleRewardSelection(selectedOptionId?: string): void {
+    const quest = this.currentQuestForReward;
+    if (!quest || !quest.isCompleted || !this.activeCharacter) {
+      console.warn("Cannot handle reward: No active quest or player.");
+      return;
+    }
+
+    console.log(
+      `Handling reward for quest: ${quest.name}, Option: ${selectedOptionId}`
+    );
+
+    switch (quest.rewardType) {
+      case QuestRewardType.WEAPON_CHOICE:
+        if (!selectedOptionId) {
+          console.warn(
+            "Weapon choice reward selected but no option ID provided."
+          );
+          return;
+        }
+        if (selectedOptionId === "new_sword") {
+          // Give a new sword (replace or add?) - Let's add for now
+          const addResult = this.activeCharacter.inventory?.addItem("sword", 1);
+          if (addResult?.totalAdded) {
+            this.notificationManager?.createItemAddedSprite(
+              "sword",
+              1,
+              this.activeCharacter.mesh!.position
+            );
+            this.logEvent(
+              this.activeCharacter,
+              "reward_received",
+              `Received reward: New Sword`,
+              undefined,
+              { quest: quest.name, reward: "New Sword" },
+              this.activeCharacter.mesh!.position
+            );
+          } else {
+            this.logEvent(
+              this.activeCharacter,
+              "reward_fail",
+              `Failed to receive reward: New Sword (Inventory Full?)`,
+              undefined,
+              { quest: quest.name, reward: "New Sword" },
+              this.activeCharacter.mesh!.position
+            );
+          }
+        } else if (selectedOptionId === "upgrade_damage") {
+          this.activeCharacter.upgradeWeaponDamage(5); // Example upgrade amount
+          this.logEvent(
+            this.activeCharacter,
+            "reward_received",
+            `Received reward: Damage Upgrade`,
+            undefined,
+            { quest: quest.name, reward: "Damage Upgrade" },
+            this.activeCharacter.mesh!.position
+          );
+        }
+        break;
+
+      case QuestRewardType.WEAPON_UPGRADE:
+        const upgradeAmount = (quest.rewardData as number) || 5; // Default upgrade
+        this.activeCharacter.upgradeWeaponDamage(upgradeAmount);
+        this.logEvent(
+          this.activeCharacter,
+          "reward_received",
+          `Received reward: Damage Upgrade (+${upgradeAmount})`,
+          undefined,
+          { quest: quest.name, reward: `Damage Upgrade +${upgradeAmount}` },
+          this.activeCharacter.mesh!.position
+        );
+        break;
+
+      case QuestRewardType.ENABLE_MECHANIC:
+        if (quest.rewardData === "character_switching") {
+          this.characterSwitchingEnabled = true;
+          console.log("Character switching enabled!");
+          this.logEvent(
+            this.activeCharacter,
+            "reward_received",
+            `Received reward: Character Switching Unlocked`,
+            undefined,
+            { quest: quest.name, reward: "Character Switching" },
+            this.activeCharacter.mesh!.position
+          );
+        }
+        break;
+
+      case QuestRewardType.ADD_PROFESSION:
+        const professionToAdd = quest.rewardData as Profession | undefined;
+        if (professionToAdd) {
+          this.activeCharacter.addProfession(professionToAdd);
+          this.logEvent(
+            this.activeCharacter,
+            "reward_received",
+            `Received reward: Profession - ${professionToAdd}`,
+            undefined,
+            { quest: quest.name, reward: `Profession: ${professionToAdd}` },
+            this.activeCharacter.mesh!.position
+          );
+        }
+        break;
+    }
+
+    // Quest is now fully handled, maybe mark it differently?
+    // For now, just ensure banner closes.
   }
 
   /**
@@ -762,6 +971,7 @@ export class Game {
       title,
       descriptionHTML, // Pass HTML string
       "trade",
+      null, // No quest object for trades
       undefined, // No OK handler for trades
       () => this.handleTradeAccept(), // Accept handler
       () => this.handleTradeDecline() // Decline handler
@@ -936,6 +1146,12 @@ export class Game {
       this.droppedItemManager?.update(deltaTime); // Update dropped items
       this.checkRespawn(); // Check for respawning entities
 
+      // Check quest completion periodically
+      if (currentTime - this.lastQuestCheckTime > this.questCheckInterval) {
+        this.questManager.checkAllQuestsCompletion();
+        this.lastQuestCheckTime = currentTime;
+      }
+
       // Check player death
       if (this.activeCharacter.isDead) this.respawnPlayer();
     } // End if (!this.isPaused)
@@ -1009,6 +1225,13 @@ export class Game {
       this.activeCharacter.mesh!.position
     );
 
+    // Reset quest counters tied to player survival
+    this.wolfKillCount = 0; // Reset wolf kill count on player death
+    const wolfQuest = this.questManager.getQuestById("wolf_slayer");
+    if (wolfQuest && !wolfQuest.isCompleted) {
+      wolfQuest.objectives.forEach((obj) => (obj.currentCount = 0));
+    }
+
     // Define a safe respawn point (e.g., near village center or start portal)
     let respawnPos = new Vector3(0, 0, 10); // Example near village
     if (this.portalManager.startPortal) {
@@ -1025,7 +1248,8 @@ export class Game {
     if (
       targetCharacter === this.activeCharacter ||
       !targetCharacter.mesh ||
-      targetCharacter.isDead
+      targetCharacter.isDead ||
+      !this.characterSwitchingEnabled // Check if mechanic is enabled
     )
       return;
 

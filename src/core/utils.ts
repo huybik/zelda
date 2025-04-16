@@ -9,7 +9,7 @@ import {
   Box3,
 } from "three";
 import type { Character } from "../entities/character";
-import { getItemDefinition } from "./items"; // Import item definitions
+import { getItemDefinition, Profession } from "./items"; // Import item definitions and Profession
 
 export interface EntityUserData {
   entityReference: any | null;
@@ -71,16 +71,54 @@ export interface GameEvent {
   location: Vector3;
 }
 
-export interface Quest {
-  id: string; // Unique identifier for the quest
-  name: string;
-  description: string;
-  isCompleted: boolean;
-  checkCompletion: (
-    interactionTarget: Character,
-    chatResponse: string
-  ) => boolean;
+// --- New Quest System Interfaces ---
+
+export enum QuestObjectiveType {
+  ITEM_COUNT = "item_count", // Have X of item Y in inventory
+  KILL_COUNT = "kill_count", // Kill X entities of type Y
+  ENTITY_STATE = "entity_state", // Entity X is in state Y (e.g., following)
+  ENTITY_KILLED_BY = "entity_killed_by", // Entity X killed by entity type Y
+  MULTI_STATE = "multi_state", // Multiple entities in a specific state (e.g., all villagers following)
 }
+
+export enum QuestRewardType {
+  WEAPON_CHOICE = "weapon_choice",
+  WEAPON_UPGRADE = "weapon_upgrade",
+  ENABLE_MECHANIC = "enable_mechanic",
+  ADD_PROFESSION = "add_profession",
+}
+
+export interface QuestObjective {
+  type: QuestObjectiveType;
+  description: string; // e.g., "Gather Wood", "Kill Wolves", "Convince Villagers"
+  targetItemId?: string; // For ITEM_COUNT
+  targetEntityType?: string; // For KILL_COUNT, ENTITY_KILLED_BY (killer type)
+  targetEntityId?: string; // For ENTITY_STATE, ENTITY_KILLED_BY (victim)
+  targetState?: string; // For ENTITY_STATE (e.g., "following")
+  requiredCount: number;
+  currentCount: number; // Track progress
+  isCompleted: boolean; // Track individual objective completion
+}
+
+export interface QuestRewardOption {
+  id: string; // e.g., "new_sword", "upgrade_damage"
+  name: string; // e.g., "New Sword", "Upgrade Damage"
+  description: string;
+}
+
+export interface Quest {
+  id: string;
+  name: string;
+  description: string; // Overall quest description
+  objectives: QuestObjective[];
+  isCompleted: boolean; // Overall quest completion status
+  rewardType: QuestRewardType;
+  rewardOptions?: QuestRewardOption[]; // For choices like weapon selection
+  rewardData?: any; // For specific data like profession to add or mechanic to enable
+  hasBeenNotified?: boolean; // Track if completion notification was shown
+}
+
+// --- End New Quest System Interfaces ---
 
 export interface EventEntry {
   timestamp: string;
