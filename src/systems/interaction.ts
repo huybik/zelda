@@ -281,6 +281,8 @@ export class InteractionSystem {
         this.hidePrompt();
         return;
       }
+      // Make player look at target before initiating interaction
+      this.player.lookAt(target.mesh!.position);
       const result = target.interact(this.player);
       if (result) this.handleInteractionResult(result, target);
     } else if (targetType === "item") {
