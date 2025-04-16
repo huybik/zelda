@@ -105,7 +105,7 @@ export class AnimalAIController {
       jump: false,
       sprint: false, // Animals might always "run" or have different speeds
       interact: false,
-      attack: false,
+      attack: false, // Attack intent is now handled by initiating attack via CombatSystem
     };
 
     if (this.aiState === "dead") {
@@ -159,12 +159,17 @@ export class AnimalAIController {
           } else {
             // Within attack range
             moveState.forward = 0; // Stop moving
-            const now = performance.now();
-            if (now - this.lastAttackTime > this.attackCooldown * 1000) {
-              moveState.attack = true; // Trigger attack animation/logic in Animal class
-              this.lastAttackTime = now;
-              // Note: The actual attack execution happens in Animal.performAttack()
-              // triggered by Animal.update() when moveState.attack is true.
+            // Initiate attack via CombatSystem if cooldown allows
+            if (
+              this.animal.game?.combatSystem &&
+              !this.animal.isPerformingAction
+            ) {
+              this.animal.game.combatSystem.initiateAttack(
+                this.animal,
+                this.target
+              );
+              // The actual attack execution (damage, etc.) is handled by CombatSystem
+              // The animation is triggered within initiateAttack -> animal.playAttackAnimation
             }
           }
         }

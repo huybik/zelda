@@ -62,7 +62,7 @@ export class AIController {
       jump: false,
       sprint: false,
       interact: false,
-      attack: false,
+      attack: false, // Attack intent is now handled by initiating attack via CombatSystem
     };
 
     if (this.character.isDead) {
@@ -160,21 +160,32 @@ export class AIController {
               this.character.mesh!.position.clone().add(direction)
             );
             moveState.forward = 1;
-            moveState.attack = false;
+            // moveState.attack = false; // No longer needed
           } else {
             // Reached target or close enough for action
             this.character.lookAt(targetPosition);
             moveState.forward = 0;
 
             if (this.targetAction === "attack") {
-              moveState.attack = true;
+              // Initiate attack via CombatSystem if cooldown allows
+              if (
+                this.character.game?.combatSystem &&
+                !this.character.isPerformingAction
+              ) {
+                this.character.game.combatSystem.initiateAttack(
+                  this.character,
+                  this.target
+                );
+                // The actual attack execution (damage, etc.) is handled by CombatSystem
+                // The animation is triggered within initiateAttack -> character.playAttackAnimation
+              }
+              // Check if target became invalid *after* initiating attack (e.g., died instantly)
               const targetStillValid =
                 this.target instanceof Entity
                   ? !this.target.isDead
                   : this.target.visible && this.target.userData.isInteractable;
               if (!targetStillValid || distance > this.searchRadius) {
                 this.handleTargetLostOrDepleted();
-                moveState.attack = false;
               }
             } else if (
               this.targetAction === "chat" &&

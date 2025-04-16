@@ -1,5 +1,4 @@
 /* File: /src/controls/controls.ts */
-/* File: /src/controls/controls.ts */
 import { Character } from "../entities/character";
 import { ThirdPersonCamera } from "../systems/camera";
 import { Game } from "../main";
@@ -20,7 +19,7 @@ export class Controls {
     jump: false,
     sprint: false,
     interact: false,
-    attack: false,
+    attack: false, // Keep for potential animation blending or state checks
   };
   keyDownListeners: Record<string, Array<() => void>> = {};
   mouseClickListeners: Record<number, Array<(event: MouseEvent) => void>> = {};
@@ -150,11 +149,14 @@ export class Controls {
     const keyCode = event.code;
     if (this.game?.interactionSystem?.isChatOpen && keyCode !== "Escape")
       return;
-    if (this.keys[keyCode]) return;
+    if (this.keys[keyCode]) return; // Prevent multiple triggers for held keys
     this.keys[keyCode] = true;
     this.keyDownListeners[keyCode]?.forEach((cb) => cb());
     if (keyCode === "KeyE") this.moveState.interact = true;
-    if (keyCode === "KeyF") this.moveState.attack = true; // Attack key
+    if (keyCode === "KeyF") {
+      this.moveState.attack = true; // Keep state for potential blending/checks
+      this.game?.handlePlayerAttackInput(); // Trigger attack sequence
+    }
     if (keyCode === "Escape") this.handleEscapeKey();
     this.updateContinuousMoveState();
   }
@@ -164,7 +166,7 @@ export class Controls {
     const keyCode = event.code;
     this.keys[keyCode] = false;
     if (keyCode === "KeyE") this.moveState.interact = false;
-    if (keyCode === "KeyF") this.moveState.attack = false; // Attack key
+    if (keyCode === "KeyF") this.moveState.attack = false; // Reset attack state
     this.updateContinuousMoveState();
   }
 
@@ -194,11 +196,19 @@ export class Controls {
     if (this.game?.interactionSystem?.isChatOpen) return;
     this.mouse.buttons[event.button] = true;
     this.mouseClickListeners[event.button]?.forEach((cb) => cb(event));
+    // Handle left mouse click (button 0) for attack
+    if (event.button === 0 && this.isPointerLocked) {
+      this.moveState.attack = true; // Keep state for potential blending/checks
+      this.game?.handlePlayerAttackInput(); // Trigger attack sequence
+    }
   }
 
   onMouseUp(event: MouseEvent): void {
     if (this.game?.mobileControls?.isActive()) return;
     this.mouse.buttons[event.button] = false;
+    if (event.button === 0) {
+      this.moveState.attack = false; // Reset attack state
+    }
   }
 
   onMouseMove(event: MouseEvent): void {

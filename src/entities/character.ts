@@ -1,4 +1,4 @@
-/* File: src/entities/character.ts */
+/* File: /src/entities/character.ts */
 import {
   Scene,
   Vector3,
@@ -92,6 +92,8 @@ export class Character extends Entity {
   respawnDelay: number = 40000; // 60 seconds respawn delay for NPCs
   lastAttacker: Entity | null = null; // Track the last attacker
   bonusDamage: number = 0; // Flat bonus damage from upgrades
+  attackCooldown: number = 0.8; // Cooldown in seconds between attacks
+  lastAttackTime: number = 0; // Timestamp of the last attack start
 
   // Item/Equipment related properties
   rightHandBone: Bone | null = null;
@@ -275,6 +277,7 @@ export class Character extends Entity {
       this.attackAction = this.mixer.clipAction(attackAnim);
       this.attackAction.setLoop(LoopOnce, 1);
       this.attackAction.clampWhenFinished = true;
+      this.attackCooldown = this.attackAction.getClip().duration * 0.9; // Set cooldown based on animation
     }
     if (deadAnim) {
       this.deadAction = this.mixer.clipAction(deadAnim);
@@ -295,21 +298,10 @@ export class Character extends Entity {
     // Animation finished listener
     this.mixer.addEventListener("finished", (e) => {
       if (e.action === this.attackAction) {
-        const isPlayerHoldingAttack =
-          this.userData.isPlayer && this.moveState.attack;
-        if (isPlayerHoldingAttack) {
-          // Player attack chaining
-          this.performAttack(); // Perform next attack logic
-          this.attackAction?.reset().play(); // Replay animation
-        } else if (!this.userData.isPlayer && this.moveState.attack) {
-          // NPC continuous attack: Allow next update loop to trigger
-          this.isPerformingAction = false;
-        } else {
-          // Stop attacking
-          this.isPerformingAction = false;
-          this.actionType = "none";
-          this.transitionToLocomotion();
-        }
+        this.isPerformingAction = false;
+        this.actionType = "none";
+        // Transition back to locomotion immediately after attack finishes
+        this.transitionToLocomotion();
       }
       // Death animation clamps, no transition needed
     });
@@ -699,288 +691,45 @@ export class Character extends Entity {
     this.currentAction = newAction;
   }
 
-  performAttack(): void {
-    // Determine attack range based on player/NPC and AI settings
-    let range = 3.0; // Default player range
-    if (this.aiController) {
-      range = this.aiController.attackDistance + 0.5; // NPC range based on AI + buffer
-    }
+  playAttackAnimation(): void {
+    if (this.isDead || !this.attackAction) return;
+    this.actionType = "attack";
+    this.isPerformingAction = true;
+    this.switchAction(this.attackAction);
+  }
 
-    // Use weapon damage if equipped, otherwise a default value (e.g., fist damage)
+  getAttackDamage(): number {
+    // Base damage from weapon or fists
     const baseDamage = this.equippedWeapon
       ? this.equippedWeapon.definition.damage
-      : 2;
+      : 2; // Base fist damage
 
-    if (
-      !this.mesh ||
-      !this.scene ||
-      !this.game ||
-      this.isDead ||
-      !this.rayCaster
-    )
-      return;
+    // Profession bonus (example: +50% if using preferred weapon)
+    let professionMultiplier = 1.0;
+    if (this.equippedWeapon) {
+      const weaponDef = this.equippedWeapon.definition;
+      let efficientProfession: Profession | null = null;
+      if (weaponDef.id === "sword") efficientProfession = Profession.Hunter;
+      else if (weaponDef.id === "pickaxe")
+        efficientProfession = Profession.Blacksmith;
+      else if (weaponDef.id === "axe") efficientProfession = Profession.Farmer;
 
-    const rayOrigin = this.mesh.position
-      .clone()
-      .add(new Vector3(0, CHARACTER_HEIGHT / 2, 0));
-    let rayDirection = new Vector3();
-
-    // Use camera direction for player, mesh forward direction for NPC
-    if (this.userData.isPlayer && this.game.camera) {
-      this.game.camera.getWorldDirection(rayDirection);
-    } else {
-      this.mesh.getWorldDirection(rayDirection);
-    }
-
-    this.rayCaster.set(rayOrigin, rayDirection);
-    this.rayCaster.far = range;
-
-    // Filter potential targets (Entities and Resources)
-    const potentialTargets = this.game.interactableObjects.filter((item) => {
-      if (item === this || item === this.mesh) return false; // Don't target self
-      const targetMesh = (item as any).mesh ?? item;
-      if (!(targetMesh instanceof Object3D) || !targetMesh.visible)
-        return false;
-      // Check if entity is dead
-      if (item instanceof Entity && item.isDead) return false;
-      // Check if resource is depleted or falling
-      if (
-        targetMesh.userData.resource &&
-        (targetMesh.userData.health <= 0 || targetMesh.userData.isFalling)
-      )
-        return false;
-      return true;
-    });
-
-    let closestTarget: any | null = null; // Can be Entity or resource Object3D
-    let closestPoint: Vector3 | null = null;
-    let minDistanceSq = range * range;
-    const intersectionPoint = new Vector3(); // Reusable vector
-
-    for (const targetInstance of potentialTargets) {
-      const targetMesh = (targetInstance as any).mesh ?? targetInstance;
-      if (!(targetMesh instanceof Object3D) || targetMesh instanceof Sprite)
-        continue; // Skip invalid meshes/sprites
-
-      const boundingBox = targetMesh.userData.boundingBox as Box3 | undefined;
-      if (!boundingBox || boundingBox.isEmpty()) {
-        // console.warn(`Skipping attack check for ${targetInstance.name || targetMesh.name}: Missing or empty bounding box.`);
-        continue; // Skip if no valid bounding box
-      }
-
-      // Check intersection with bounding box
-      if (this.rayCaster.ray.intersectsBox(boundingBox)) {
-        // Calculate the precise intersection point
-        if (this.rayCaster.ray.intersectBox(boundingBox, intersectionPoint)) {
-          const distanceSq = rayOrigin.distanceToSquared(intersectionPoint);
-          // Check if within range and closer than previous hits
-          if (distanceSq < minDistanceSq) {
-            minDistanceSq = distanceSq;
-            closestTarget = targetInstance;
-            closestPoint = intersectionPoint.clone(); // Clone the point
-          }
-        }
+      if (efficientProfession && this.professions.has(efficientProfession)) {
+        professionMultiplier = 1.5; // 50% bonus
       }
     }
 
-    // --- Handle Hit ---
-    if (closestTarget && closestPoint) {
-      const targetMesh = (closestTarget as any).mesh ?? closestTarget;
+    // Total damage calculation
+    const totalDamage =
+      Math.round(baseDamage * professionMultiplier) + this.bonusDamage;
 
-      // --- Calculate Damage Modifiers ---
-      let damageMultiplier = 1.0;
+    return Math.max(1, totalDamage); // Ensure at least 1 damage
+  }
 
-      // 1. Profession Weapon Efficiency Bonus
-      if (this.equippedWeapon) {
-        const weaponDef = this.equippedWeapon.definition;
-        let efficientProfession: Profession | null = null;
-        if (weaponDef.id === "sword") efficientProfession = Profession.Hunter;
-        else if (weaponDef.id === "pickaxe")
-          efficientProfession = Profession.Blacksmith;
-        else if (weaponDef.id === "axe")
-          efficientProfession = Profession.Farmer;
-
-        // Check if ANY of the character's professions match the efficient one
-        if (efficientProfession && this.professions.has(efficientProfession)) {
-          damageMultiplier *= 2.0; // 100% bonus
-        }
-      }
-
-      // 2. Weapon vs Target Bonus
-      const targetIsEntity = closestTarget instanceof Entity;
-      const targetResource = targetMesh.userData.resource;
-      const weaponId = this.equippedWeapon?.definition.id;
-
-      if (weaponId === "sword" && targetIsEntity) {
-        damageMultiplier *= 2.0;
-      } else if (weaponId === "axe" && targetResource === "wood") {
-        damageMultiplier *= 2.0;
-      } else if (weaponId === "pickaxe" && targetResource === "stone") {
-        damageMultiplier *= 2.0;
-      }
-
-      // 3. Add bonus damage from upgrades
-      const effectiveDamage = Math.max(
-        1,
-        Math.round(baseDamage * damageMultiplier) + this.bonusDamage // Add flat bonus damage
-      );
-
-      // --- Apply Damage ---
-      // --- Target is a Resource ---
-      if (targetMesh.userData.resource) {
-        const resource = targetMesh.userData.resource as string;
-        const currentHealth = targetMesh.userData.health as number;
-        const maxHealth = targetMesh.userData.maxHealth as number;
-
-        if (currentHealth > 0) {
-          const newHealth = Math.max(0, currentHealth - effectiveDamage);
-          targetMesh.userData.health = newHealth;
-          this.game.notificationManager?.createAttackNumberSprite(
-            effectiveDamage,
-            closestPoint
-          ); // Show damage number
-
-          // Log hit only if target is different from last logged
-          const targetId = targetMesh.userData.id || targetMesh.uuid;
-          if (
-            this.game &&
-            this.aiController &&
-            this.aiController.lastLoggedAttackTargetId !== targetId
-          ) {
-            this.aiController.lastLoggedAttackTargetId = targetId;
-          }
-
-          if (newHealth <= 0) {
-            // Resource depleted - Grant item based on resource type
-            let itemsToGrant: { id: string; count: number }[] = [];
-            if (resource === "wood")
-              itemsToGrant.push({ id: "wood", count: MathUtils.randInt(1, 3) });
-            else if (resource === "stone")
-              itemsToGrant.push({
-                id: "stone",
-                count: MathUtils.randInt(1, 2),
-              });
-            else if (resource === "herb")
-              itemsToGrant.push({ id: "herb", count: 1 });
-
-            // Check if the gatherer is the player before showing notifications
-            if (this === this.game.activeCharacter) {
-              for (const itemGrant of itemsToGrant) {
-                const addResult = this.inventory?.addItem(
-                  itemGrant.id,
-                  itemGrant.count
-                );
-                if (addResult && addResult.added > 0) {
-                  // Use the new sprite notification
-                  this.game.notificationManager?.createItemAddedSprite(
-                    itemGrant.id,
-                    addResult.added,
-                    closestPoint
-                  );
-                  this.game.logEvent(
-                    this,
-                    "gather_complete",
-                    `${this.name} gathered ${addResult.totalAdded} ${itemGrant.id}.`,
-                    targetMesh.name || targetMesh.id,
-                    { resource: itemGrant.id },
-                    closestPoint
-                  );
-                } else {
-                  this.game.logEvent(
-                    this,
-                    "gather_fail",
-                    `${this.name}'s inventory full, could not gather ${itemGrant.count} ${itemGrant.id}.`,
-                    targetMesh.name || targetMesh.id,
-                    { resource: itemGrant.id },
-                    closestPoint
-                  );
-                  break; // Stop trying to add if inventory is full
-                }
-              }
-            } else {
-              // NPC gathering, just add items without notification
-              for (const itemGrant of itemsToGrant) {
-                if (
-                  !this.inventory?.addItem(itemGrant.id, itemGrant.count)
-                    .totalAdded
-                ) {
-                  // Log NPC inventory full? (Optional)
-                  break;
-                }
-              }
-            }
-
-            // Handle resource depletion and respawn timer (now handled in main update loop after animation)
-            // Play fall animation if it's a tree
-            if (
-              targetMesh.userData.resource === "wood" &&
-              targetMesh.userData.mixer &&
-              targetMesh.userData.fallAction &&
-              !targetMesh.userData.isFalling
-            ) {
-              targetMesh.userData.isFalling = true;
-              targetMesh.userData.fallAction.reset().play();
-              // Respawn timer and visibility/collision changes are handled in main.ts update loop
-            } else if (targetMesh.userData.isDepletable) {
-              // For non-trees, handle depletion immediately (no animation)
-              targetMesh.userData.isInteractable = false;
-              targetMesh.userData.isCollidable = false;
-              targetMesh.visible = false;
-              const respawnTime = targetMesh.userData.respawnTime || 15000; // Default respawn time
-              setTimeout(() => {
-                // Check if mesh still exists and has userData before respawning
-                if (targetMesh && targetMesh.userData) {
-                  targetMesh.userData.isInteractable = true;
-                  targetMesh.userData.isCollidable = true;
-                  targetMesh.userData.health = maxHealth; // Reset health
-                  targetMesh.visible = true;
-                  // Recompute bounding box on respawn? Maybe not needed if size doesn't change.
-                }
-              }, respawnTime);
-            }
-          }
-        }
-      }
-      // --- Target is an Entity (Character or Animal) ---
-      else if (closestTarget instanceof Entity) {
-        closestTarget.takeDamage(effectiveDamage, this, closestPoint); // Pass hit location
-        // Log hit only if target is different from last logged
-        if (
-          this.game &&
-          this.aiController &&
-          this.aiController.lastLoggedAttackTargetId !== closestTarget.id
-        ) {
-          this.game.logEvent(
-            this,
-            "attack_hit",
-            `${this.name} attacked ${closestTarget.name} for ${effectiveDamage.toFixed(0)} damage.`,
-            closestTarget,
-            { damage: effectiveDamage },
-            this.mesh!.position
-          );
-          this.aiController.lastLoggedAttackTargetId = closestTarget.id;
-        }
-      }
-    } else {
-      // Attack missed or hit nothing
-      // Log miss only if last logged event wasn't a miss
-      if (
-        this.game &&
-        this.aiController &&
-        this.aiController.lastLoggedAttackTargetId !== "miss"
-      ) {
-        console.warn(`NPC Attack Fail: ${this.name} attacked but hit nothing.`);
-        this.game.logEvent(
-          this,
-          "attack_fail",
-          `${this.name} attacked but missed.`,
-          undefined,
-          { reason: "No target in range/LOS" },
-          this.mesh!.position
-        );
-        this.aiController.lastLoggedAttackTargetId = "miss";
-      }
-    }
+  getAttackRange(): number {
+    // Return weapon range or default fist range
+    // For now, let's use a fixed range, but could be weapon-dependent
+    return this.equippedWeapon ? 3.0 : 2.0;
   }
 
   handleStamina(deltaTime: number): void {
@@ -1061,30 +810,10 @@ export class Character extends Entity {
       return; // Don't update locomotion/action animations if dead
     }
 
-    // Handle one-shot actions like attack
-    if (
-      this.isPerformingAction &&
-      this.actionType === "attack" &&
-      this.attackAction
-    ) {
-      // Animation is playing, wait for 'finished' event to transition back
-    }
     // Handle locomotion (idle/walk/run) if not doing a specific action
-    else if (!this.isPerformingAction) {
+    if (!this.isPerformingAction) {
       this.transitionToLocomotion();
     }
-  }
-
-  triggerAction(actionType: string): void {
-    if (this.isDead || this.isPerformingAction) return; // Prevent actions if dead or already busy
-
-    if (actionType === "attack" && this.attackAction) {
-      this.actionType = actionType;
-      this.isPerformingAction = true;
-      this.switchAction(this.attackAction); // SwitchAction handles reset and play
-      this.performAttack(); // Perform the actual attack logic
-    }
-    // Add other actions here if needed
   }
 
   updateWeaponOrientation(): void {
@@ -1151,23 +880,8 @@ export class Character extends Entity {
       this.velocity.y = 0; // Reset vertical velocity after clamping
     }
 
-    // Handle attack trigger from player input OR AI command
-    if (moveState.attack && !this.isPerformingAction) {
-      // If attack is commanded and we are not already performing the attack animation
-      if (this.userData.isPlayer) {
-        // Player attack debounce
-        if (!this.attackTriggered) {
-          this.attackTriggered = true;
-          this.triggerAction("attack");
-        }
-      } else {
-        // NPC attack - trigger directly if not already performing
-        this.triggerAction("attack");
-      }
-    } else if (!moveState.attack && this.userData.isPlayer) {
-      // Reset player debounce flag when input stops
-      this.attackTriggered = false;
-    }
+    // Attack input is handled in main.ts -> combatSystem for player
+    // AI attack initiation is handled in aiController -> combatSystem
 
     this.updateAnimations(deltaTime); // Mixer updates bone transforms here
     this.updateWeaponOrientation(); // Ensure weapon faces forward after animation update

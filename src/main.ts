@@ -54,6 +54,7 @@ import { LandingPage } from "./ui/landingPage.ts";
 import { QuestManager } from "./core/questManager.ts";
 import { PortalManager } from "./objects/portalManagement";
 import { TradingSystem } from "./systems/tradingSystem.ts"; // Import TradingSystem
+import { CombatSystem } from "./systems/combatSystem.ts"; // Import CombatSystem
 import {
   getItemDefinition,
   WeaponDefinition,
@@ -73,6 +74,7 @@ export class Game {
   controls: Controls | null = null;
   mobileControls: MobileControls | null = null;
   physics: Physics | null = null;
+  combatSystem: CombatSystem | null = null; // Add CombatSystem
   inventory: Inventory | null = null; // This will be the PLAYER's inventory instance
   interactionSystem: InteractionSystem | null = null;
   tradingSystem: TradingSystem | null = null; // Add TradingSystem
@@ -190,7 +192,7 @@ export class Game {
     this.initMobileControls();
     this.initPhysics();
     this.initEnvironment(this.models); // NPCs created here, including profession weapons
-    this.initSystems(); // TradingSystem, DroppedItemManager initialized here
+    this.initSystems(); // TradingSystem, DroppedItemManager, CombatSystem initialized here
     this.questManager.initQuests();
     this.initUI(); // UI initialized here, including InventoryDisplay
     this.setupUIControls();
@@ -476,6 +478,7 @@ export class Game {
       throw new Error("Cannot init systems: Core components missing.");
 
     this.droppedItemManager = new DroppedItemManager(this); // Initialize DroppedItemManager first
+    this.combatSystem = new CombatSystem(this); // Initialize CombatSystem
     this.interactionSystem = new InteractionSystem(
       this.activeCharacter,
       this.camera,
@@ -1027,6 +1030,13 @@ export class Game {
     // Actual start logic is triggered by the landing page button click
   }
 
+  /** Handles player attack input from Controls. */
+  handlePlayerAttackInput(): void {
+    if (this.isPaused || !this.activeCharacter || !this.combatSystem) return;
+    // CombatSystem.initiateAttack handles cooldown checks and target finding
+    this.combatSystem.initiateAttack(this.activeCharacter);
+  }
+
   update(): void {
     if (
       !this.clock ||
@@ -1138,6 +1148,7 @@ export class Game {
       });
 
       // Update systems
+      this.combatSystem?.update(deltaTime); // Update combat system (if needed)
       this.interactionSystem!.update(deltaTime);
       this.thirdPersonCamera!.update(deltaTime, this.collidableObjects); // Update camera after all movements
       this.portalManager.animatePortals();
@@ -1492,6 +1503,7 @@ export class Game {
     this.particleEffects = [];
     this.tradingSystem = null; // Nullify trading system
     this.droppedItemManager = null;
+    this.combatSystem = null; // Nullify combat system
     console.log("Game destroyed.");
   }
 }

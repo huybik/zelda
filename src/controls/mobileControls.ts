@@ -202,6 +202,7 @@ export class MobileControls {
         e.preventDefault();
         this.interactHeld = true;
         this.interactButton?.classList.add("active");
+        this.controls.moveState.interact = true; // Set interact state
       },
       { passive: false }
     );
@@ -211,6 +212,7 @@ export class MobileControls {
         e.preventDefault();
         this.interactHeld = false;
         this.interactButton?.classList.remove("active");
+        this.controls.moveState.interact = false; // Reset interact state
       },
       { passive: false }
     );
@@ -220,6 +222,8 @@ export class MobileControls {
         e.preventDefault();
         this.attackHeld = true;
         this.attackButton?.classList.add("active");
+        this.controls.moveState.attack = true; // Set attack state
+        this.game.handlePlayerAttackInput(); // Trigger attack sequence
       },
       { passive: false }
     );
@@ -229,6 +233,7 @@ export class MobileControls {
         e.preventDefault();
         this.attackHeld = false;
         this.attackButton?.classList.remove("active");
+        this.controls.moveState.attack = false; // Reset attack state
       },
       { passive: false }
     );
@@ -287,8 +292,9 @@ export class MobileControls {
       Math.min(1, this.controls.moveState.right)
     );
     this.controls.moveState.sprint = false;
-    this.controls.moveState.interact = this.interactHeld;
-    this.controls.moveState.attack = this.attackHeld; // Attack state from button
+    // Interact and Attack states are set directly by button events now
+    // this.controls.moveState.interact = this.interactHeld;
+    // this.controls.moveState.attack = this.attackHeld;
     this.controls.moveState.jump = false;
     const touchCameraSensitivity = 0.3;
     const touchPlayerRotationSensitivity = 0.2;

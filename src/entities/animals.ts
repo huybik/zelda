@@ -1,4 +1,4 @@
-/* File: /src/entities/animals.ts */
+/* File: /src/entities/animal.ts */
 import {
   Scene,
   Vector3,
@@ -54,6 +54,8 @@ export class Animal extends Entity {
   aiController: AnimalAIController | null = null; // Specific AI controller
   respawnDelay: number = 20000; // 30 seconds respawn delay
   lastAttacker: Entity | null = null; // Track the last attacker
+  attackCooldown: number = 1.5; // Cooldown in seconds between attacks
+  lastAttackTime: number = 0; // Timestamp of the last attack start
 
   constructor(
     scene: Scene,
@@ -215,6 +217,7 @@ export class Animal extends Entity {
       this.attackAction = this.mixer.clipAction(attackAnim);
       this.attackAction.setLoop(LoopOnce, 1);
       this.attackAction.clampWhenFinished = true;
+      this.attackCooldown = this.attackAction.getClip().duration * 0.9; // Set cooldown based on animation
     }
     if (dieAnim) {
       this.dieAction = this.mixer.clipAction(dieAnim);
@@ -237,13 +240,8 @@ export class Animal extends Entity {
       if (e.action === this.attackAction) {
         this.isPerformingAction = false;
         this.actionType = "none";
-        // If AI still wants to attack, allow next update loop to trigger it
-        if (this.moveState.attack) {
-          // No need to replay animation here, update loop will handle it
-        } else {
-          // If AI stopped attacking, transition back to idle/move
-          this.transitionToLocomotion();
-        }
+        // Transition back to locomotion immediately after attack finishes
+        this.transitionToLocomotion();
       }
       // Death animation clamps, no transition needed
     });
@@ -312,104 +310,19 @@ export class Animal extends Entity {
     this.currentAction = newAction;
   }
 
-  performAttack(): void {
-    // Use AI's attack range + a small buffer for the raycast
-    const range = (this.aiController?.attackRange ?? 2.0) + 0.5;
-    const damage = this.animalType === "Wolf" ? 15 : 5; // Example damage
-    if (
-      !this.mesh ||
-      !this.scene ||
-      !this.game ||
-      this.isDead ||
-      !this.rayCaster ||
-      !this.aiController // Need AI controller for logging check
-    )
-      return;
+  playAttackAnimation(): void {
+    if (this.isDead || !this.attackAction) return;
+    this.actionType = "attack";
+    this.isPerformingAction = true;
+    this.switchAction(this.attackAction);
+  }
 
-    const attackOrigin = this.mesh.position
-      .clone()
-      .add(new Vector3(0, (this.userData.height ?? 0.8) * 0.5, 0)); // Mid-body approx
-    const attackDirection = this.mesh.getWorldDirection(new Vector3());
+  getAttackDamage(): number {
+    return this.animalType === "Wolf" ? 15 : 5; // Example damage
+  }
 
-    this.rayCaster.set(attackOrigin, attackDirection);
-    this.rayCaster.far = range;
-
-    // Check against interactable objects (only Entities for animals)
-    const potentialTargets = this.game.entities.filter(
-      (item): item is Entity =>
-        item instanceof Entity && // Must be an entity
-        item !== this && // Not self
-        !item.isDead && // Must be alive
-        item.mesh !== null && // Must have a mesh
-        item.mesh.visible // Must be visible
-    );
-
-    let closestTarget: Entity | null = null;
-    let closestPoint: Vector3 | null = null;
-    let minDistanceSq = range * range;
-    const intersectionPoint = new Vector3(); // Reusable vector for intersection point
-
-    for (const target of potentialTargets) {
-      const targetMesh = target.mesh!;
-      const boundingBox = target.userData.boundingBox as Box3 | undefined;
-
-      if (!boundingBox || boundingBox.isEmpty()) {
-        // console.warn(`Skipping attack check for ${target.name}: Missing or empty bounding box.`);
-        continue; // Skip if no valid bounding box
-      }
-
-      // Check for intersection with the bounding box
-      if (this.rayCaster.ray.intersectsBox(boundingBox)) {
-        // Calculate the intersection point
-        if (this.rayCaster.ray.intersectBox(boundingBox, intersectionPoint)) {
-          const distanceSq = attackOrigin.distanceToSquared(intersectionPoint);
-
-          // Check if within range and closer than previous hits
-          if (distanceSq < minDistanceSq) {
-            minDistanceSq = distanceSq;
-            closestTarget = target;
-            closestPoint = intersectionPoint.clone(); // Clone the point
-          }
-        }
-      }
-    }
-
-    // If a target was hit within range
-    if (closestTarget && closestPoint) {
-      // Apply damage
-      closestTarget.takeDamage(damage, this, closestPoint); // Pass hit location
-
-      // Log the hit only if the target is different from the last logged one
-      if (
-        this.game &&
-        this.aiController.lastLoggedAttackTargetId !== closestTarget.id
-      ) {
-        this.game.logEvent(
-          this,
-          "attack_hit",
-          `${this.name} attacked ${closestTarget.name}.`,
-          closestTarget,
-          { damage: damage },
-          this.mesh!.position
-        );
-        this.aiController.lastLoggedAttackTargetId = closestTarget.id; // Update last logged target
-      }
-    } else {
-      // Attack missed
-      // Log the miss only if the last logged event wasn't already a miss
-      if (this.game && this.aiController.lastLoggedAttackTargetId !== "miss") {
-        console.warn(`${this.name} attacked but hit nothing.`);
-        this.game.logEvent(
-          this,
-          "attack_fail",
-          `${this.name} attacked but missed.`,
-          undefined,
-          { reason: "No target in range/LOS" },
-          this.mesh!.position
-        );
-        this.aiController.lastLoggedAttackTargetId = "miss"; // Mark last event as a miss
-      }
-    }
+  getAttackRange(): number {
+    return this.aiController?.attackRange ?? 2.0;
   }
 
   handleMovement(deltaTime: number): void {
@@ -455,34 +368,14 @@ export class Animal extends Entity {
       return;
     }
 
-    // Check if an attack was triggered in the current move state
-    if (
-      this.moveState.attack &&
-      !this.isPerformingAction &&
-      this.attackAction
-    ) {
-      this.triggerAction("attack"); // Trigger the attack animation and ilogic
-    }
     // If performing an attack, let the animation play out (handled by 'finished' listener)
-    else if (this.isPerformingAction && this.actionType === "attack") {
+    if (this.isPerformingAction && this.actionType === "attack") {
       // Do nothing here, wait for animation to finish
     }
     // Otherwise, handle locomotion (idle/walk/run)
     else {
       this.transitionToLocomotion(); // Uses this.moveState to decide animation
     }
-  }
-
-  triggerAction(actionType: string): void {
-    if (this.isDead || this.isPerformingAction) return;
-
-    if (actionType === "attack" && this.attackAction) {
-      this.actionType = actionType;
-      this.isPerformingAction = true;
-      this.switchAction(this.attackAction);
-      this.performAttack(); // Execute the attack logic immediately
-    }
-    // Add other actions like 'flee' or 'graze' if needed
   }
 
   // Main update loop for the animal
@@ -498,7 +391,14 @@ export class Animal extends Entity {
     }
 
     // Calculate movement based on the AI's *current* state
-    this.handleMovement(deltaTime); // Sets this.velocity based on AI state
+    // AI attack initiation is handled in aiController -> combatSystem
+    if (!this.isPerformingAction) {
+      this.handleMovement(deltaTime); // Sets this.velocity based on AI state
+    } else {
+      // Freeze movement during attack animation
+      this.velocity.x = 0;
+      this.velocity.z = 0;
+    }
 
     // Apply velocity to position
     if (this.mesh) {
