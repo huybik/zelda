@@ -212,7 +212,7 @@ export class CombatSystem {
     // --- Effects and Logging ---
     // Spawn damage number near the attacker
     const numberSpawnPosition = attackerPosition.add(
-      new Vector3(0, attacker.userData.height * 0.8, 0)
+      new Vector3(0, attacker.userData.height! * 0.8, 0)
     );
     this.game.notificationManager?.createAttackNumberSprite(
       effectiveDamage,
@@ -275,7 +275,7 @@ export class CombatSystem {
             gatherer,
             "gather_complete",
             `${gatherer.name} gathered ${addResult.totalAdded} ${itemGrant.id}.`,
-            resourceMesh.name || resourceMesh.id,
+            resourceMesh.userData.name || resourceMesh.userData.id,
             { resource: itemGrant.id },
             position
           );
@@ -284,7 +284,7 @@ export class CombatSystem {
             gatherer,
             "gather_fail",
             `${gatherer.name}'s inventory full, could not gather ${itemGrant.count} ${itemGrant.id}.`,
-            resourceMesh.name || resourceMesh.id,
+            resourceMesh.userData.name || resourceMesh.userData.id,
             { resource: itemGrant.id },
             position
           );
@@ -298,7 +298,7 @@ export class CombatSystem {
         gatherer,
         "destroy_resource",
         `${gatherer.name} destroyed a ${resource}.`,
-        resourceMesh.name || resourceMesh.id,
+        resourceMesh.userData.name || resourceMesh.userData.id,
         { resource: resource },
         position
       );
