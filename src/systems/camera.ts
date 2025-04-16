@@ -1,3 +1,4 @@
+/* File: /src/systems/camera.ts */
 // File: /src/systems/camera.ts
 import {
   PerspectiveCamera,
@@ -25,6 +26,13 @@ export class ThirdPersonCamera {
   currentPosition: Vector3;
   currentLookat: Vector3;
 
+  // Horizon stabilization properties
+  private targetPitchAngle: number = -0.1; // Desired stable pitch (looking slightly up)
+  private lastUserPitchInputTime: number = 0;
+  private readonly pitchReturnTimeout: number = 3.0; // seconds
+  private readonly pitchReturnSpeed: number = 0.02; // Lerp factor base for return
+  private readonly userPitchInputThreshold: number = 0.0005; // Minimum deltaY to count as input
+
   private targetPosition = new Vector3();
   private offset = new Vector3();
   private idealPosition = new Vector3();
@@ -42,37 +50,74 @@ export class ThirdPersonCamera {
     this.currentLookat = new Vector3();
     this.target.getWorldPosition(this.currentLookat);
     this.currentLookat.y += (target.userData?.height ?? 1.8) * 0.6;
+    this.lastUserPitchInputTime = performance.now() / 1000; // Initialize timestamp
     this.update(0.016, []);
     this.camera.position.copy(this.currentPosition);
     this.camera.lookAt(this.currentLookat);
   }
 
   handleMouseInput(deltaX: number, deltaY: number): void {
+    // Update pitch based on user input
     this.pitchAngle -= deltaY * this.pitchSensitivity;
     this.pitchAngle = MathUtils.clamp(
       this.pitchAngle,
       this.minPitch,
       this.maxPitch
     );
+
+    // Record time if input is significant
+    if (Math.abs(deltaY) > this.userPitchInputThreshold) {
+      this.lastUserPitchInputTime = performance.now() / 1000;
+    }
   }
 
   update(deltaTime: number, collidables: Object3D[]): void {
     if (!this.target || !this.target.parent) return;
+
+    // --- Horizon Stabilization Logic ---
+    const currentTime = performance.now() / 1000;
+    if (currentTime - this.lastUserPitchInputTime > this.pitchReturnTimeout) {
+      // Smoothly interpolate pitchAngle back to targetPitchAngle
+      const returnFactor =
+        1.0 - Math.pow(1.0 - this.pitchReturnSpeed, deltaTime * 60); // Adjust speed based on deltaTime
+      this.pitchAngle = MathUtils.lerp(
+        this.pitchAngle,
+        this.targetPitchAngle,
+        returnFactor
+      );
+      // Ensure it doesn't overshoot due to lerp
+      if (Math.abs(this.pitchAngle - this.targetPitchAngle) < 0.001) {
+        this.pitchAngle = this.targetPitchAngle;
+      }
+    }
+    // Clamp pitch after potential stabilization or user input
+    this.pitchAngle = MathUtils.clamp(
+      this.pitchAngle,
+      this.minPitch,
+      this.maxPitch
+    );
+    // --- End Horizon Stabilization Logic ---
+
     this.target.getWorldPosition(this.targetPosition);
     const targetQuaternion = this.target.quaternion;
+
+    // Calculate ideal camera position based on current pitch and target orientation
     this.offset
       .copy(this.idealOffset)
-      .applyAxisAngle(new Vector3(1, 0, 0), this.pitchAngle)
+      .applyAxisAngle(new Vector3(1, 0, 0), this.pitchAngle) // Apply potentially stabilized pitch
       .applyQuaternion(targetQuaternion);
     this.idealPosition.copy(this.targetPosition).add(this.offset);
+
+    // Collision detection and adjustment
     this.cameraDirection.copy(this.idealPosition).sub(this.targetPosition);
     let idealDistance = this.cameraDirection.length();
     this.cameraDirection.normalize();
     this.rayOrigin
       .copy(this.targetPosition)
-      .addScaledVector(this.cameraDirection, 0.2);
+      .addScaledVector(this.cameraDirection, 0.2); // Start ray slightly ahead of target
     this.collisionRaycaster.set(this.rayOrigin, this.cameraDirection);
-    this.collisionRaycaster.far = Math.max(0, idealDistance - 0.2);
+    this.collisionRaycaster.far = Math.max(0, idealDistance - 0.2); // Ray length up to ideal position
+
     const collisionCheckObjects = collidables.filter(
       (obj) => obj !== this.target && obj?.userData?.isCollidable
     );
@@ -80,29 +125,39 @@ export class ThirdPersonCamera {
       collisionCheckObjects,
       true
     );
+
     let actualDistance = idealDistance;
     if (intersects.length > 0) {
+      // Find the closest intersection point
       actualDistance =
         intersects.reduce(
           (minDist, intersect) => Math.min(minDist, intersect.distance),
           idealDistance
         ) +
-        0.2 -
-        this.collisionOffset;
-      actualDistance = Math.max(this.minOffsetDistance, actualDistance);
+        0.2 - // Add back the initial offset
+        this.collisionOffset; // Subtract collision buffer
+      actualDistance = Math.max(this.minOffsetDistance, actualDistance); // Clamp to min distance
     }
+
+    // Clamp final distance
     actualDistance = MathUtils.clamp(
       actualDistance,
       this.minOffsetDistance,
       this.maxOffsetDistance
     );
+
+    // Calculate final camera position
     this.finalPosition
       .copy(this.targetPosition)
       .addScaledVector(this.cameraDirection, actualDistance);
+
+    // Calculate ideal lookat point (slightly above target center)
     const targetHeight = this.target.userData?.height ?? 1.8;
     this.idealLookat
       .copy(this.targetPosition)
       .add(new Vector3(0, targetHeight * 0.6, 0));
+
+    // Smoothly interpolate current position and lookat towards their targets
     smoothVectorLerp(
       this.currentPosition,
       this.finalPosition,
@@ -115,6 +170,8 @@ export class ThirdPersonCamera {
       this.lerpAlphaLookatBase,
       deltaTime
     );
+
+    // Apply final position and lookat to the camera
     this.camera.position.copy(this.currentPosition);
     this.camera.lookAt(this.currentLookat);
   }
