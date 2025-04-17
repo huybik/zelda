@@ -993,6 +993,102 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   height: 24px;
 }
 
+/* Mobile Control Indicators */
+.joystick-indicator {
+  position: absolute;
+  width: 100px; /* Same as joystick size */
+  height: 100px;
+  border: 5px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  box-sizing: border-box;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.3s ease-out;
+}
+
+.joystick-indicator.hidden {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.3s ease-out,
+    visibility 0s 0.3s;
+}
+
+.camera-arrow {
+  position: absolute;
+  top: 40%;
+  width: 80px; /* Adjust size */
+  height: 80px;
+  background-color: rgba(255, 255, 255, 0.3);
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  pointer-events: none;
+  opacity: 0; /* Start transparent */
+  animation:
+    pulseAndFadeIn 1.5s ease-out forwards,
+    pulseMove 2.5s infinite ease-in-out 1.5s; /* Fade in first, then pulse */
+  transform: translateY(-50%);
+  z-index: 16; /* Ensure above other elements if needed */
+}
+
+.camera-arrow.arrow-left {
+  left: 20%; /* Position */
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="rgba(255,255,255,0.7)"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"/></svg>');
+}
+
+.camera-arrow.arrow-right {
+  right: 20%; /* Position */
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="rgba(255,255,255,0.7)"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>');
+}
+
+.camera-arrow.hidden {
+  animation: none; /* Stop animation */
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.3s ease-out,
+    visibility 0s 0.3s;
+}
+
+@keyframes pulseAndFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.8);
+  }
+  50% {
+    opacity: 0.7;
+    transform: translateY(-50%) scale(1.1);
+  }
+  100% {
+    opacity: 0.6;
+    transform: translateY(-50%) scale(1);
+  }
+}
+
+@keyframes pulseMove {
+  0% {
+    transform: translateY(-50%) translateX(0);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translateY(-50%) translateX(var(--arrow-move, 5px)); /* Use CSS variable */
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-50%) translateX(0);
+    opacity: 0.6;
+  }
+}
+
+/* Set direction variable for each arrow */
+.camera-arrow.arrow-left {
+  --arrow-move: -5px;
+}
+.camera-arrow.arrow-right {
+  --arrow-move: 5px;
+}
+
 /* Responsive Adjustments */
 @media (max-width: 768px) {
   #hud {
@@ -1109,6 +1205,21 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   .icon-button svg {
     width: 22px;
     height: 22px;
+  }
+
+  .joystick-indicator {
+    width: 80px;
+    height: 80px;
+  }
+  .camera-arrow {
+    width: 60px;
+    height: 60px;
+  }
+  .camera-arrow.arrow-left {
+    left: 20%;
+  }
+  .camera-arrow.arrow-right {
+    right: 20%;
   }
 }
 

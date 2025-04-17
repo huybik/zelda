@@ -28,6 +28,13 @@ export class MobileControls {
   public attackHeld: boolean = false; // Public to be checked by Game loop
   private interactHeld: boolean = false;
 
+  // Indicator elements and state
+  private joystickIndicatorCircle: HTMLElement | null = null;
+  private cameraArrowLeft: HTMLElement | null = null;
+  private cameraArrowRight: HTMLElement | null = null;
+  private hasMovedJoystick: boolean = false;
+  private hasDraggedCamera: boolean = false;
+
   private boundHandleCameraTouchStart: (event: TouchEvent) => void;
   private boundHandleCameraTouchMove: (event: TouchEvent) => void;
   private boundHandleCameraTouchEnd: (event: TouchEvent) => void;
@@ -39,6 +46,13 @@ export class MobileControls {
     this.boundHandleCameraTouchStart = this.handleCameraTouchStart.bind(this);
     this.boundHandleCameraTouchMove = this.handleCameraTouchMove.bind(this);
     this.boundHandleCameraTouchEnd = this.handleCameraTouchEnd.bind(this);
+
+    // Get indicator elements
+    this.joystickIndicatorCircle = document.getElementById(
+      "joystick-indicator-circle"
+    );
+    this.cameraArrowLeft = document.getElementById("camera-arrow-left");
+    this.cameraArrowRight = document.getElementById("camera-arrow-right");
 
     if (!this.isMobile()) {
       document.getElementById("mobile-controls-layer")?.classList.add("hidden");
@@ -53,6 +67,14 @@ export class MobileControls {
     document
       .getElementById("mobile-controls-layer")
       ?.classList.remove("hidden");
+
+    // Show initial indicators if mobile
+    if (!this.hasMovedJoystick)
+      this.joystickIndicatorCircle?.classList.remove("hidden");
+    if (!this.hasDraggedCamera) {
+      this.cameraArrowLeft?.classList.remove("hidden");
+      this.cameraArrowRight?.classList.remove("hidden");
+    }
   }
 
   private isMobile(): boolean {
@@ -75,6 +97,12 @@ export class MobileControls {
     };
     this.moveManager = nipplejs.create(commonOptions);
     const handleMove = (evt: EventData, nipple: JoystickOutputData) => {
+      // Hide indicator permanently once move starts
+      if (!this.hasMovedJoystick) {
+        this.joystickIndicatorCircle?.classList.add("hidden");
+        this.hasMovedJoystick = true;
+      }
+
       if (nipple.angle && nipple.force) {
         this.moveVector.set(
           Math.cos(nipple.angle.radian) * nipple.force,
@@ -141,7 +169,15 @@ export class MobileControls {
       }
     }
     event.preventDefault();
-    this.isDraggingCamera = true;
+    this.isDraggingCamera = true; // Camera drag starts here
+
+    // Hide arrows permanently once drag starts
+    if (!this.hasDraggedCamera) {
+      this.cameraArrowLeft?.classList.add("hidden");
+      this.cameraArrowRight?.classList.add("hidden");
+      this.hasDraggedCamera = true;
+    }
+
     this.currentTouchId = touch.identifier;
     this.lastTouchPosition.set(touchX, touchY);
     this.cameraRotationDelta.set(0, 0);
