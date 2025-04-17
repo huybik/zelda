@@ -1,3 +1,4 @@
+/* File: /src/controls/mobileControls.ts */
 // File: /src/controls/mobileControls.ts
 import nipplejs, {
   JoystickManager,
@@ -160,9 +161,9 @@ export class MobileControls {
     const touchX = currentTouch.clientX;
     const touchY = currentTouch.clientY;
     const deltaX = touchX - this.lastTouchPosition.x;
-    const deltaY = touchY - this.lastTouchPosition.y;
+    // const deltaY = touchY - this.lastTouchPosition.y; // Removed Y-axis update
     this.cameraRotationDelta.x += deltaX * 8;
-    this.cameraRotationDelta.y += deltaY * 8;
+    // this.cameraRotationDelta.y += deltaY * 8; // Removed Y-axis update
     this.lastTouchPosition.set(touchX, touchY);
   }
 
@@ -292,7 +293,7 @@ export class MobileControls {
     this.controls.moveState.sprint = false;
     // Attack state is no longer set directly here; game loop checks attackHeld
     this.controls.moveState.jump = false;
-    const touchCameraSensitivity = 0.3;
+    // const touchCameraSensitivity = 0.3; // No longer needed for pitch
     const touchPlayerRotationSensitivity = 0.2;
     if (this.cameraRotationDelta.lengthSq() > 0) {
       if (this.controls.player && this.controls.player.mesh) {
@@ -302,14 +303,11 @@ export class MobileControls {
           deltaTime;
         this.controls.player.mesh.rotateY(yawDelta);
       }
-      if (this.controls.cameraController) {
-        const pitchDelta =
-          -this.cameraRotationDelta.y *
-          touchCameraSensitivity *
-          deltaTime *
-          100;
-        this.controls.cameraController.handleMouseInput(0, pitchDelta);
-      }
+      // Camera pitch is no longer controlled by touch delta Y
+      // if (this.controls.cameraController) {
+      //     const pitchDelta = -this.cameraRotationDelta.y * touchCameraSensitivity * deltaTime * 100;
+      //     this.controls.cameraController.handleMouseInput(0, pitchDelta);
+      // }
       this.cameraRotationDelta.set(0, 0);
     }
   }

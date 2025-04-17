@@ -403,7 +403,8 @@ export class Game {
     this.thirdPersonCamera = new ThirdPersonCamera(
       this.camera,
       this.activeCharacter.mesh!,
-      isMobileActive // Pass mobile status
+      isMobileActive, // Pass mobile status
+      this // Pass Game instance
     );
     this.controls.cameraController = this.thirdPersonCamera; // Link camera to controls
   }

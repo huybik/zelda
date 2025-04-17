@@ -7,14 +7,16 @@ import {
   Raycaster,
   MathUtils,
 } from "three";
-import { smoothVectorLerp } from "../core/utils";
+import { smoothVectorLerp, getTerrainHeight } from "../core/utils";
+import { Game } from "../main"; // Import Game
 
 export class ThirdPersonCamera {
   camera: PerspectiveCamera;
   target: Object3D;
+  game: Game; // Add reference to the Game instance
   // Define separate offsets for desktop and mobile
   private desktopIdealOffset = new Vector3(0, 2.5, -2.5);
-  private mobileIdealOffset = new Vector3(0, 6, -6); // Further away and higher for mobile
+  private mobileIdealOffset = new Vector3(0, 7, -7); // Further away and higher for mobile
   idealOffset: Vector3; // Current ideal offset based on mode
   minOffsetDistance: number = 1.5;
   maxOffsetDistance: number = 12.0;
@@ -37,6 +39,8 @@ export class ThirdPersonCamera {
   private readonly pitchReturnTimeout: number = 3.0; // seconds
   private readonly pitchReturnSpeed: number = 0.02; // Lerp factor base for return
   private readonly userPitchInputThreshold: number = 0.0005; // Minimum deltaY to count as input
+  private readonly terrainSlopeAdjustmentFactor: number = 0.3; // How much slope affects pitch (0 to 1)
+  private readonly slopeSampleDistance: number = 1.0; // Distance ahead to sample terrain for slope
 
   private targetPosition = new Vector3();
   private offset = new Vector3();
@@ -45,12 +49,19 @@ export class ThirdPersonCamera {
   private idealLookat = new Vector3();
   private rayOrigin = new Vector3();
   private cameraDirection = new Vector3();
+  private playerForward = new Vector3(); // To store player forward direction
   private isMobile: boolean;
 
-  constructor(camera: PerspectiveCamera, target: Object3D, isMobile: boolean) {
+  constructor(
+    camera: PerspectiveCamera,
+    target: Object3D,
+    isMobile: boolean,
+    game: Game // Accept Game instance
+  ) {
     this.camera = camera;
     this.target = target;
     this.isMobile = isMobile;
+    this.game = game; // Store Game instance
 
     // Initialize offsets and pitch based on mobile status
     this.idealOffset = this.isMobile
@@ -74,6 +85,11 @@ export class ThirdPersonCamera {
   }
 
   handleMouseInput(deltaX: number, deltaY: number): void {
+    // Prevent pitch changes on mobile via touch
+    if (this.isMobile) {
+      deltaY = 0;
+    }
+
     // Update pitch based on user input
     this.pitchAngle -= deltaY * this.pitchSensitivity;
     this.pitchAngle = MathUtils.clamp(
@@ -89,27 +105,50 @@ export class ThirdPersonCamera {
   }
 
   update(deltaTime: number, collidables: Object3D[]): void {
-    if (!this.target || !this.target.parent) return;
+    if (!this.target || !this.target.parent || !this.game.scene) return;
 
-    // Select the appropriate target pitch for stabilization
-    const currentTargetPitch = this.isMobile
+    this.target.getWorldPosition(this.targetPosition);
+    this.target.getWorldDirection(this.playerForward); // Get player's forward direction
+
+    // --- Calculate Slope-Adjusted Target Pitch ---
+    const h1 = getTerrainHeight(
+      this.game.scene,
+      this.targetPosition.x,
+      this.targetPosition.z
+    );
+    const aheadPos = this.targetPosition
+      .clone()
+      .addScaledVector(this.playerForward, this.slopeSampleDistance);
+    const h2 = getTerrainHeight(this.game.scene, aheadPos.x, aheadPos.z);
+    const slopeAngle = Math.atan((h2 - h1) / this.slopeSampleDistance);
+
+    // Select the base target pitch for stabilization
+    const baseTargetPitch = this.isMobile
       ? this.mobileTargetPitchAngle
       : this.desktopTargetPitchAngle;
 
+    // Adjust target pitch based on slope (subtract slope angle)
+    const adjustedTargetPitch =
+      baseTargetPitch - slopeAngle * this.terrainSlopeAdjustmentFactor;
+
     // --- Horizon Stabilization Logic ---
     const currentTime = performance.now() / 1000;
-    if (currentTime - this.lastUserPitchInputTime > this.pitchReturnTimeout) {
-      // Smoothly interpolate pitchAngle back to targetPitchAngle
+    // Only stabilize if user hasn't interacted recently OR if on mobile (always stabilize pitch on mobile)
+    if (
+      this.isMobile ||
+      currentTime - this.lastUserPitchInputTime > this.pitchReturnTimeout
+    ) {
+      // Smoothly interpolate pitchAngle back to the adjusted target pitch
       const returnFactor =
         1.0 - Math.pow(1.0 - this.pitchReturnSpeed, deltaTime * 60); // Adjust speed based on deltaTime
       this.pitchAngle = MathUtils.lerp(
         this.pitchAngle,
-        currentTargetPitch, // Use the mode-specific target pitch
+        adjustedTargetPitch, // Use the slope-adjusted target pitch
         returnFactor
       );
       // Ensure it doesn't overshoot due to lerp
-      if (Math.abs(this.pitchAngle - currentTargetPitch) < 0.001) {
-        this.pitchAngle = currentTargetPitch;
+      if (Math.abs(this.pitchAngle - adjustedTargetPitch) < 0.001) {
+        this.pitchAngle = adjustedTargetPitch;
       }
     }
     // Clamp pitch after potential stabilization or user input
@@ -120,7 +159,6 @@ export class ThirdPersonCamera {
     );
     // --- End Horizon Stabilization Logic ---
 
-    this.target.getWorldPosition(this.targetPosition);
     const targetQuaternion = this.target.quaternion;
 
     // Select the appropriate ideal offset based on mode
