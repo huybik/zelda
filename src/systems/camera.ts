@@ -15,7 +15,7 @@ export class ThirdPersonCamera {
   target: Object3D;
   game: Game; // Add reference to the Game instance
   // Define separate offsets for desktop and mobile
-  private desktopIdealOffset = new Vector3(0, 2.5, -2.5);
+  private desktopIdealOffset = new Vector3(0, 3, -3);
   private mobileIdealOffset = new Vector3(0, 6, -6); // Further away and higher for mobile
   idealOffset: Vector3; // Current ideal offset based on mode
   minOffsetDistance: number = 1.5;
