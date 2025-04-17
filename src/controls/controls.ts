@@ -171,24 +171,24 @@ export class Controls {
   }
 
   handleEscapeKey(): void {
+    // Prioritize closing UI elements over unlocking pointer
     if (this.game?.interactionSystem?.isChatOpen) {
       this.game.interactionSystem.closeChatInterface();
     } else if (this.game?.inventoryDisplay?.isOpen) {
       this.game.inventoryDisplay.hide();
-      this.game?.setPauseState(false);
+      // Don't unpause here, allow setPauseState in hide() to handle it
     } else if (this.game?.journalDisplay?.isOpen) {
       this.game.journalDisplay.hide();
-      this.game?.setPauseState(false);
+      // Don't unpause here, allow setPauseState in hide() to handle it
     } else if (this.game?.isQuestBannerVisible) {
-      // If it's a trade offer, treat Escape as Decline
-      if (this.game.currentBannerType === "trade") {
-        this.game.handleTradeDecline(); // Call the decline handler
-      } else {
-        this.game.hideQuestBanner(); // Close regular quest banner
-      }
+      // Delegate banner closing to UIManager via Game
+      this.game.hideQuestBanner();
+      // Don't unpause here, allow setPauseState in hideBanner() to handle it
     } else if (this.isPointerLocked) {
+      // Only unlock pointer if no UI elements were closed
       this.unlockPointer();
     }
+    // Game pause state is handled within the respective hide/close methods
   }
 
   onMouseDown(event: MouseEvent): void {
@@ -223,19 +223,47 @@ export class Controls {
 
   onClick(event: MouseEvent): void {
     if (this.game?.mobileControls?.isActive()) return;
+
     const targetElement = event.target as HTMLElement;
+    const isClickOnUI =
+      targetElement.closest(
+        "#inventory-display, #journal-display, #chat-container, #minimap-canvas, #quest-detail-banner, #mobile-controls-layer"
+      ) !== null;
+
+    if (this.isPointerLocked) {
+      // If pointer is locked, clicks should not interact with background UI or close menus
+      return;
+    }
+
+    // If clicking outside interactable UI elements and a menu is open, close it
+    if (!isClickOnUI) {
+      let closedSomething = false;
+      if (this.game?.inventoryDisplay?.isOpen) {
+        this.game.inventoryDisplay.hide();
+        closedSomething = true;
+      } else if (this.game?.journalDisplay?.isOpen) {
+        this.game.journalDisplay.hide();
+        closedSomething = true;
+      } else if (this.game?.interactionSystem?.isChatOpen) {
+        this.game.interactionSystem.closeChatInterface();
+        closedSomething = true;
+      } else if (this.game?.isQuestBannerVisible) {
+        this.game.hideQuestBanner();
+        closedSomething = true;
+      }
+
+      // If we closed something, don't try to lock pointer immediately
+      if (closedSomething) {
+        return;
+      }
+    }
+
+    // If click was on the game container itself (not UI) and not pointer locked, request lock
     const isGameContainerClick =
       targetElement === this.domElement ||
-      (this.domElement.contains(targetElement) &&
-        targetElement.closest(
-          "#inventory-display, #journal-display, #chat-container, #minimap-canvas, #quest-detail-banner, #mobile-controls-layer"
-        ) === null);
+      (this.domElement.contains(targetElement) && !isClickOnUI);
 
-    if (
-      isGameContainerClick &&
-      !this.isPointerLocked &&
-      !this.game?.isUIPaused()
-    ) {
+    if (isGameContainerClick && !this.isPointerLocked) {
       this.lockPointer();
     }
   }

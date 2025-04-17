@@ -316,7 +316,10 @@ export class Character extends Entity {
 
   initIntentDisplay(): void {
     // Only init for NPCs with AIController, not animals
-    if (!(this.aiController instanceof AIController)) return;
+    if (!(this.aiController instanceof AIController) || !this.mesh) return;
+
+    const isMobile = this.game?.mobileControls?.isActive() ?? false;
+    const baseScale = isMobile ? 3 : 0.6; // Larger base scale for mobile
 
     // Initialize rayCaster here if not already done (e.g., by Character)
     if (!this.rayCaster) {
@@ -336,9 +339,15 @@ export class Character extends Entity {
       const material = new SpriteMaterial({ map: this.intentTexture });
       this.intentSprite = new Sprite(material);
       const aspectRatio = this.intentCanvas.width / this.intentCanvas.height;
-      this.intentSprite.scale.set(aspectRatio * 0.6, 0.6, 1);
-      this.intentSprite.position.set(0, CHARACTER_HEIGHT + 0.6, 0);
+      this.intentSprite.scale.set(aspectRatio * baseScale, baseScale, 1); // Apply base scale
+
+      const baseHeight = isMobile ? 2 : 0.6;
+      this.intentSprite.position.set(0, CHARACTER_HEIGHT + baseHeight, 0);
       this.mesh!.add(this.intentSprite);
+    } else {
+      // Update scale if mobile status changed
+      const aspectRatio = this.intentCanvas.width / this.intentCanvas.height;
+      this.intentSprite.scale.set(aspectRatio * baseScale, baseScale, 1);
     }
     this.updateIntentDisplay("");
   }
@@ -406,12 +415,17 @@ export class Character extends Entity {
     }
 
     if (isWeapon(definition)) {
-      // Check if already equipped
       if (this.equippedWeapon?.definition.id === definition.id) {
-        this.unequipWeapon(); // Double-click equipped item to unequip
+        // Currently equipped: Unequip it
+        this.unequipWeapon();
       } else {
+        // Not currently equipped (or different weapon equipped): Equip it
         this.equipWeapon(definition);
       }
+      // Close inventory after equipping
+
+      this.game?.inventoryDisplay?.hide();
+      this.game?.setPauseState(false); // Ensure game unpauses
     } else if (isConsumable(definition)) {
       this.useConsumable(definition, inventoryIndex);
     } else {

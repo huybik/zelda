@@ -165,8 +165,7 @@ export class InventoryDisplay {
     if (this.selectedItemIndex === index && item) {
       // Second click on the same item: perform action
       this.handleItemAction(index, item);
-      this.selectedItemIndex = null; // Reset selection after action
-      // handleItemAction already hides description
+      // Don't reset selectedItemIndex here, let handleItemAction or hide() do it
     } else {
       // First click on this item, or click on a different item, or click on empty slot
       this.showItemDescription(item); // Show description (or hide if item is null)
@@ -180,8 +179,9 @@ export class InventoryDisplay {
     // console.log("Action on index:", index, item);
     if (item && this.game.activeCharacter) {
       this.game.activeCharacter.handleItemAction(index);
-      this.hideItemDescription(); // Hide description after use/equip attempt
-      this.selectedItemIndex = null; // Ensure selection is cleared after action
+      // Description hiding and selection clearing are now handled within Character.handleItemAction
+      // if the action results in closing the inventory or unequipping.
+      // Otherwise, the description stays visible.
     }
   }
 
@@ -247,6 +247,7 @@ export class InventoryDisplay {
     this.isOpen = true;
     this.updateDisplay(this.inventory.items); // Update display immediately
     this.displayElement.classList.remove("hidden");
+    this.game.setPauseState(true);
     // Don't automatically hide description when opening inventory
     // Don't reset selection on show, allow remembering last selection if desired
   }
@@ -257,6 +258,7 @@ export class InventoryDisplay {
     this.displayElement.classList.add("hidden");
     this.hideItemDescription(); // Hide description when closing inventory
     this.selectedItemIndex = null; // Reset selection when closing
+    this.game.setPauseState(false); // Unpause game when inventory closes
   }
 
   // Clean up listeners when the display is no longer needed
