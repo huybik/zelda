@@ -12,7 +12,10 @@ import { smoothVectorLerp } from "../core/utils";
 export class ThirdPersonCamera {
   camera: PerspectiveCamera;
   target: Object3D;
-  idealOffset: Vector3 = new Vector3(0, 2.5, -2.5);
+  // Define separate offsets for desktop and mobile
+  private desktopIdealOffset = new Vector3(0, 2.5, -2.5);
+  private mobileIdealOffset = new Vector3(0, 6, -6); // Further away and higher for mobile
+  idealOffset: Vector3; // Current ideal offset based on mode
   minOffsetDistance: number = 1.5;
   maxOffsetDistance: number = 12.0;
   pitchAngle: number = 0.15;
@@ -27,7 +30,9 @@ export class ThirdPersonCamera {
   currentLookat: Vector3;
 
   // Horizon stabilization properties
-  private targetPitchAngle: number = -0.1; // Desired stable pitch (looking slightly up)
+  private desktopTargetPitchAngle: number = -0.1; // Desired stable pitch (looking slightly up)
+  private mobileTargetPitchAngle: number = -0.4; // More top-down pitch for mobile
+  private targetPitchAngle: number; // Current target pitch based on mode
   private lastUserPitchInputTime: number = 0;
   private readonly pitchReturnTimeout: number = 3.0; // seconds
   private readonly pitchReturnSpeed: number = 0.02; // Lerp factor base for return
@@ -40,10 +45,22 @@ export class ThirdPersonCamera {
   private idealLookat = new Vector3();
   private rayOrigin = new Vector3();
   private cameraDirection = new Vector3();
+  private isMobile: boolean;
 
-  constructor(camera: PerspectiveCamera, target: Object3D) {
+  constructor(camera: PerspectiveCamera, target: Object3D, isMobile: boolean) {
     this.camera = camera;
     this.target = target;
+    this.isMobile = isMobile;
+
+    // Initialize offsets and pitch based on mobile status
+    this.idealOffset = this.isMobile
+      ? this.mobileIdealOffset.clone()
+      : this.desktopIdealOffset.clone();
+    this.targetPitchAngle = this.isMobile
+      ? this.mobileTargetPitchAngle
+      : this.desktopTargetPitchAngle;
+    this.pitchAngle = this.targetPitchAngle; // Start at the target pitch
+
     this.collisionRaycaster = new Raycaster();
     this.collisionRaycaster.camera = camera;
     this.currentPosition = new Vector3();
@@ -51,7 +68,7 @@ export class ThirdPersonCamera {
     this.target.getWorldPosition(this.currentLookat);
     this.currentLookat.y += (target.userData?.height ?? 1.8) * 0.6;
     this.lastUserPitchInputTime = performance.now() / 1000; // Initialize timestamp
-    this.update(0.016, []);
+    this.update(0.016, []); // Initial update to set position
     this.camera.position.copy(this.currentPosition);
     this.camera.lookAt(this.currentLookat);
   }
@@ -74,6 +91,11 @@ export class ThirdPersonCamera {
   update(deltaTime: number, collidables: Object3D[]): void {
     if (!this.target || !this.target.parent) return;
 
+    // Select the appropriate target pitch for stabilization
+    const currentTargetPitch = this.isMobile
+      ? this.mobileTargetPitchAngle
+      : this.desktopTargetPitchAngle;
+
     // --- Horizon Stabilization Logic ---
     const currentTime = performance.now() / 1000;
     if (currentTime - this.lastUserPitchInputTime > this.pitchReturnTimeout) {
@@ -82,12 +104,12 @@ export class ThirdPersonCamera {
         1.0 - Math.pow(1.0 - this.pitchReturnSpeed, deltaTime * 60); // Adjust speed based on deltaTime
       this.pitchAngle = MathUtils.lerp(
         this.pitchAngle,
-        this.targetPitchAngle,
+        currentTargetPitch, // Use the mode-specific target pitch
         returnFactor
       );
       // Ensure it doesn't overshoot due to lerp
-      if (Math.abs(this.pitchAngle - this.targetPitchAngle) < 0.001) {
-        this.pitchAngle = this.targetPitchAngle;
+      if (Math.abs(this.pitchAngle - currentTargetPitch) < 0.001) {
+        this.pitchAngle = currentTargetPitch;
       }
     }
     // Clamp pitch after potential stabilization or user input
@@ -101,9 +123,14 @@ export class ThirdPersonCamera {
     this.target.getWorldPosition(this.targetPosition);
     const targetQuaternion = this.target.quaternion;
 
+    // Select the appropriate ideal offset based on mode
+    const currentIdealOffset = this.isMobile
+      ? this.mobileIdealOffset
+      : this.desktopIdealOffset;
+
     // Calculate ideal camera position based on current pitch and target orientation
     this.offset
-      .copy(this.idealOffset)
+      .copy(currentIdealOffset) // Use the mode-specific offset
       .applyAxisAngle(new Vector3(1, 0, 0), this.pitchAngle) // Apply potentially stabilized pitch
       .applyQuaternion(targetQuaternion);
     this.idealPosition.copy(this.targetPosition).add(this.offset);

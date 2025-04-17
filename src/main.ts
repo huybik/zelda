@@ -161,7 +161,8 @@ export class Game {
     }
 
     this.initControls();
-    this.initMobileControls();
+    this.initMobileControls(); // Initialize mobile controls before camera
+    this.initCameraAndControls(); // Initialize camera after mobile controls status is known
     this.initPhysics();
     this.initEnvironment(this.models);
     this.initSystems(); // Includes TradingSystem, DroppedItemManager, CombatSystem
@@ -376,15 +377,12 @@ export class Game {
   }
 
   initControls(): void {
-    if (!this.activeCharacter || !this.camera || !this.renderer)
+    if (!this.activeCharacter || !this.renderer)
       throw new Error("Cannot init controls: Core components missing.");
-    this.thirdPersonCamera = new ThirdPersonCamera(
-      this.camera,
-      this.activeCharacter.mesh!
-    );
+    // Camera initialization moved to initCameraAndControls
     this.controls = new Controls(
       this.activeCharacter,
-      this.thirdPersonCamera,
+      null, // Camera controller passed later
       this.renderer.domElement,
       this
     );
@@ -394,6 +392,20 @@ export class Game {
     if (!this.controls)
       throw new Error("Cannot init mobile controls: Base controls missing.");
     this.mobileControls = new MobileControls(this, this.controls);
+  }
+
+  // New method to initialize camera and link controls after mobile status is known
+  initCameraAndControls(): void {
+    if (!this.activeCharacter || !this.camera || !this.controls)
+      throw new Error("Cannot init camera/controls: Core components missing.");
+
+    const isMobileActive = this.mobileControls?.isActive() ?? false;
+    this.thirdPersonCamera = new ThirdPersonCamera(
+      this.camera,
+      this.activeCharacter.mesh!,
+      isMobileActive // Pass mobile status
+    );
+    this.controls.cameraController = this.thirdPersonCamera; // Link camera to controls
   }
 
   initPhysics(): void {
