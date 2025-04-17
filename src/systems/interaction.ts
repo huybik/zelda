@@ -146,125 +146,54 @@ export class InteractionSystem {
     // Attack logic is handled by Character.update based on moveState.attack
   }
 
-  // Renamed to specifically find Characters for 'E' interaction
+  /**
+   * Finds the nearest interactable Character within interaction distance.
+   * Uses proximity check instead of raycasting. Angle check is removed.
+   * @returns TargetInfo object for the closest character, or null.
+   */
   findInteractableCharacterTarget(): TargetInfo | null {
-    this.raycaster.setFromCamera(new Vector2(0, 0), this.camera);
-    this.raycaster.far = this.interactionDistance;
     const playerPosition = this.player.mesh!.position;
+    let closestDistSq = this.interactionDistance * this.interactionDistance;
+    let closestCharacter: Character | null = null;
 
-    const meshesToCheck = this.interactableEntities
-      .map((item) => (item as any).mesh ?? item)
-      .filter((mesh): mesh is Object3D => {
-        if (
-          !(mesh instanceof Object3D) ||
-          !mesh.userData?.isInteractable ||
-          !mesh.visible ||
-          mesh === this.player.mesh
-        )
-          return false;
+    for (const entity of this.interactableEntities) {
+      // Check if it's a Character, not the player, and alive
+      if (
+        !(entity instanceof Character) ||
+        entity === this.player ||
+        entity.isDead ||
+        !entity.mesh ||
+        !entity.mesh.visible
+      ) {
+        continue;
+      }
 
-        const entityRef = mesh.userData?.entityReference;
-        if (!(entityRef instanceof Character) || entityRef.isDead) return false;
+      const targetPosition = entity.mesh.getWorldPosition(new Vector3());
+      const distSq = playerPosition.distanceToSquared(targetPosition);
 
-        const distSq = playerPosition.distanceToSquared(mesh.position);
-        return distSq < this.interactionDistance * this.interactionDistance * 4;
-      });
-
-    let closestHit: TargetInfo | null = null;
-    const intersects = this.raycaster.intersectObjects(meshesToCheck, true);
-
-    if (intersects.length > 0) {
-      for (const intersect of intersects) {
-        let hitObject: Object3D | null = intersect.object;
-        let rootInstance: any | null = null;
-        let rootMesh: Object3D | null = null;
-
-        while (hitObject) {
-          if (
-            hitObject.userData?.isInteractable &&
-            hitObject.userData?.entityReference instanceof Character
-          ) {
-            rootInstance = hitObject.userData.entityReference;
-            rootMesh = hitObject;
-            break;
-          }
-          hitObject = hitObject.parent;
-        }
-
-        if (
-          rootInstance instanceof Character &&
-          rootMesh &&
-          !rootInstance.isDead &&
-          rootInstance !== this.player
-        ) {
-          this.objectDirection
-            .copy(intersect.point)
-            .sub(this.camera.position)
-            .normalize();
-          this.camera.getWorldDirection(this.cameraDirection);
-          const angle = this.cameraDirection.angleTo(this.objectDirection);
-
-          if (angle < this.aimTolerance) {
-            closestHit = {
-              mesh: rootMesh,
-              instance: rootInstance,
-              point: intersect.point,
-              distance: intersect.distance,
-            };
-            break;
-          }
-        }
+      // Check if within range
+      if (distSq < closestDistSq) {
+        // No angle check needed for interaction
+        closestDistSq = distSq;
+        closestCharacter = entity;
       }
     }
 
-    return closestHit || this.findNearbyCharacter();
-  }
-
-  findNearbyCharacter(): TargetInfo | null {
-    const playerPosition = this.player.mesh!.getWorldPosition(new Vector3());
-    let closestDistSq = this.interactionDistance * this.interactionDistance;
-    let closestInstance: Character | null = null;
-
-    this.interactableEntities.forEach((item) => {
-      if (
-        !(item instanceof Character) ||
-        item === this.player ||
-        item.isDead ||
-        !item.mesh ||
-        !item.mesh.visible
-      )
-        return;
-
-      this.objectPosition.copy(item.mesh.getWorldPosition(new Vector3()));
-      const distSq = playerPosition.distanceToSquared(this.objectPosition);
-
-      if (distSq < closestDistSq) {
-        this.player.mesh!.getWorldDirection(this.playerDirection);
-        this.objectDirection
-          .copy(this.objectPosition)
-          .sub(playerPosition)
-          .normalize();
-        const angle = this.playerDirection.angleTo(this.objectDirection);
-
-        if (angle < Math.PI / 2.5) {
-          closestDistSq = distSq;
-          closestInstance = item;
-        }
-      }
-    });
-
-    if (closestInstance) {
-      const mesh = (closestInstance as any).mesh ?? closestInstance;
-      this.objectPosition.copy(mesh!.getWorldPosition(new Vector3()));
+    if (closestCharacter) {
+      const mesh = closestCharacter.mesh!;
+      const position = mesh.getWorldPosition(new Vector3());
       return {
-        mesh,
-        instance: closestInstance,
-        point: this.objectPosition.clone(),
-        distance: this.player.mesh!.position.distanceTo(this.objectPosition),
+        mesh: mesh,
+        instance: closestCharacter,
+        point: position.clone(), // Use object position as interaction point
+        distance: Math.sqrt(closestDistSq),
       };
     }
+
     return null;
   }
+
+  // Removed findNearbyCharacter as the logic is now consolidated in findInteractableCharacterTarget
 
   tryInteract(target: any, targetType: "character" | "item" | "none"): void {
     if (targetType === "character") {

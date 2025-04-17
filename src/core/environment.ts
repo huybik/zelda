@@ -106,6 +106,9 @@ export function populateEnvironment(
         }
       }
     }
+    // Add starting gold
+    character.inventory?.addItem("coin", 10);
+
     entities.push(character);
     collidableObjects.push(character.mesh!);
     interactableObjects.push(character);

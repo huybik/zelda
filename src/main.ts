@@ -97,6 +97,7 @@ export class Game {
   questManager: QuestManager;
   boundHandleVisibilityChange: () => void;
   wasPausedBeforeVisibilityChange: boolean = false;
+  wasMusicPlayingBeforePause: boolean = false; // Flag for music state
   worldSize: number = WORLD_SIZE;
   language: string = "en";
   playerProfession: Profession = Profession.None;
@@ -344,6 +345,8 @@ export class Game {
     if (this.activeCharacter.aiController)
       this.activeCharacter.aiController = null;
 
+    // Add starting gold
+
     this.entities.push(this.activeCharacter);
     this.collidableObjects.push(this.activeCharacter.mesh!);
     this.interactableObjects.push(this.activeCharacter);
@@ -374,6 +377,7 @@ export class Game {
         );
       }
     }
+    this.activeCharacter.inventory?.addItem("coin", 10);
   }
 
   initControls(): void {
@@ -532,6 +536,25 @@ export class Game {
     }
 
     this.isPaused = paused;
+
+    // Pause/Resume Music
+    if (this.audioElement) {
+      if (this.isPaused) {
+        if (!this.audioElement.paused) {
+          this.audioElement.pause();
+          this.wasMusicPlayingBeforePause = true;
+        } else {
+          this.wasMusicPlayingBeforePause = false;
+        }
+      } else {
+        if (this.wasMusicPlayingBeforePause && this.audioElement.paused) {
+          this.audioElement
+            .play()
+            .catch((e) => console.warn("Audio resume failed", e));
+        }
+        this.wasMusicPlayingBeforePause = false; // Reset flag after attempting resume
+      }
+    }
 
     if (!this.mobileControls?.isActive()) {
       if (this.isPaused) {
