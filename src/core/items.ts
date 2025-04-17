@@ -119,8 +119,8 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     icon: "herb.jpeg",
     type: ItemType.Consumable,
     stackable: true,
-    maxStack: 30,
-    healAmount: 10, // Specific to ConsumableDefinition
+    maxStack: 99,
+    healAmount: 30, // Specific to ConsumableDefinition
     color: 0x228b22, // Forest Green
   },
   meat: {
@@ -131,8 +131,8 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     icon: "meat.jpeg",
     type: ItemType.Consumable, // Could also be Resource if used in crafting
     stackable: true,
-    maxStack: 20,
-    healAmount: 5, // Specific to ConsumableDefinition
+    maxStack: 99,
+    healAmount: 100, // Specific to ConsumableDefinition
     color: 0xff4500, // Orangey-Red
   },
   potion: {
@@ -142,8 +142,8 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     icon: "potion.jpeg",
     type: ItemType.Consumable,
     stackable: true,
-    maxStack: 10,
-    healAmount: 50, // Specific to ConsumableDefinition
+    maxStack: 99,
+    healAmount: 200, // Specific to ConsumableDefinition
     color: 0xff00ff, // Magenta/Pink
   },
   // Tools (also act as weapons)
@@ -170,7 +170,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     type: ItemType.Tool,
     stackable: false,
     maxStack: 1,
-    damage: 7,
+    damage: 8,
     equipSlot: EquipSlot.RightHand,
     modelFileName: "pickaxe.glb", // Specific to WeaponDefinition
     color: 0xadd8e6, // Light Blue
@@ -185,7 +185,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     type: ItemType.Weapon,
     stackable: false,
     maxStack: 1,
-    damage: 12,
+    damage: 8,
     equipSlot: EquipSlot.RightHand,
     modelFileName: "sword.glb", // Specific to WeaponDefinition
     color: 0xadd8e6, // Light Blue
