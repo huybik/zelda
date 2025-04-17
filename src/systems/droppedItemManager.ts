@@ -153,17 +153,18 @@ export class DroppedItemManager {
       itemGroup: itemGroup, // Store reference to the group
     };
     itemGroup.userData.droppedItemId = droppedItemId; // Link group to data ID
-    itemGroup.userData.isInteractable = true; // Mark as interactable for InteractionSystem
-    itemGroup.userData.interactionType = "pickup";
+    itemGroup.userData.isInteractable = false; // No longer interactable via 'E'
     itemGroup.userData.entityReference = droppedItemData; // Reference the data itself
     this.activeItems.set(droppedItemId, droppedItemData);
   }
 
   update(deltaTime: number): void {
-    if (!this.game.clock || !this.game.activeCharacter) return;
+    if (!this.game.clock || !this.game.activeCharacter || !this.game.scene)
+      return;
 
     const elapsedTime = this.game.clock.elapsedTime;
     const itemsToRemove: string[] = [];
+    const playerPosition = this.game.activeCharacter.mesh!.position;
 
     this.activeItems.forEach((data, id) => {
       const itemGroup = data.itemGroup; // Use stored reference
@@ -253,8 +254,19 @@ export class DroppedItemManager {
       // Fade the whole system slightly over its total lifetime? Maybe not needed.
       // data.particleSystem.material.opacity = 1.0 - (elapsedTime - data.startTime) / this.despawnTime;
 
-      // --- Collection Check (Moved to InteractionSystem) ---
-      // We only update animations and check for despawn here.
+      // --- Auto Collection Check ---
+      if (elapsedTime > data.collectionCooldown) {
+        const distanceSq = playerPosition.distanceToSquared(itemGroup.position);
+        if (distanceSq < this.collectionRadiusSq) {
+          const collected = this.collectItem(id, this.game.activeCharacter!);
+          if (collected) {
+            itemsToRemove.push(id); // Mark for removal after iteration
+          } else {
+            // Collection failed (inventory full), add a small cooldown
+            data.collectionCooldown = elapsedTime + 0.5;
+          }
+        }
+      }
     });
 
     // --- Remove Collected/Despawned Items ---
@@ -308,6 +320,7 @@ export class DroppedItemManager {
     }
 
     const now = this.game.clock?.elapsedTime ?? 0;
+    // Cooldown check might be redundant if called from update, but keep for safety
     if (now < data.collectionCooldown) {
       return false; // Still on cooldown
     }
@@ -329,7 +342,7 @@ export class DroppedItemManager {
         { item: data.itemId, count: addResult.totalAdded },
         player.mesh!.position
       );
-      this.removeDroppedItem(droppedItemId); // Remove from world and manager
+      // Don't remove here, let the update loop handle removal via itemsToRemove
       return true;
     } else {
       // Inventory full or other add error
@@ -342,7 +355,7 @@ export class DroppedItemManager {
         );
       }
       // Add a small cooldown to prevent spamming inventory full message
-      data.collectionCooldown = now + 0.5;
+      // This is now handled in the update loop where collectItem is called
       return false;
     }
   }

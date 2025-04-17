@@ -41,9 +41,11 @@ export class CombatSystem {
 
     let finalTarget: Entity | Object3D | null = target ?? null;
 
-    // If no target provided (player attack), find the nearest one
+    // If no target provided (player attack), find the nearest one within the increased radius
     if (!finalTarget && attacker === this.game.activeCharacter) {
-      finalTarget = this.findNearestTarget(attacker, attacker.getAttackRange());
+      // Use a larger radius for player attack search
+      const playerAttackSearchRadius = attacker.getAttackRange(); // Increased radius
+      finalTarget = this.findNearestTarget(attacker, playerAttackSearchRadius);
     }
 
     // If a target exists (either provided or found), execute the attack logic
@@ -55,15 +57,26 @@ export class CombatSystem {
           : finalTarget.position;
       attacker.lookAt(targetPosition);
 
-      // Execute the attack logic (damage, effects)
-      this.executeAttack(attacker, finalTarget);
+      // Check distance again after turning, ensure still within actual attack range
+      const distanceSq =
+        attacker.mesh!.position.distanceToSquared(targetPosition);
+      const attackRange = attacker.getAttackRange();
+      if (distanceSq <= attackRange * attackRange) {
+        // Execute the attack logic (damage, effects)
+        this.executeAttack(attacker, finalTarget);
+      } else {
+        // Target moved out of actual attack range after turning
+        console.log(
+          `${attacker.name} target moved out of attack range (${attackRange}m).`
+        );
+      }
     } else {
-      // Animation is already playing due to the call before target check.
+      // Animation is already playing (swinging at air).
     }
   }
 
   /**
-   * Finds the nearest valid attack target within range and view angle.
+   * Finds the nearest valid attack target within range. Angle check is removed.
    * @param attacker The entity searching for a target.
    * @param range The maximum attack range.
    * @returns The closest valid target (Entity or resource Object3D), or null.
@@ -72,7 +85,6 @@ export class CombatSystem {
     if (!attacker.mesh || !this.game.scene) return null;
 
     const attackerPosition = attacker.mesh.position;
-    const attackerDirection = attacker.mesh.getWorldDirection(new Vector3());
     const rangeSq = range * range;
     let closestTarget: Entity | Object3D | null = null;
     let minDistanceSq = rangeSq;
@@ -97,25 +109,15 @@ export class CombatSystem {
       const distanceSq = attackerPosition.distanceToSquared(targetPosition);
 
       if (distanceSq < minDistanceSq) {
-        // Check angle (optional, simple cone check)
-        const directionToTarget = targetPosition
-          .clone()
-          .sub(attackerPosition)
-          .normalize();
-        const angle = attackerDirection.angleTo(directionToTarget);
-
-        // Allow wider angle for player targeting? Adjust tolerance as needed.
-        const angleTolerance = Math.PI / 2.5; // Approx 72 degrees cone
-        if (angle < angleTolerance) {
-          // Optional: Line of sight check
-          // this.raycaster.set(attackerPosition.clone().add(new Vector3(0, attacker.userData.height * 0.5, 0)), directionToTarget);
-          // this.raycaster.far = Math.sqrt(distanceSq);
-          // const intersects = this.raycaster.intersectObjects(this.game.collidableObjects.filter(o => o !== attacker.mesh && o !== targetMesh), false);
-          // if (intersects.length === 0) { // No obstructions
-          minDistanceSq = distanceSq;
-          closestTarget = potentialTarget;
-          // }
-        }
+        // Angle check removed - player will turn via lookAt in initiateAttack
+        // Optional: Line of sight check could remain here if needed
+        // this.raycaster.set(attackerPosition.clone().add(new Vector3(0, attacker.userData.height * 0.5, 0)), directionToTarget);
+        // this.raycaster.far = Math.sqrt(distanceSq);
+        // const intersects = this.raycaster.intersectObjects(this.game.collidableObjects.filter(o => o !== attacker.mesh && o !== targetMesh), false);
+        // if (intersects.length === 0) { // No obstructions
+        minDistanceSq = distanceSq;
+        closestTarget = potentialTarget;
+        // }
       }
     }
 
