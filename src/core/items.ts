@@ -46,7 +46,7 @@ export interface ItemDefinition {
   id: string; // Unique identifier (e.g., 'wood', 'sword_basic')
   name: string; // Display name (e.g., 'Wood', 'Basic Sword')
   description: string;
-  icon: string; // Filename in assets/items/icons/ (e.g., 'wood.jpeg')
+  icon: string; // Filename in assets/items/icons/ (e.g., 'wood.png')
   type: ItemType;
   stackable: boolean;
   maxStack: number;
@@ -95,7 +95,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     id: "wood",
     name: "Wood",
     description: "A sturdy piece of wood, useful for crafting and building.",
-    icon: "wood.jpeg",
+    icon: "wood.png",
     type: ItemType.Resource,
     stackable: true,
     maxStack: 99,
@@ -105,7 +105,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     id: "stone",
     name: "Stone",
     description: "A common grey stone, good for building and tool making.",
-    icon: "stone.jpeg",
+    icon: "stone.png",
     type: ItemType.Resource,
     stackable: true,
     maxStack: 99,
@@ -116,7 +116,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     id: "herb",
     name: "Herb",
     description: "A fragrant herb with minor healing properties.",
-    icon: "herb.jpeg",
+    icon: "herb.png",
     type: ItemType.Consumable,
     stackable: true,
     maxStack: 99,
@@ -128,7 +128,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     name: "Meat",
     description:
       "Raw meat obtained from animals. Cooking might enhance its effects.",
-    icon: "meat.jpeg",
+    icon: "meat.png",
     type: ItemType.Consumable, // Could also be Resource if used in crafting
     stackable: true,
     maxStack: 99,
@@ -139,7 +139,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     id: "potion",
     name: "Health Potion",
     description: "A brewed potion that restores a moderate amount of health.",
-    icon: "potion.jpeg",
+    icon: "potion.png",
     type: ItemType.Consumable,
     stackable: true,
     maxStack: 99,
@@ -152,7 +152,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     name: "Axe",
     description:
       "A basic axe, effective for chopping wood and as a makeshift weapon. Favored by Farmers.",
-    icon: "axe.jpeg",
+    icon: "axe.png",
     type: ItemType.Tool,
     stackable: false,
     maxStack: 1,
@@ -166,7 +166,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     name: "Pickaxe",
     description:
       "A sturdy pickaxe, good for mining stone and breaking rocks. Favored by Blacksmiths.",
-    icon: "pickaxe.jpeg",
+    icon: "pickaxe.png",
     type: ItemType.Tool,
     stackable: false,
     maxStack: 1,
@@ -181,7 +181,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     name: "Sword",
     description:
       "A simple but reliable iron sword for combat. Favored by Hunters.",
-    icon: "sword.jpeg",
+    icon: "sword.png",
     type: ItemType.Weapon,
     stackable: false,
     maxStack: 1,
@@ -195,7 +195,7 @@ const itemDatabase: Record<string, AnyItemDefinition> = {
     id: "coin",
     name: "Coin",
     description: "A shiny gold coin. Used for trading.",
-    icon: "coin.jpeg",
+    icon: "coin.png",
     type: ItemType.Currency,
     stackable: true,
     maxStack: 9999, // Use a large number for stack limit

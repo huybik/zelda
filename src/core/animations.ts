@@ -769,14 +769,5 @@ export function createTreeFallAnimation(
     ])
   );
 
-  // Optional: Add slight downward movement if desired
-  // const posInitial = new Vector3().copy(treeGroup.position);
-  // const posFallen = posInitial.clone().add(new Vector3(0, -0.2, 0)); // Sink slightly
-  // tracks.push(new VectorKeyframeTrack('.position', times, [
-  //     ...posInitial.toArray(),
-  //     ...posFallen.toArray(),
-  //     ...posFallen.toArray()
-  // ]));
-
   return new AnimationClip("TreeFall_Generated", duration, tracks);
 }

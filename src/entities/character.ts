@@ -447,49 +447,34 @@ export class Character extends Entity {
   }
 
   /**
-   * Equips a weapon or tool.
+   * Equips a weapon or tool. Assumes the model is already loaded.
    * @param definition The definition of the weapon/tool to equip.
    */
-  async equipWeapon(definition: WeaponDefinition): Promise<void> {
-    if (this.isDead || !this.rightHandBone) {
+  equipWeapon(definition: WeaponDefinition): void {
+    if (this.isDead || !this.rightHandBone || !this.game) {
       console.warn(
-        `Cannot equip ${definition.name}: Character dead or no right hand bone.`
+        `Cannot equip ${definition.name}: Character dead, no right hand bone, or game not linked.`
       );
       return;
     }
 
     // Ensure the model is loaded (or load it)
     const modelKey = definition.modelFileName; // Use filename as key for simplicity
-    let weaponModelData = this.game?.models[modelKey];
-    if (!weaponModelData) {
-      try {
-        const modelPaths = {
-          [modelKey]: `assets/items/weapons/${definition.modelFileName}`,
-        };
-        const loadedModels = await loadModels(modelPaths);
-        if (this.game) this.game.models[modelKey] = loadedModels[modelKey];
-        weaponModelData = loadedModels[modelKey];
-      } catch (error) {
-        console.error(
-          `Failed to load weapon model ${definition.modelFileName}:`,
-          error
-        );
-        if (this.game) {
-          this.game.logEvent(
-            this,
-            "equip_fail",
-            `Failed to equip ${definition.name} (load error).`,
-            undefined,
-            { item: definition.name, error: (error as Error).message },
-            this.mesh!.position
-          );
-        }
-        return;
-      }
-    }
+    const weaponModelData = this.game.models[modelKey];
 
+    // Check if model data exists in the preloaded models
     if (!weaponModelData?.scene) {
-      console.error(`Weapon model data invalid for ${definition.name}`);
+      console.error(
+        `Weapon model data for ${definition.name} (key: ${modelKey}) not found or invalid in preloaded models. Cannot equip.`
+      );
+      this.game.logEvent(
+        this,
+        "equip_fail",
+        `Failed to equip ${definition.name} (model not loaded).`,
+        undefined,
+        { item: definition.name },
+        this.mesh!.position
+      );
       return;
     }
 
@@ -518,7 +503,7 @@ export class Character extends Entity {
       // --- Apply a standard base scale for all weapons ---
       // This ensures weapons have a consistent size relative to the hand,
       // regardless of the character model's original or adjusted scale.
-      weaponModel.scale.multiplyScalar(0.1); // Adjust this scalar as needed for desired weapon size
+      weaponModel.scale.multiplyScalar(0.15); // Adjust this scalar as needed for desired weapon size
 
       // Apply position adjustments per weapon type (relative to hand bone)
       // These offsets define the weapon's position relative to the hand bone's origin.
@@ -545,28 +530,24 @@ export class Character extends Entity {
       };
 
       console.log(`${this.name} equipped ${definition.name}.`);
-      if (this.game) {
-        this.game.logEvent(
-          this,
-          "equip",
-          `Equipped ${definition.name}.`,
-          undefined,
-          { item: definition.name },
-          this.mesh!.position
-        );
-      }
+      this.game.logEvent(
+        this,
+        "equip",
+        `Equipped ${definition.name}.`,
+        undefined,
+        { item: definition.name },
+        this.mesh!.position
+      );
     } catch (error) {
       console.error(`Error during weapon attach ${definition.name}:`, error);
-      if (this.game) {
-        this.game.logEvent(
-          this,
-          "equip_fail",
-          `Failed to equip ${definition.name} (attach error).`,
-          undefined,
-          { item: definition.name, error: (error as Error).message },
-          this.mesh!.position
-        );
-      }
+      this.game.logEvent(
+        this,
+        "equip_fail",
+        `Failed to equip ${definition.name} (attach error).`,
+        undefined,
+        { item: definition.name, error: (error as Error).message },
+        this.mesh!.position
+      );
     }
   }
 

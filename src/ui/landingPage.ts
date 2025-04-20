@@ -71,10 +71,14 @@ export class LandingPage {
     const langList = document.getElementById(
       "language-list"
     ) as HTMLUListElement;
-    const startButton = document.getElementById("start-game-button");
+    const startButton = document.getElementById(
+      "start-game-button"
+    ) as HTMLButtonElement;
     const gameContainer = document.getElementById("game-container");
     const uiContainer = document.getElementById("ui-container");
-    const loadingText = landingPage?.querySelector(".loading-text");
+    const loadingText = landingPage?.querySelector(
+      ".loading-text"
+    ) as HTMLElement;
     const professionSelector = document.getElementById(
       "profession-selector"
     ) as HTMLDivElement;
@@ -100,14 +104,11 @@ export class LandingPage {
       !startingWeaponIcon // Check for icon element
     ) {
       console.error("Landing page elements not found!");
-      this.game.isGameStarted = true;
-      gameContainer?.classList.remove("hidden");
-      uiContainer?.classList.remove("hidden");
+      // Don't automatically start game here if elements are missing
       return;
     }
 
-    // Pause the game while landing page is visible
-    this.game.setPauseState(true);
+    // Don't pause here, Game.init doesn't start the loop yet
 
     let selectedLanguageCode = savedLang || "en";
     let selectedProfession = savedProfession || Profession.Hunter; // Default to Hunter
@@ -237,7 +238,9 @@ export class LandingPage {
     langSearchInput.addEventListener("blur", () => hideLanguageList());
 
     // --- Start Button ---
-    startButton.onclick = () => {
+    startButton.onclick = async () => {
+      // Make onclick async
+      // 1. Save settings
       const playerName = nameInput.value.trim() || "Player";
       localStorage.setItem("playerName", playerName);
       localStorage.setItem("selectedLanguage", selectedLanguageCode);
@@ -245,33 +248,25 @@ export class LandingPage {
       this.game.language = selectedLanguageCode;
       this.game.playerProfession = selectedProfession; // Set profession in Game
 
-      if (this.game.activeCharacter) {
-        this.game.activeCharacter.name = playerName;
-        this.game.activeCharacter.profession = selectedProfession; // Set profession on Character
-        this.game.activeCharacter.updateNameDisplay(playerName);
-        this.game.giveStartingWeapon(); // Give weapon after character is ready
+      // 2. Update UI to loading state
+      loadingText.textContent = "Loading game world...";
+      loadingText.classList.remove("hidden"); // Ensure visible
+      startButton.disabled = true;
+      startButton.textContent = "Loading...";
+
+      // 3. Trigger core game initialization (which awaits models)
+      try {
+        await this.game.startGameCore();
+        // startGameCore now handles hiding the landing page
+      } catch (error) {
+        console.error("Error during core game initialization:", error);
+        loadingText.textContent = "Error starting game. Please refresh.";
+        startButton.disabled = false; // Re-enable button on error
+        startButton.textContent = "Start Game";
       }
-
-      landingPage.classList.add("hidden");
-      gameContainer.classList.remove("hidden");
-      uiContainer.classList.remove("hidden");
-
-      this.game.isGameStarted = true;
-
-      // Don't show initial quest banner
-      // const firstQuest = this.game.questManager.quests?.[0];
-      // if (firstQuest && this.game.uiManager) {
-      //     this.game.uiManager.showQuestCompletionBanner(firstQuest);
-      // } else {
-      // If no quests or uiManager not ready, just unpause
-      this.game.setPauseState(false);
-      // }
-
-      this.game.audioElement
-        ?.play()
-        .catch((e) => console.warn("Background music play failed:", e));
     };
 
-    loadingText.textContent = "Ready to start!";
+    loadingText.textContent = "Ready to start!"; // Initial ready text
+    loadingText.classList.remove("hidden"); // Ensure visible
   }
 }

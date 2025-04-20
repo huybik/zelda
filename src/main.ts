@@ -87,7 +87,6 @@ export class Game {
   collidableObjects: Object3D[] = [];
   interactableObjects: Array<any> = [];
   isPaused: boolean = false;
-  // Removed banner state, managed by UIManager now
   intentContainer: HTMLElement | null = null;
   particleEffects: Group[] = [];
   audioElement: HTMLAudioElement | null = null;
@@ -112,9 +111,11 @@ export class Game {
   private lastQuestCheckTime: number = 0;
   private questCheckInterval: number = 0.5;
 
-  // Removed banner elements and handlers, moved to UIManager
-
   public models!: Record<string, { scene: Group; animations: AnimationClip[] }>;
+  private modelsPromise: Promise<
+    Record<string, { scene: Group; animations: AnimationClip[] }>
+  > | null = null;
+  private isCoreGameInitialized: boolean = false;
 
   constructor() {
     this.questManager = new QuestManager(this);
@@ -123,6 +124,7 @@ export class Game {
   }
 
   async init(): Promise<void> {
+    // --- Phase 1: Immediate UI Setup ---
     this.clock = new Clock();
     this.initRenderer();
     this.initScene();
@@ -130,46 +132,105 @@ export class Game {
     this.initInventory();
     this.initAudio();
 
+    // --- Phase 2: Background Asset Loading ---
     const modelPaths = {
       player: "assets/player.glb",
       tavernMan: "assets/tavernman.glb",
       oldMan: "assets/oldman.glb",
       woman: "assets/woman.glb",
-      sword: "assets/items/weapons/sword.glb",
-      axe: "assets/items/weapons/axe.glb",
-      pickaxe: "assets/items/weapons/pickaxe.glb",
+      // Add weapon models here
+      "sword.glb": "assets/items/weapons/sword.glb",
+      "axe.glb": "assets/items/weapons/axe.glb",
+      "pickaxe.glb": "assets/items/weapons/pickaxe.glb",
     };
+    // Start loading models but don't await here
+    this.modelsPromise = loadModels(modelPaths);
+    this.modelsPromise
+      .then((models) => (this.models = models)) // Store models when ready
+      .catch((err) => console.error("Failed to load models:", err)); // Handle loading errors
 
-    this.models = await loadModels(modelPaths);
-
+    // --- Phase 3: Landing Page Setup ---
+    this.landingPage = new LandingPage(this);
     const savedName = localStorage.getItem("playerName");
     const savedLang = localStorage.getItem("selectedLanguage");
     const savedProfession = localStorage.getItem(
       "selectedProfession"
     ) as Profession | null;
     this.language = savedLang || "en";
-    this.playerProfession = savedProfession || Profession.Hunter;
+    this.playerProfession = savedProfession || Profession.Hunter; // Set default early
+    this.landingPage.setup(savedName, savedLang, savedProfession); // Show landing page UI
+
+    // --- Phase 4: Event Listeners ---
+    document.addEventListener(
+      "pointerlockchange",
+      this.handlePointerLockChange.bind(this)
+    );
+    document.addEventListener(
+      "visibilitychange",
+      this.boundHandleVisibilityChange
+    );
+    window.addEventListener("resize", this.onWindowResize.bind(this), false); // Add resize listener
+
+    // Don't start animation loop here
+    console.log(
+      "Game initialized. Waiting for user to start via landing page."
+    );
+  }
+
+  // Called by LandingPage when start button is clicked
+  async startGameCore(): Promise<void> {
+    if (this.isCoreGameInitialized) return; // Prevent double initialization
+
+    console.log("Starting core game initialization...");
+
+    // --- Phase 5: Wait for Assets & Initialize Game World ---
+    if (!this.modelsPromise) {
+      console.error("Models promise not initiated!");
+      // Handle error - maybe show message on landing page
+      return;
+    }
+    try {
+      this.models = await this.modelsPromise; // Ensure models are loaded
+      console.log("Models loaded.");
+    } catch (error) {
+      console.error("Failed to load models during core initialization:", error);
+      // Update landing page with error message
+      const loadingText = document.querySelector("#landing-page .loading-text");
+      if (loadingText)
+        loadingText.textContent = "Error loading assets. Please refresh.";
+      // Re-enable start button? Or just stop here.
+      document.getElementById("start-game-button")?.removeAttribute("disabled");
+      return;
+    }
+
+    // Initialize components that depend on models or player settings
+    const playerName = localStorage.getItem("playerName") || "Player"; // Get saved name again
+    this.initPlayer(this.models, playerName); // Player needs models
+
+    if (this.activeCharacter) {
+      this.activeCharacter.professions.add(this.playerProfession);
+      this.activeCharacter.profession = this.playerProfession;
+      this.activeCharacter.updateNameDisplay(playerName); // Update name display after setting it
+    } else {
+      console.error("Failed to initialize player character!");
+      // Handle error
+      return;
+    }
+
+    this.initControls(); // Controls need player
+    this.initMobileControls(); // Needs controls
+    this.initCameraAndControls(); // Needs player, camera, controls, mobile status
+    this.initPhysics(); // Needs player
+    this.initEnvironment(this.models); // Needs models, scene, inventory
+    this.initSystems(); // Needs player, camera, controls, inventory, scene, etc.
+    this.questManager.initQuests();
+    this.initUI(); // Needs player, inventory, scene, camera, systems
+    this.setupUIControls(); // Needs UI components
 
     const urlParams = new URLSearchParams(window.location.search);
     this.hasEnteredFromPortal = urlParams.get("portal") === "true";
     this.startPortalRefUrl = urlParams.get("ref");
     this.startPortalOriginalParams = urlParams;
-
-    this.initPlayer(this.models, savedName || "Player");
-    if (this.activeCharacter) {
-      this.activeCharacter.professions.add(this.playerProfession);
-      this.activeCharacter.profession = this.playerProfession;
-    }
-
-    this.initControls();
-    this.initMobileControls(); // Initialize mobile controls before camera
-    this.initCameraAndControls(); // Initialize camera after mobile controls status is known
-    this.initPhysics();
-    this.initEnvironment(this.models);
-    this.initSystems(); // Includes TradingSystem, DroppedItemManager, CombatSystem
-    this.questManager.initQuests();
-    this.initUI(); // Includes UIManager
-    this.setupUIControls();
     this.portalManager.initPortals(
       this.scene!,
       this.hasEnteredFromPortal,
@@ -208,22 +269,38 @@ export class Game {
       }
     });
 
-    // UIManager initialization moved to initUI
-    // Removed banner element finding here
+    // Give starting weapon *after* player is fully initialized
+    this.giveStartingWeapon();
 
-    this.landingPage = new LandingPage(this);
-    this.landingPage.setup(savedName, savedLang, savedProfession);
+    // --- Phase 6: Hide Landing Page & Start Game ---
+    const landingPage = document.getElementById("landing-page");
+    const gameContainer = document.getElementById("game-container");
+    const uiContainer = document.getElementById("ui-container");
 
-    document.addEventListener(
-      "pointerlockchange",
-      this.handlePointerLockChange.bind(this)
-    );
-    document.addEventListener(
-      "visibilitychange",
-      this.boundHandleVisibilityChange
-    );
+    landingPage?.classList.add("hidden");
+    gameContainer?.classList.remove("hidden");
+    uiContainer?.classList.remove("hidden");
 
+    this.isGameStarted = true;
+    this.isCoreGameInitialized = true; // Mark as initialized
+
+    // Show the first quest banner instead of welcome banner
+    const firstQuest = this.questManager.quests?.[0];
+    if (firstQuest && this.uiManager) {
+      this.uiManager.showQuestCompletionBanner(firstQuest);
+    } else {
+      // If no quests or uiManager not ready, just unpause
+      this.setPauseState(false); // Unpause the game
+    }
+
+    // Start music
+    this.audioElement
+      ?.play()
+      .catch((e) => console.warn("Background music play failed:", e));
+
+    // Start the animation loop
     this.renderer!.setAnimationLoop(this.update.bind(this));
+    console.log("Core game started.");
   }
 
   handlePointerLockChange(): void {
@@ -367,6 +444,8 @@ export class Game {
         );
         const weaponDef = getItemDefinition(startingWeaponId);
         if (weaponDef && isWeapon(weaponDef)) {
+          // Equip weapon using requestAnimationFrame to ensure model is ready
+          // and character is fully integrated into the scene graph.
           requestAnimationFrame(() => {
             this.activeCharacter?.equipWeapon(weaponDef);
           });
@@ -573,11 +652,6 @@ export class Game {
     return this.uiManager?.isUIPaused() ?? false;
   }
 
-  // Removed banner methods, now handled by UIManager
-  // showBanner, removeBannerListeners, hideQuestBanner,
-  // showQuestCompletionBanner, handleRewardSelection,
-  // showTradeNotification, handleTradeAccept, handleTradeDecline
-
   // Wrapper methods to call UIManager
   showQuestCompletionBanner(quest: Quest): void {
     this.uiManager?.showQuestCompletionBanner(quest);
@@ -620,9 +694,8 @@ export class Game {
   }
 
   start(): void {
-    console.log(
-      "Game initialized. Waiting for user to start via landing page."
-    );
+    // This method is no longer used to start the game loop
+    // The loop starts in startGameCore after initialization
   }
 
   handlePlayerAttackInput(): void {
