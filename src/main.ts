@@ -284,15 +284,6 @@ export class Game {
     this.isGameStarted = true;
     this.isCoreGameInitialized = true; // Mark as initialized
 
-    // Show the first quest banner instead of welcome banner
-    const firstQuest = this.questManager.quests?.[0];
-    if (firstQuest && this.uiManager) {
-      this.uiManager.showQuestCompletionBanner(firstQuest);
-    } else {
-      // If no quests or uiManager not ready, just unpause
-      this.setPauseState(false); // Unpause the game
-    }
-
     // Start music
     this.audioElement
       ?.play()
