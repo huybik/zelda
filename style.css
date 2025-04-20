@@ -630,6 +630,11 @@ li.quest-item-container {
   margin-bottom: 15px;
   padding-bottom: 10px;
   border-bottom: 1px solid #ccc;
+  cursor: pointer; /* Make whole container clickable */
+  transition: background-color 0.15s ease;
+}
+li.quest-item-container:hover {
+  background-color: rgba(0, 0, 0, 0.05); /* Subtle hover for container */
 }
 li.quest-item-container:last-child {
   border-bottom: none;
@@ -639,11 +644,12 @@ li.quest-item-container:last-child {
 
 .quest-title {
   font-weight: bold;
-  cursor: pointer;
+  /* cursor: pointer; */ /* Removed cursor from title */
   transition: color 0.15s ease;
   margin-bottom: 5px;
 }
-.quest-title:hover {
+/* Change title color when container is hovered */
+li.quest-item-container:hover .quest-title {
   color: #007bff;
 }
 
@@ -671,11 +677,14 @@ li.quest-completed .quest-title {
   font-style: italic;
   cursor: default;
 }
-li.quest-completed .quest-title:hover {
-  color: #555;
+li.quest-completed:hover .quest-title {
+  color: #555; /* Keep completed title color on hover */
 }
 li.quest-completed .quest-objective {
   color: #888;
+}
+li.quest-completed:hover {
+  background-color: transparent; /* No hover effect for completed quests */
 }
 
 /* --- Chat Interface --- */

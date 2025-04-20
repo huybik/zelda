@@ -45,12 +45,12 @@ export class JournalDisplay {
       if (quest.isCompleted) {
         questContainer.classList.add("quest-completed");
       }
+      questContainer.dataset.questId = quest.id; // Add ID for click handling
+      questContainer.addEventListener("click", () => this.onQuestClick(quest)); // Add click listener to container
 
       const questTitle = document.createElement("div");
       questTitle.textContent = `${quest.name} ${quest.isCompleted ? "(Completed)" : ""}`;
       questTitle.classList.add("quest-title");
-      questTitle.dataset.questId = quest.id; // Add ID for click handling
-      questTitle.addEventListener("click", () => this.onQuestClick(quest)); // Add click listener to title
 
       const objectivesList = document.createElement("ul");
       objectivesList.classList.add("quest-objectives-list");

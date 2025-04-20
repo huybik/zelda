@@ -258,14 +258,14 @@ export class LandingPage {
 
       this.game.isGameStarted = true;
 
-      // Show the first quest banner instead of welcome banner
-      const firstQuest = this.game.questManager.quests?.[0];
-      if (firstQuest && this.game.uiManager) {
-        this.game.uiManager.showQuestCompletionBanner(firstQuest);
-      } else {
-        // If no quests or uiManager not ready, just unpause
-        this.game.setPauseState(false);
-      }
+      // Don't show initial quest banner
+      // const firstQuest = this.game.questManager.quests?.[0];
+      // if (firstQuest && this.game.uiManager) {
+      //     this.game.uiManager.showQuestCompletionBanner(firstQuest);
+      // } else {
+      // If no quests or uiManager not ready, just unpause
+      this.game.setPauseState(false);
+      // }
 
       this.game.audioElement
         ?.play()
