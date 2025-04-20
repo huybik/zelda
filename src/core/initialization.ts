@@ -1,4 +1,4 @@
-/* File: /src/core/initialization.ts */
+/* File: src/core/initialization.ts */
 import * as THREE from "three";
 import {
   Scene,
@@ -246,6 +246,24 @@ export const initializeGame = {
         game.interactionSystem!.currentTarget !== game.activeCharacter
       ) {
         game.switchControlTo(game.interactionSystem!.currentTarget);
+      }
+    });
+
+    // Profiler Controls
+    game.controls.addKeyDownListener("KeyP", () => {
+      if (game.profiler) {
+        console.log(game.profiler.getReport());
+      }
+    });
+    game.controls.addKeyDownListener("KeyO", () => {
+      if (game.profiler) {
+        game.profiler.reset();
+      }
+    });
+    game.controls.addKeyDownListener("BracketLeft", () => {
+      // [ key
+      if (game.profiler) {
+        game.profiler.toggle();
       }
     });
   },

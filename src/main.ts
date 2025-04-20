@@ -1,4 +1,4 @@
-/* File: /src/main.ts */
+/* File: src/main.ts */
 import * as THREE from "three";
 import {
   Scene,
@@ -63,6 +63,7 @@ import { DroppedItemManager } from "./systems/droppedItemManager.ts";
 import { UIManager } from "./ui/uiManager.ts"; // Import UIManager
 import { initializeGame } from "./core/initialization.ts";
 import { runGameLoopStep } from "./core/gameLoop.ts";
+import { Profiler } from "./core/profiler.ts"; // Import Profiler
 
 export class Game {
   scene: Scene | null = null;
@@ -118,11 +119,13 @@ export class Game {
     Record<string, { scene: Group; animations: AnimationClip[] }>
   > | null = null;
   private isCoreGameInitialized: boolean = false;
+  public profiler: Profiler; // Add profiler instance
 
   constructor() {
     this.questManager = new QuestManager(this);
     this.portalManager = new PortalManager(this);
     this.boundHandleVisibilityChange = this.handleVisibilityChange.bind(this);
+    this.profiler = new Profiler(); // Instantiate the profiler
   }
 
   async init(): Promise<void> {
@@ -467,11 +470,15 @@ export class Game {
 
   handlePlayerAttackInput(): void {
     if (this.isPaused || !this.activeCharacter || !this.combatSystem) return;
+    this.profiler.start("handlePlayerAttackInput");
     this.combatSystem.initiateAttack(this.activeCharacter);
+    this.profiler.end("handlePlayerAttackInput");
   }
 
   update(): void {
-    runGameLoopStep(this); // Delegate update logic
+    this.profiler.start("Game.update");
+    runGameLoopStep(this, this.profiler); // Delegate update logic, pass profiler
+    this.profiler.end("Game.update");
   }
 
   checkRespawn(): void {

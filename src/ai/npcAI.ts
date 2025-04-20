@@ -20,7 +20,7 @@ export class AIController {
   destination: Vector3 | null = null;
   actionTimer: number = 5;
   interactionDistance: number = 3; // Distance for chat/trade
-  attackDistance: number = 3; // Distance for attacking entities/resources
+  attackDistance: number = 2; // Distance for attacking entities/resources
   followDistance: number = 5; // Desired distance when following
   stoppingDistance: number = 3; // Distance to stop when following/moving to target
   searchRadius: number;
