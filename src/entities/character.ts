@@ -58,6 +58,22 @@ import {
 } from "../core/items";
 import { loadModels } from "../core/assetLoader"; // Added weapon loader
 import { Animal } from "./animals";
+import {
+  switchAction as switchActionUtil,
+  transitionToLocomotion as transitionToLocomotionUtil,
+  playAttackAnimation as playAttackAnimationUtil,
+  updateAnimations as updateAnimationsUtil,
+} from "../components/animationUtils";
+import {
+  handleStamina as handleStaminaUtil,
+  handleMovement as handleMovementUtil,
+  applyMovement,
+} from "../components/movementUtils";
+import {
+  equipWeapon as equipWeaponUtil,
+  unequipWeapon as unequipWeaponUtil,
+  updateWeaponOrientation as updateWeaponOrientationUtil,
+} from "../components/equipmentUtils";
 
 export class Character extends Entity {
   maxStamina: number;
@@ -86,28 +102,18 @@ export class Character extends Entity {
   profession: Profession = Profession.None; // Keep primary for compatibility/display?
   currentAction?: AnimationAction;
   actionType: string = "none"; // "attack", "chat", "none"
-  isPerformingAction: boolean = false;
+  // isPerformingAction: boolean = false; // Inherited from Entity
   skeletonRoot: Object3D | null = null;
   aiController: AIController | null;
   respawnDelay: number = 40000; // 60 seconds respawn delay for NPCs
-  lastAttacker: Entity | null = null; // Track the last attacker
+  // lastAttacker: Entity | null = null; // Inherited from Entity
   bonusDamage: number = 0; // Flat bonus damage from upgrades
-  attackCooldown: number = 0.8; // Cooldown in seconds between attacks
-  lastAttackTime: number = -1; // Timestamp of the last attack start, init to allow first attack
+  // attackCooldown: number = 0.8; // Inherited from Entity
+  // lastAttackTime: number = -1; // Inherited from Entity
 
   // Item/Equipment related properties
   rightHandBone: Bone | null = null;
   equippedWeapon: EquippedItem | null = null; // Stores definition and model instance
-
-  // Helper quaternions for weapon orientation
-  private _charWorldQuat = new Quaternion();
-  private _handWorldQuat = new Quaternion();
-  private _targetLocalQuat = new Quaternion();
-  // Assumes weapon models point along +Z, rotate 180 deg around Y to face -Z (forward)
-  private _weaponRotationOffset = new Quaternion().setFromAxisAngle(
-    new Vector3(0, 0, 0),
-    Math.PI
-  );
 
   constructor(
     scene: Scene,
@@ -286,7 +292,7 @@ export class Character extends Entity {
     }
 
     if (this.idleAction) {
-      this.switchAction(this.idleAction);
+      switchActionUtil(this, this.idleAction);
     } else {
       console.error(`Character ${this.name} has no idle animation!`);
     }
@@ -301,7 +307,7 @@ export class Character extends Entity {
         this.isPerformingAction = false;
         this.actionType = "none";
         // Transition back to locomotion immediately after attack finishes
-        this.transitionToLocomotion();
+        transitionToLocomotionUtil(this, this.moveState);
       }
       // Death animation clamps, no transition needed
     });
@@ -446,134 +452,14 @@ export class Character extends Entity {
     }
   }
 
-  /**
-   * Equips a weapon or tool. Assumes the model is already loaded.
-   * @param definition The definition of the weapon/tool to equip.
-   */
+  /** Delegates equipping a weapon to the utility function. */
   equipWeapon(definition: WeaponDefinition): void {
-    if (this.isDead || !this.rightHandBone || !this.game) {
-      console.warn(
-        `Cannot equip ${definition.name}: Character dead, no right hand bone, or game not linked.`
-      );
-      return;
-    }
-
-    // Ensure the model is loaded (or load it)
-    const modelKey = definition.modelFileName; // Use filename as key for simplicity
-    const weaponModelData = this.game.models[modelKey];
-
-    // Check if model data exists in the preloaded models
-    if (!weaponModelData?.scene) {
-      console.error(
-        `Weapon model data for ${definition.name} (key: ${modelKey}) not found or invalid in preloaded models. Cannot equip.`
-      );
-      this.game.logEvent(
-        this,
-        "equip_fail",
-        `Failed to equip ${definition.name} (model not loaded).`,
-        undefined,
-        { item: definition.name },
-        this.mesh!.position
-      );
-      return;
-    }
-
-    // --- Start Equip Process ---
-    this.unequipWeapon(); // Unequip previous weapon first
-
-    try {
-      const weaponModel = weaponModelData.scene.clone();
-
-      // **Critical Reset:** Ensure clean state before applying transforms
-      weaponModel.position.set(0, 0, 0);
-      weaponModel.rotation.set(0, 0, 0);
-      weaponModel.scale.set(1, 1, 1); // Start with identity scale
-
-      // --- NEW: Counteract parent scale ---
-      const charWorldScale = new Vector3();
-      this.mesh!.getWorldScale(charWorldScale); // Get the character mesh's world scale
-      // Calculate inverse scale. Handle potential zero scale? (Unlikely but safe)
-      const invCharScale = new Vector3(
-        charWorldScale.x === 0 ? 1 : 1 / charWorldScale.x,
-        charWorldScale.y === 0 ? 1 : 1 / charWorldScale.y,
-        charWorldScale.z === 0 ? 1 : 1 / charWorldScale.z
-      );
-      weaponModel.scale.copy(invCharScale); // Apply inverse scale
-
-      // --- Apply a standard base scale for all weapons ---
-      // This ensures weapons have a consistent size relative to the hand,
-      // regardless of the character model's original or adjusted scale.
-      weaponModel.scale.multiplyScalar(0.15); // Adjust this scalar as needed for desired weapon size
-
-      // Apply position adjustments per weapon type (relative to hand bone)
-      // These offsets define the weapon's position relative to the hand bone's origin.
-      if (definition.id === "sword") {
-        weaponModel.position.set(0, 0.2, 0); // Offset along hand bone's Y-axis
-      } else if (definition.id === "axe") {
-        weaponModel.position.set(0, 0.25, 0);
-      } else if (definition.id === "pickaxe") {
-        weaponModel.position.set(0, 0.25, 0);
-      }
-      // Add more weapon types if needed
-
-      // Attach to the right hand bone
-      this.rightHandBone.add(weaponModel);
-
-      // Reset local rotation AFTER attaching (orientation handled in update)
-      weaponModel.rotation.set(0, 0, 0);
-
-      // Store equipped weapon data
-      this.equippedWeapon = {
-        definition: definition,
-        modelInstance: weaponModel,
-        attachedBone: this.rightHandBone,
-      };
-
-      console.log(`${this.name} equipped ${definition.name}.`);
-      this.game.logEvent(
-        this,
-        "equip",
-        `Equipped ${definition.name}.`,
-        undefined,
-        { item: definition.name },
-        this.mesh!.position
-      );
-    } catch (error) {
-      console.error(`Error during weapon attach ${definition.name}:`, error);
-      this.game.logEvent(
-        this,
-        "equip_fail",
-        `Failed to equip ${definition.name} (attach error).`,
-        undefined,
-        { item: definition.name, error: (error as Error).message },
-        this.mesh!.position
-      );
-    }
+    equipWeaponUtil(this, definition);
   }
 
-  /**
-   * Unequips the currently held weapon/tool.
-   */
+  /** Delegates unequipping a weapon to the utility function. */
   unequipWeapon(): void {
-    if (this.equippedWeapon && this.rightHandBone) {
-      this.rightHandBone.remove(this.equippedWeapon.modelInstance);
-      // Note: We don't dispose geometry/material here as the model might be cached by AssetLoader.
-      // AssetLoader should handle disposal if necessary, or manage clones appropriately.
-      console.log(
-        `${this.name} unequipped ${this.equippedWeapon.definition.name}.`
-      );
-      if (this.game) {
-        this.game.logEvent(
-          this,
-          "unequip",
-          `Unequipped ${this.equippedWeapon.definition.name}.`,
-          undefined,
-          { item: this.equippedWeapon.definition.name },
-          this.mesh!.position
-        );
-      }
-    }
-    this.equippedWeapon = null;
+    unequipWeaponUtil(this);
   }
 
   /**
@@ -642,55 +528,9 @@ export class Character extends Entity {
 
   // --- Core Update Logic ---
 
-  transitionToLocomotion(): void {
-    if (this.isDead) return;
-    const isMoving =
-      Math.abs(this.moveState.forward) > 0.1 ||
-      Math.abs(this.moveState.right) > 0.1;
-    let targetAction: AnimationAction | undefined;
-    if (isMoving) {
-      targetAction =
-        this.isSprinting && this.runAction ? this.runAction : this.walkAction;
-      // Fallback if preferred action is missing
-      if (!targetAction) targetAction = this.runAction || this.walkAction;
-    } else {
-      targetAction = this.idleAction;
-    }
-    // Ensure we always have a fallback to idle if other actions are missing
-    if (!targetAction && this.idleAction) {
-      targetAction = this.idleAction;
-    }
-    this.switchAction(targetAction);
-  }
-
-  switchAction(newAction: AnimationAction | undefined): void {
-    if (this.isDead && newAction !== this.deadAction) return;
-    if (!newAction || newAction === this.currentAction) {
-      // Ensure the action is playing if it's the current one
-      if (newAction && !newAction.isRunning()) newAction.play();
-      return;
-    }
-
-    const fadeDuration = 0.2;
-    if (this.currentAction) {
-      this.currentAction.fadeOut(fadeDuration);
-    }
-
-    newAction
-      .reset()
-      .setEffectiveTimeScale(1)
-      .setEffectiveWeight(1)
-      .fadeIn(fadeDuration)
-      .play();
-
-    this.currentAction = newAction;
-  }
-
+  /** Delegates playing the attack animation to the utility function. */
   playAttackAnimation(): void {
-    if (this.isDead || !this.attackAction) return;
-    this.actionType = "attack";
-    this.isPerformingAction = true;
-    this.switchAction(this.attackAction);
+    playAttackAnimationUtil(this);
   }
 
   getAttackDamage(): number {
@@ -727,112 +567,24 @@ export class Character extends Entity {
     return this.equippedWeapon ? 3.0 : 2.0;
   }
 
+  /** Delegates stamina handling to the utility function. */
   handleStamina(deltaTime: number): void {
-    if (this.isDead) return;
-    const isMoving = this.moveState.forward !== 0 || this.moveState.right !== 0;
-    this.isSprinting =
-      this.moveState.sprint &&
-      isMoving &&
-      !this.isExhausted &&
-      this.stamina > 0;
-    if (this.isSprinting) {
-      this.stamina -= this.staminaDrainRate * deltaTime;
-      if (this.stamina <= 0) {
-        this.stamina = 0;
-        this.isExhausted = true;
-        this.isSprinting = false;
-        if (this.game)
-          this.game.logEvent(
-            this,
-            "exhausted",
-            `${this.name} is exhausted!`,
-            undefined,
-            {},
-            this.mesh!.position
-          );
-      }
-    } else {
-      let regenRate = this.staminaRegenRate;
-      if (this.isExhausted) {
-        regenRate /= 2; // Slower regen when exhausted
-        if (this.stamina >= this.exhaustionThreshold) {
-          this.isExhausted = false;
-          if (this.game)
-            this.game.logEvent(
-              this,
-              "recovered",
-              `${this.name} feels recovered.`,
-              undefined,
-              {},
-              this.mesh!.position
-            );
-        }
-      }
-      this.stamina = Math.min(
-        this.maxStamina,
-        this.stamina + regenRate * deltaTime
-      );
-    }
+    handleStaminaUtil(this, deltaTime);
   }
 
+  /** Delegates movement calculation to the utility function. */
   handleMovement(deltaTime: number): void {
-    if (this.isDead || !this.mesh) return;
-    const forward = new Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
-    const right = new Vector3(1, 0, 0).applyQuaternion(this.mesh.quaternion);
-    const moveDirection = new Vector3(
-      this.moveState.right,
-      0,
-      this.moveState.forward
-    ).normalize();
-    const moveVelocity = new Vector3()
-      .addScaledVector(forward, moveDirection.z)
-      .addScaledVector(right, moveDirection.x);
-    const currentSpeed = this.isSprinting ? this.runSpeed : this.walkSpeed;
-    if (moveDirection.lengthSq() > 0) {
-      moveVelocity.normalize().multiplyScalar(currentSpeed);
-    }
-    this.velocity.x = moveVelocity.x;
-    this.velocity.z = moveVelocity.z;
+    handleMovementUtil(this, deltaTime);
   }
 
+  /** Delegates animation updates to the utility function. */
   updateAnimations(deltaTime: number): void {
-    this.mixer.update(deltaTime);
-
-    if (this.isDead) {
-      if (this.currentAction !== this.deadAction && this.deadAction) {
-        this.switchAction(this.deadAction);
-      }
-      return; // Don't update locomotion/action animations if dead
-    }
-
-    // Handle locomotion (idle/walk/run) if not doing a specific action
-    if (!this.isPerformingAction) {
-      this.transitionToLocomotion();
-    }
+    updateAnimationsUtil(this, deltaTime);
   }
 
+  /** Delegates weapon orientation updates to the utility function. */
   updateWeaponOrientation(): void {
-    if (this.equippedWeapon && this.rightHandBone && this.mesh) {
-      const weaponModel = this.equippedWeapon.modelInstance;
-      const handBone = this.rightHandBone;
-
-      // Get current world quaternions (ensure matrices are updated if needed,
-      // but typically handled by renderer before frame)
-      this.mesh.getWorldQuaternion(this._charWorldQuat);
-      handBone.getWorldQuaternion(this._handWorldQuat);
-
-      // Calculate the desired local rotation: inv(HandWorld) * CharWorld
-      this._targetLocalQuat
-        .copy(this._handWorldQuat)
-        .invert()
-        .multiply(this._charWorldQuat);
-
-      // Apply offset if weapon model points along +Z instead of -Z (character forward)
-      this._targetLocalQuat.multiply(this._weaponRotationOffset);
-
-      // Apply the calculated local rotation to the weapon model
-      weaponModel.quaternion.copy(this._targetLocalQuat);
-    }
+    updateWeaponOrientationUtil(this);
   }
 
   update(deltaTime: number, options: UpdateOptions = {}): void {
@@ -858,22 +610,8 @@ export class Character extends Entity {
       this.velocity.z = 0;
     }
 
-    // Apply velocity to position
-    if (this.mesh) {
-      this.mesh.position.x += this.velocity.x * deltaTime;
-      this.mesh.position.z += this.velocity.z * deltaTime;
-
-      // Ground clamping
-      if (this.scene) {
-        const groundY = getTerrainHeight(
-          this.scene,
-          this.mesh.position.x,
-          this.mesh.position.z
-        );
-        this.mesh.position.y = groundY; // Simple clamp for now
-      }
-      this.velocity.y = 0; // Reset vertical velocity after clamping
-    }
+    // Apply velocity to position and handle ground clamping
+    applyMovement(this, deltaTime);
 
     // Attack input is handled in main.ts -> combatSystem for player
     // AI attack initiation is handled in aiController -> combatSystem
@@ -930,7 +668,7 @@ export class Character extends Entity {
 
     // Play death animation
     if (this.deadAction) {
-      this.switchAction(this.deadAction);
+      switchActionUtil(this, this.deadAction);
     } else {
       // Fallback if no death animation
       this.mesh?.rotateX(Math.PI / 2);
@@ -1012,7 +750,7 @@ export class Character extends Entity {
     // Reset animations
     this.mixer.stopAllAction();
     if (this.idleAction) {
-      this.switchAction(this.idleAction);
+      switchActionUtil(this, this.idleAction);
     } else {
       console.error(`Character ${this.name} cannot respawn to idle animation!`);
     }

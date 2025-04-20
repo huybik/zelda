@@ -61,6 +61,8 @@ import {
 } from "./core/items";
 import { DroppedItemManager } from "./systems/droppedItemManager.ts";
 import { UIManager } from "./ui/uiManager.ts"; // Import UIManager
+import { initializeGame } from "./core/initialization.ts";
+import { runGameLoopStep } from "./core/gameLoop.ts";
 
 export class Game {
   scene: Scene | null = null;
@@ -106,10 +108,10 @@ export class Game {
   public wolfKillCount: number = 0;
   public characterSwitchingEnabled: boolean = false;
 
-  private lastAiUpdateTime: number = 0;
-  private aiUpdateInterval: number = 0.2;
-  private lastQuestCheckTime: number = 0;
-  private questCheckInterval: number = 0.5;
+  public lastAiUpdateTime: number = 0; // Made public for gameLoop
+  public aiUpdateInterval: number = 0.2; // Made public for gameLoop
+  public lastQuestCheckTime: number = 0; // Made public for gameLoop
+  public questCheckInterval: number = 0.5; // Made public for gameLoop
 
   public models!: Record<string, { scene: Group; animations: AnimationClip[] }>;
   private modelsPromise: Promise<
@@ -126,11 +128,11 @@ export class Game {
   async init(): Promise<void> {
     // --- Phase 1: Immediate UI Setup ---
     this.clock = new Clock();
-    this.initRenderer();
-    this.initScene();
-    this.initCamera();
-    this.initInventory();
-    this.initAudio();
+    this.renderer = initializeGame.initRenderer(); // Use initializer
+    this.scene = initializeGame.initScene(this); // Use initializer
+    this.camera = initializeGame.initCamera(); // Use initializer
+    this.inventory = initializeGame.initInventory(); // Use initializer
+    this.audioElement = initializeGame.initAudio(); // Use initializer
 
     // --- Phase 2: Background Asset Loading ---
     const modelPaths = {
@@ -205,7 +207,7 @@ export class Game {
 
     // Initialize components that depend on models or player settings
     const playerName = localStorage.getItem("playerName") || "Player"; // Get saved name again
-    this.initPlayer(this.models, playerName); // Player needs models
+    this.activeCharacter = initializeGame.initPlayer(this, playerName); // Use initializer
 
     if (this.activeCharacter) {
       this.activeCharacter.professions.add(this.playerProfession);
@@ -217,15 +219,15 @@ export class Game {
       return;
     }
 
-    this.initControls(); // Controls need player
-    this.initMobileControls(); // Needs controls
-    this.initCameraAndControls(); // Needs player, camera, controls, mobile status
-    this.initPhysics(); // Needs player
-    this.initEnvironment(this.models); // Needs models, scene, inventory
-    this.initSystems(); // Needs player, camera, controls, inventory, scene, etc.
+    this.controls = initializeGame.initControls(this); // Use initializer
+    this.mobileControls = initializeGame.initMobileControls(this); // Use initializer
+    this.thirdPersonCamera = initializeGame.initCameraAndControls(this); // Use initializer
+    this.physics = initializeGame.initPhysics(this); // Use initializer
+    initializeGame.initEnvironment(this); // Use initializer
+    initializeGame.initSystems(this); // Use initializer
     this.questManager.initQuests();
-    this.initUI(); // Needs player, inventory, scene, camera, systems
-    this.setupUIControls(); // Needs UI components
+    initializeGame.initUI(this); // Use initializer
+    initializeGame.setupUIControls(this); // Use initializer
 
     const urlParams = new URLSearchParams(window.location.search);
     this.hasEnteredFromPortal = urlParams.get("portal") === "true";
@@ -339,87 +341,6 @@ export class Game {
     }
   }
 
-  initRenderer(): void {
-    this.renderer = new WebGLRenderer({
-      antialias: true,
-      powerPreference: "high-performance",
-    });
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = PCFSoftShadowMap;
-    document
-      .getElementById("game-container")
-      ?.appendChild(this.renderer.domElement);
-    this.intentContainer = document.getElementById("intent-container");
-  }
-
-  initScene(): void {
-    this.scene = new Scene();
-    this.scene.background = new Color(0x87ceeb);
-    this.scene.fog = new Fog(0x87ceeb, 15, 50);
-    setupLighting(this.scene);
-    const terrain = createTerrain(WORLD_SIZE, TERRAIN_SEGMENTS);
-    this.scene.add(terrain);
-    this.collidableObjects.push(terrain);
-    createWorldBoundary(this.scene, WORLD_SIZE, this.collidableObjects);
-  }
-
-  initCamera(): void {
-    this.camera = new PerspectiveCamera(
-      75,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      2000
-    );
-  }
-
-  initInventory(): void {
-    this.inventory = new Inventory(20);
-  }
-
-  initAudio(): void {
-    this.audioElement = new Audio("assets/background.mp3");
-    this.audioElement.loop = true;
-    this.audioElement.volume = 0.3;
-  }
-
-  initPlayer(
-    models: Record<string, { scene: Group; animations: AnimationClip[] }>,
-    playerName: string
-  ): void {
-    let playerSpawnPos = new Vector3(0, 0, 5);
-    if (this.hasEnteredFromPortal) playerSpawnPos = new Vector3(0, 0, 15);
-    playerSpawnPos.y = getTerrainHeight(
-      this.scene!,
-      playerSpawnPos.x,
-      playerSpawnPos.z
-    );
-
-    const playerModelData = models.player;
-    if (!playerModelData) throw new Error("Player model not loaded!");
-
-    this.activeCharacter = new Character(
-      this.scene!,
-      playerSpawnPos,
-      playerName,
-      playerModelData.scene,
-      playerModelData.animations,
-      this.inventory!
-    );
-    this.activeCharacter.userData.isPlayer = true;
-    this.activeCharacter.userData.isInteractable = true;
-    this.activeCharacter.userData.isNPC = false;
-    if (this.activeCharacter.aiController)
-      this.activeCharacter.aiController = null;
-
-    // Add starting gold
-
-    this.entities.push(this.activeCharacter);
-    this.collidableObjects.push(this.activeCharacter.mesh!);
-    this.interactableObjects.push(this.activeCharacter);
-  }
-
   giveStartingWeapon(): void {
     if (!this.activeCharacter || !this.activeCharacter.inventory) return;
 
@@ -448,146 +369,6 @@ export class Game {
       }
     }
     this.activeCharacter.inventory?.addItem("coin", 10);
-  }
-
-  initControls(): void {
-    if (!this.activeCharacter || !this.renderer)
-      throw new Error("Cannot init controls: Core components missing.");
-    // Camera initialization moved to initCameraAndControls
-    this.controls = new Controls(
-      this.activeCharacter,
-      null, // Camera controller passed later
-      this.renderer.domElement,
-      this
-    );
-  }
-
-  initMobileControls(): void {
-    if (!this.controls)
-      throw new Error("Cannot init mobile controls: Base controls missing.");
-    this.mobileControls = new MobileControls(this, this.controls);
-  }
-
-  // New method to initialize camera and link controls after mobile status is known
-  initCameraAndControls(): void {
-    if (!this.activeCharacter || !this.camera || !this.controls)
-      throw new Error("Cannot init camera/controls: Core components missing.");
-
-    const isMobileActive = this.mobileControls?.isActive() ?? false;
-    this.thirdPersonCamera = new ThirdPersonCamera(
-      this.camera,
-      this.activeCharacter.mesh!,
-      isMobileActive, // Pass mobile status
-      this // Pass Game instance
-    );
-    this.controls.cameraController = this.thirdPersonCamera; // Link camera to controls
-  }
-
-  initPhysics(): void {
-    if (!this.activeCharacter)
-      throw new Error("Cannot init physics: Player character missing.");
-    this.physics = new Physics(this.activeCharacter, this.collidableObjects);
-  }
-
-  initEnvironment(
-    models: Record<string, { scene: Group; animations: AnimationClip[] }>
-  ): void {
-    if (!this.scene || !this.inventory)
-      throw new Error("Cannot init environment: Scene or Inventory missing.");
-    populateEnvironment(
-      this.scene,
-      WORLD_SIZE,
-      this.collidableObjects,
-      this.interactableObjects,
-      this.entities,
-      this.inventory,
-      models,
-      this
-    );
-  }
-
-  initSystems(): void {
-    if (
-      !this.activeCharacter ||
-      !this.camera ||
-      !this.controls ||
-      !this.inventory ||
-      !this.scene
-    )
-      throw new Error("Cannot init systems: Core components missing.");
-
-    this.droppedItemManager = new DroppedItemManager(this);
-    this.combatSystem = new CombatSystem(this);
-    this.interactionSystem = new InteractionSystem(
-      this.activeCharacter,
-      this.camera,
-      this.interactableObjects,
-      this.controls,
-      this.inventory,
-      this.activeCharacter.eventLog,
-      this,
-      this.droppedItemManager
-    );
-    this.tradingSystem = new TradingSystem(this);
-  }
-
-  initUI(): void {
-    if (!this.activeCharacter || !this.inventory || !this.scene || !this.camera)
-      throw new Error("Cannot init UI: Core components missing.");
-    this.hud = new HUD(this.activeCharacter);
-    this.minimap = new Minimap(
-      document.getElementById("minimap-canvas") as HTMLCanvasElement,
-      this.activeCharacter,
-      this.entities,
-      WORLD_SIZE
-    );
-    this.inventoryDisplay = new InventoryDisplay(this.inventory, this);
-    this.journalDisplay = new JournalDisplay(
-      this.activeCharacter.eventLog,
-      this
-    );
-    this.notificationManager = new NotificationManager(
-      this.scene,
-      this.camera,
-      document.getElementById("ui-container")!
-    );
-    this.uiManager = new UIManager(this); // Initialize UIManager
-    this.uiManager.init(); // Call UIManager's init to get elements
-  }
-
-  setupUIControls(): void {
-    if (
-      !this.controls ||
-      !this.inventoryDisplay ||
-      !this.journalDisplay ||
-      !this.interactionSystem ||
-      !this.uiManager // Check for uiManager
-    )
-      return;
-
-    this.controls.addKeyDownListener("KeyI", () => {
-      if (this.interactionSystem?.isChatOpen || this.uiManager?.isBannerVisible)
-        return;
-      this.journalDisplay!.hide();
-      this.inventoryDisplay!.toggle();
-      this.setPauseState(this.inventoryDisplay!.isOpen);
-    });
-    this.controls.addKeyDownListener("KeyJ", () => {
-      if (this.interactionSystem?.isChatOpen || this.uiManager?.isBannerVisible)
-        return;
-      this.inventoryDisplay!.hide();
-      this.journalDisplay!.toggle();
-      // Pause state handled by journalDisplay
-    });
-    this.controls.addKeyDownListener("KeyC", () => {
-      if (this.isPaused || !this.characterSwitchingEnabled) return;
-      if (
-        this.interactionSystem!.currentTarget instanceof Character &&
-        this.interactionSystem!.currentTarget !== this.activeCharacter
-      ) {
-        this.switchControlTo(this.interactionSystem!.currentTarget);
-      }
-    });
   }
 
   setPauseState(paused: boolean): void {
@@ -684,137 +465,13 @@ export class Game {
     return this.uiManager?.currentBannerType ?? "none";
   }
 
-  start(): void {
-    // This method is no longer used to start the game loop
-    // The loop starts in startGameCore after initialization
-  }
-
   handlePlayerAttackInput(): void {
     if (this.isPaused || !this.activeCharacter || !this.combatSystem) return;
     this.combatSystem.initiateAttack(this.activeCharacter);
   }
 
   update(): void {
-    if (
-      !this.clock ||
-      !this.renderer ||
-      !this.scene ||
-      !this.camera ||
-      !this.activeCharacter ||
-      !this.isGameStarted
-    )
-      return;
-
-    const deltaTime = Math.min(this.clock.getDelta(), 0.05);
-    const elapsedTime = this.clock.elapsedTime;
-
-    this.controls!.update(deltaTime);
-    this.mobileControls?.update(deltaTime);
-
-    if (!this.isPaused) {
-      const currentTime = this.clock.elapsedTime;
-      const timeSinceLastAiUpdate = currentTime - this.lastAiUpdateTime;
-      const shouldUpdateAiLogic =
-        timeSinceLastAiUpdate >= this.aiUpdateInterval;
-
-      if (shouldUpdateAiLogic) {
-        this.lastAiUpdateTime = currentTime;
-      }
-
-      if (this.controls?.moveState.attack || this.mobileControls?.attackHeld) {
-        this.handlePlayerAttackInput();
-      }
-
-      this.activeCharacter.update(deltaTime, {
-        moveState: this.controls!.moveState,
-        collidables: this.collidableObjects,
-      });
-
-      this.physics!.update(deltaTime);
-
-      this.entities.forEach((entity) => {
-        if (entity === this.activeCharacter) return;
-
-        if (
-          entity instanceof Character &&
-          entity.aiController instanceof AIController
-        ) {
-          if (shouldUpdateAiLogic) {
-            entity.moveState = entity.aiController.computeAIMoveState(
-              timeSinceLastAiUpdate
-            );
-          }
-          entity.update(deltaTime, {
-            moveState: entity.moveState,
-            collidables: this.collidableObjects,
-          });
-        } else if (
-          entity instanceof Animal &&
-          entity.aiController instanceof AnimalAIController
-        ) {
-          if (shouldUpdateAiLogic) {
-            entity.aiController.updateLogic(timeSinceLastAiUpdate);
-          }
-          entity.update(deltaTime, { collidables: this.collidableObjects });
-        } else if (
-          entity instanceof Group &&
-          entity.userData?.mixer &&
-          entity.userData?.isFalling
-        ) {
-          entity.userData.mixer.update(deltaTime);
-          if (
-            !entity.userData.fallAction.isRunning() &&
-            entity.userData.isFalling
-          ) {
-            entity.userData.isFalling = false;
-            entity.visible = false;
-            entity.userData.isCollidable = false;
-            entity.userData.isInteractable = false;
-            const respawnTime = entity.userData.respawnTime || 20000;
-            const maxHealth = entity.userData.maxHealth;
-            setTimeout(() => {
-              if (entity && entity.userData) {
-                entity.visible = true;
-                entity.userData.isCollidable = true;
-                entity.userData.isInteractable = true;
-                entity.userData.health = maxHealth;
-                entity.rotation.set(0, 0, 0);
-                entity.quaternion.set(0, 0, 0, 1);
-              }
-            }, respawnTime);
-          }
-        } else if (
-          entity.update &&
-          !(entity instanceof Character) &&
-          !(entity instanceof Animal) &&
-          !(entity instanceof Group && entity.userData?.mixer)
-        ) {
-          entity.update(deltaTime);
-        }
-      });
-
-      this.combatSystem?.update(deltaTime);
-      this.interactionSystem!.update(deltaTime);
-      this.thirdPersonCamera!.update(deltaTime, this.collidableObjects);
-      this.portalManager.animatePortals();
-      this.portalManager.checkPortalCollisions();
-      updateParticleEffects(this, elapsedTime);
-      this.droppedItemManager?.update(deltaTime);
-      this.checkRespawn();
-
-      if (currentTime - this.lastQuestCheckTime > this.questCheckInterval) {
-        this.questManager.checkAllQuestsCompletion();
-        this.lastQuestCheckTime = currentTime;
-      }
-
-      if (this.activeCharacter.isDead) this.respawnPlayer();
-    }
-
-    this.hud!.update();
-    this.minimap!.update();
-    this.notificationManager?.update(deltaTime);
-
-    this.renderer.render(this.scene, this.camera);
+    runGameLoopStep(this); // Delegate update logic
   }
 
   checkRespawn(): void {

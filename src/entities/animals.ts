@@ -34,6 +34,16 @@ import {
   createAnimalAttackAnimation,
   createAnimalDieAnimation,
 } from "../core/animalAnimations"; // Import animal animation generation functions
+import {
+  switchAction,
+  transitionToLocomotion,
+  playAttackAnimation as playAttackAnimationUtil,
+  updateAnimations as updateAnimationsUtil,
+} from "../components/animationUtils";
+import {
+  handleMovement as handleMovementUtil,
+  applyMovement,
+} from "../components/movementUtils";
 
 export class Animal extends Entity {
   animalType: string;
@@ -45,7 +55,7 @@ export class Animal extends Entity {
   walkAction?: AnimationAction;
   runAction?: AnimationAction;
   attackAction?: AnimationAction;
-  dieAction?: AnimationAction;
+  dieAction?: AnimationAction; // Renamed from deadAction for consistency
   attackTriggered: boolean = false;
   currentAction?: AnimationAction;
   actionType: string = "none";
@@ -56,6 +66,11 @@ export class Animal extends Entity {
   // lastAttacker: Entity | null = null; // Inherited from Entity
   // attackCooldown: number = 1.5; // Inherited from Entity
   // lastAttackTime: number = 0; // Inherited from Entity
+
+  // Make deadAction an alias for dieAction for compatibility with animationUtils
+  get deadAction(): AnimationAction | undefined {
+    return this.dieAction;
+  }
 
   constructor(
     scene: Scene,
@@ -226,7 +241,7 @@ export class Animal extends Entity {
     }
 
     if (this.idleAction) {
-      this.switchAction(this.idleAction);
+      switchAction(this, this.idleAction);
     } else {
       console.error(`Animal ${this.name} has no idle animation!`);
     }
@@ -241,7 +256,7 @@ export class Animal extends Entity {
         this.isPerformingAction = false;
         this.actionType = "none";
         // Transition back to locomotion immediately after attack finishes
-        this.transitionToLocomotion();
+        transitionToLocomotion(this, this.moveState);
       }
       // Death animation clamps, no transition needed
     });
@@ -254,67 +269,9 @@ export class Animal extends Entity {
     this.initNameDisplay();
   }
 
-  // Helper to transition from an action back to idle/walk/run
-  transitionToLocomotion(): void {
-    if (this.isDead) return;
-    const isMoving =
-      Math.abs(this.moveState.forward) > 0.1 ||
-      Math.abs(this.moveState.right) > 0.1;
-    let targetAction: AnimationAction | undefined;
-
-    if (isMoving) {
-      // Use run animation if sprinting (or if animals always run)
-      targetAction =
-        this.moveState.sprint && this.runAction
-          ? this.runAction
-          : this.walkAction;
-      // Fallback if run/walk is missing
-      if (!targetAction) targetAction = this.runAction || this.walkAction;
-    } else {
-      targetAction = this.idleAction;
-    }
-
-    // Ensure we have a valid action to switch to
-    if (!targetAction && this.idleAction) {
-      targetAction = this.idleAction;
-    }
-
-    this.switchAction(targetAction);
-  }
-
-  switchAction(newAction: AnimationAction | undefined): void {
-    if (this.isDead && newAction !== this.dieAction) return;
-    if (!newAction) return;
-
-    if (newAction === this.currentAction) {
-      if (!newAction.isRunning()) newAction.play();
-      return;
-    }
-
-    const fadeDuration = 0.2;
-    if (this.currentAction) {
-      if (this.currentAction.loop === LoopRepeat) {
-        this.currentAction.fadeOut(fadeDuration);
-      } else {
-        this.currentAction.fadeOut(fadeDuration);
-      }
-    }
-
-    newAction
-      .reset()
-      .setEffectiveTimeScale(1)
-      .setEffectiveWeight(1)
-      .fadeIn(fadeDuration)
-      .play();
-
-    this.currentAction = newAction;
-  }
-
+  // Delegate animation switching
   playAttackAnimation(): void {
-    if (this.isDead || !this.attackAction) return;
-    this.actionType = "attack";
-    this.isPerformingAction = true;
-    this.switchAction(this.attackAction);
+    playAttackAnimationUtil(this);
   }
 
   getAttackDamage(): number {
@@ -325,57 +282,14 @@ export class Animal extends Entity {
     return this.aiController?.attackRange ?? 2.0;
   }
 
+  // Delegate movement calculation
   handleMovement(deltaTime: number): void {
-    if (this.isDead || !this.mesh) return;
-
-    // Get the move state computed by the AI controller
-    // Note: The AI controller's logic update is throttled,
-    // but movement calculation happens every frame based on the *last computed* state.
-    const currentMoveState =
-      this.aiController?.computeAIMovement() ?? this.moveState;
-
-    const forward = new Vector3(0, 0, 1).applyQuaternion(this.mesh!.quaternion);
-    const moveDirection = new Vector3(
-      0,
-      0,
-      currentMoveState.forward
-    ).normalize(); // Only forward/backward based on AI
-    const moveVelocity = new Vector3();
-
-    if (moveDirection.lengthSq() > 0) {
-      const currentSpeed = currentMoveState.sprint
-        ? this.runSpeed
-        : this.walkSpeed;
-      moveVelocity.addScaledVector(forward, moveDirection.z * currentSpeed);
-    }
-
-    this.velocity.x = moveVelocity.x;
-    this.velocity.z = moveVelocity.z;
-
-    // Update the internal moveState for animation purposes if needed,
-    // or rely directly on the computed state for animations.
-    // Let's update the internal state for consistency with animation logic.
-    this.moveState = currentMoveState;
+    handleMovementUtil(this, deltaTime);
   }
 
+  // Delegate animation updates
   updateAnimations(deltaTime: number): void {
-    this.mixer.update(deltaTime);
-
-    if (this.isDead) {
-      if (this.currentAction !== this.dieAction && this.dieAction) {
-        this.switchAction(this.dieAction);
-      }
-      return;
-    }
-
-    // If performing an attack, let the animation play out (handled by 'finished' listener)
-    if (this.isPerformingAction && this.actionType === "attack") {
-      // Do nothing here, wait for animation to finish
-    }
-    // Otherwise, handle locomotion (idle/walk/run)
-    else {
-      this.transitionToLocomotion(); // Uses this.moveState to decide animation
-    }
+    updateAnimationsUtil(this, deltaTime);
   }
 
   // Main update loop for the animal
@@ -400,29 +314,8 @@ export class Animal extends Entity {
       this.velocity.z = 0;
     }
 
-    // Apply velocity to position
-    if (this.mesh) {
-      this.mesh.position.x += this.velocity.x * deltaTime;
-      this.mesh.position.z += this.velocity.z * deltaTime;
-
-      // Ground clamping
-      if (this.scene) {
-        const groundY = getTerrainHeight(
-          this.scene,
-          this.mesh.position.x,
-          this.mesh.position.z
-        );
-        // Smoothly adjust height to avoid jittering on slopes
-        const lerpFactor = 1 - Math.pow(0.1, deltaTime); // Adjust 0.1 for faster/slower smoothing
-        this.mesh.position.y = MathUtils.lerp(
-          this.mesh.position.y,
-          groundY,
-          lerpFactor
-        );
-        // this.mesh.position.y = groundY; // Simple ground clamp
-      }
-    }
-    this.velocity.y = 0; // Reset vertical velocity after clamping/lerping
+    // Apply velocity to position and handle ground clamping
+    applyMovement(this, deltaTime);
 
     // Update animations based on the current move state (set in handleMovement)
     this.updateAnimations(deltaTime);
@@ -448,7 +341,7 @@ export class Animal extends Entity {
 
     // Play death animation
     if (this.dieAction) {
-      this.switchAction(this.dieAction);
+      switchAction(this, this.dieAction);
     } else {
       // Fallback: Rotate model onto side
       this.mesh?.rotateX(Math.PI / 2);
@@ -529,7 +422,7 @@ export class Animal extends Entity {
     // Reset animations
     this.mixer.stopAllAction();
     if (this.idleAction) {
-      this.switchAction(this.idleAction);
+      switchAction(this, this.idleAction);
     } else {
       console.error(`Animal ${this.name} cannot respawn to idle animation!`);
     }
