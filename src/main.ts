@@ -113,6 +113,8 @@ export class Game {
   public aiUpdateInterval: number = 0.2; // Made public for gameLoop
   public lastQuestCheckTime: number = 0; // Made public for gameLoop
   public questCheckInterval: number = 0.5; // Made public for gameLoop
+  private lastUpdateTime: number = 0;
+  private targetFrameTime: number = 1000 / 42; // ~23.8 ms for 42 FPS
 
   public models!: Record<string, { scene: Group; animations: AnimationClip[] }>;
   private modelsPromise: Promise<
@@ -476,9 +478,14 @@ export class Game {
   }
 
   update(): void {
-    this.profiler.start("Game.update");
-    runGameLoopStep(this, this.profiler); // Delegate update logic, pass profiler
-    this.profiler.end("Game.update");
+    const currentTime = performance.now();
+    const elapsed = currentTime - this.lastUpdateTime;
+    if (elapsed >= this.targetFrameTime) {
+      this.profiler.start("Game.update");
+      runGameLoopStep(this, this.profiler);
+      this.profiler.end("Game.update");
+      this.lastUpdateTime = currentTime;
+    }
   }
 
   checkRespawn(): void {
