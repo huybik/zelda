@@ -1,4 +1,4 @@
-// File: /src/ui/minimap.ts
+/* File: /src/ui/minimap.ts */
 import { Character } from "../entities/character";
 import { Animal } from "../entities/animals"; // Import Animal
 import { Object3D, Vector3, Group } from "three";
@@ -89,6 +89,15 @@ export class Minimap {
           : null;
       if (!mesh || !(mesh instanceof Object3D) || !mesh.parent || !mesh.visible)
         return;
+
+      // Optimization: Skip drawing static resources like trees and rocks
+      if (
+        mesh.userData?.resource === "wood" ||
+        mesh.userData?.resource === "stone"
+      ) {
+        return;
+      }
+
       mesh.getWorldPosition(this.entityPosition);
       const entityMapX = this.worldToMapX(this.entityPosition.x);
       const entityMapZ = this.worldToMapZ(this.entityPosition.z);
@@ -103,20 +112,11 @@ export class Minimap {
         size += 1;
         draw = true;
       } else if (entity.userData?.resource) {
-        switch (entity.userData.resource) {
-          case "wood":
-            color = "saddlebrown";
-            return; // skip drawing wood
-          case "stone":
-            color = "darkgray";
-            return; // skip drawing stone
-          case "herb":
-            color = "limegreen";
-            break;
-          default:
-            color = "white";
+        // Only draw herbs now, others are skipped above
+        if (entity.userData.resource === "herb") {
+          color = "limegreen";
+          draw = true;
         }
-        draw = true;
       } else if (entity.userData?.isNPC) {
         color = this.npcColor;
         size += 1;

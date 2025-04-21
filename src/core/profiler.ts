@@ -15,7 +15,7 @@ export class Profiler {
   // Use a single root map to store top-level calls
   private rootChildren: Map<string, ProfileData> = new Map();
   private stack: ProfileRecord[] = [];
-  public isEnabled: boolean = true; // Allow enabling/disabling
+  public isEnabled: boolean = false; // Allow enabling/disabling
 
   constructor() {
     // No explicit root node needed, rootChildren holds the top level
