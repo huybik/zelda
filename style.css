@@ -245,6 +245,7 @@ canvas {
 #chat-container,
 #quest-detail-banner,
 #mobile-controls-layer > *, /* Buttons, joystick zones */
+.top-right-icon-buttons > *, /* Make icon buttons interactive */
 #mobile-controls-layer .mobile-button {
   pointer-events: auto; /* Allow interaction with these elements */
 }
@@ -267,26 +268,26 @@ canvas {
 .stat-bars {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px; /* Reduced gap */
 }
 
 .bar-container {
   background-color: rgba(30, 30, 30, 0.7);
-  border-radius: 5px;
-  padding: 3px;
-  width: 160px;
+  border-radius: 4px; /* Slightly smaller radius */
+  padding: 2px; /* Reduced padding */
+  width: 120px; /* Smaller width */
   position: relative;
   border: 1px solid rgba(0, 0, 0, 0.3);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.4);
 }
 
 .bar {
-  height: 16px;
-  border-radius: 3px;
+  height: 12px; /* Smaller height */
+  border-radius: 2px; /* Smaller radius */
   transition:
     width 0.2s ease-out,
     background-color 0.3s ease;
-  box-shadow: inset 0 -1px 1px rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 -1px 1px rgba(255, 255, 255, 0.15);
 }
 
 #health-bar {
@@ -312,13 +313,13 @@ canvas {
 
 .bar-label {
   position: absolute;
-  top: 1px;
-  left: 6px;
-  font-size: 11px;
+  top: 0px; /* Adjust for smaller bar */
+  left: 5px; /* Adjust padding */
+  font-size: 9px; /* Smaller font */
   font-weight: bold;
-  line-height: 18px;
+  line-height: 14px; /* Adjust line height */
   color: white;
-  text-shadow: 1px 1px 2px black;
+  text-shadow: 1px 1px 1px black;
   pointer-events: none;
 }
 
@@ -342,17 +343,22 @@ canvas {
 /* --- Minimap --- */
 #minimap-container {
   position: absolute;
-  top: 15px;
-  right: 15px;
+  top: 90px;
+  left: 15px;
   border: 2px solid rgba(50, 50, 50, 0.8);
-  border-radius: 4px;
+  border-radius: 50%;
   background-color: rgba(100, 100, 100, 0.6);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  width: 120px;
+  height: 120px;
+  overflow: hidden;
 }
 
 #minimap-canvas {
   display: block;
-  border-radius: 2px;
+  width: 100%; /* Fill container */
+  height: 100%;
+  border-radius: 50%; /* Ensure canvas is clipped */
 }
 
 /* --- Panels (Inventory & Journal) --- */
@@ -777,10 +783,10 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
 
 #fps-display {
   position: relative;
-  top: 10px;
+  top: 5px; /* Adjust spacing */
   color: white;
   font-family: Arial, sans-serif;
-  font-size: 14px;
+  font-size: 12px; /* Smaller font */
   padding: 2px 5px;
 }
 
@@ -889,7 +895,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   background-color: #f57c00;
 }
 
-/* --- Mobile Controls --- */
+/* --- Mobile Controls (Only visible on mobile) --- */
 #mobile-controls-layer {
   position: absolute;
   top: 0;
@@ -930,32 +936,27 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   background-color: rgba(50, 50, 50, 0.4) !important;
 }
 
-#right-action-buttons {
+/* Action Button Cluster (Right Side) */
+#action-button-cluster {
   position: absolute;
   right: calc(5% + env(safe-area-inset-right));
-  bottom: calc(15% + env(safe-area-inset-bottom));
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
+  bottom: calc(10% + env(safe-area-inset-bottom));
+  width: 180px; /* Adjust size as needed */
+  height: 180px;
+  /* background: rgba(0, 255, 0, 0.1); */ /* Debugging */
   pointer-events: none; /* Container doesn't block */
   z-index: 18;
 }
 
 .mobile-button {
-  position: relative;
+  position: absolute; /* Position buttons within the cluster */
   background-color: rgba(50, 50, 50, 0.6);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  width: 65px;
-  height: 65px;
+  border-radius: 50%; /* Make buttons circular */
   display: flex;
-  flex-direction: column;
   justify-content: center;
   align-items: center;
-  font-size: 10px;
-  text-align: center;
   cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent; /* Remove tap highlight */
@@ -963,15 +964,15 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
     background-color 0.1s ease,
     transform 0.1s ease;
   pointer-events: auto; /* Buttons are interactive */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .mobile-button svg {
-  width: 28px;
-  height: 28px;
-  margin-bottom: 2px;
+  width: 60%; /* Adjust icon size relative to button */
+  height: 60%;
 }
 .mobile-button span {
-  line-height: 1.1;
+  display: none; /* Hide text labels */
 }
 
 .mobile-button.active,
@@ -980,26 +981,81 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   transform: scale(0.95);
 }
 
-.bottom-icon-buttons {
-  position: absolute;
-  bottom: calc(15px + env(safe-area-inset-bottom));
+/* Positioning within the cluster */
+#button-attack.main-action {
+  width: 80px; /* Larger main button */
+  height: 80px;
+  bottom: 10px; /* Position near bottom center of cluster */
   left: 50%;
   transform: translateX(-50%);
+  z-index: 20; /* Ensure it's clickable */
+}
+
+#button-interact.secondary-action {
+  width: 60px; /* Smaller secondary button */
+  height: 60px;
+  top: 10px; /* Position above attack */
+  right: 10px; /* Position to the right */
+  z-index: 19;
+}
+
+/* Add styles for Jump/Sprint if needed */
+/*
+.mobile-button.jump {
+    width: 55px;
+    height: 55px;
+    bottom: 85px;
+    left: 10px;
+}
+.mobile-button.sprint {
+     width: 55px;
+    height: 55px;
+    bottom: 10px;
+    right: 85px;
+}
+*/
+
+/* Icon Buttons (Top Right) - General Styling */
+.top-right-icon-buttons {
+  position: absolute;
+  top: 15px; /* Align with HUD */
+  right: calc(15px + env(safe-area-inset-right));
   display: flex;
-  gap: 20px;
+  flex-direction: row; /* Arrange horizontally */
+  gap: 10px; /* Space between buttons */
   z-index: 16;
   pointer-events: auto; /* Container needs to be interactive */
 }
 
 .icon-button {
-  position: relative;
-  width: 55px;
-  height: 55px;
+  position: relative; /* Reset position from absolute */
+  width: 40px; /* Smaller icon buttons */
+  height: 40px;
   background-color: rgba(40, 40, 40, 0.7);
+  /* Inherit common mobile-button styles */
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 0.1s ease,
+    transform 0.1s ease;
+  pointer-events: auto;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 .icon-button svg {
-  width: 24px;
-  height: 24px;
+  width: 20px; /* Smaller icons */
+  height: 20px;
+}
+.icon-button.active,
+.icon-button:active {
+  background-color: rgba(80, 80, 80, 0.8);
+  transform: scale(0.95);
 }
 
 /* Mobile Control Indicators */
@@ -1098,35 +1154,9 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   --arrow-move: 5px;
 }
 
-/* Responsive Adjustments */
+/* Responsive Adjustments (Keep mobile-specific controls adjustments here) */
 @media (max-width: 768px) {
-  #hud {
-    top: 10px;
-    left: 10px;
-  }
-  .bar-container {
-    width: 130px;
-  }
-  .bar {
-    height: 14px;
-  }
-  .bar-label {
-    font-size: 10px;
-    line-height: 16px;
-  }
-  #fps-display {
-    font-size: 12px;
-    top: 5px;
-  }
-
-  #minimap-container {
-    top: 10px;
-    right: 10px;
-  }
-  #minimap-canvas {
-    width: 100px;
-    height: 100px;
-  }
+  /* Adjustments for smaller screens if needed, but base layout is now consistent */
 
   #inventory-display,
   #journal-display {
@@ -1185,37 +1215,27 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
     font-size: 1em;
   }
 
+  /* Mobile Controls Specific Adjustments */
   #joystick-zone-left {
     bottom: calc(5% + env(safe-area-inset-bottom));
     left: 2%;
     width: 45%;
     height: 45%;
   }
-  #right-action-buttons {
+  #action-button-cluster {
     right: calc(2% + env(safe-area-inset-right));
-    gap: 15px;
+    bottom: calc(5% + env(safe-area-inset-bottom));
+    width: 160px; /* Slightly smaller cluster */
+    height: 160px;
   }
-  .mobile-button {
-    width: 60px;
-    height: 60px;
+  #button-attack.main-action {
+    width: 70px;
+    height: 70px;
   }
-  .mobile-button svg {
-    width: 26px;
-    height: 26px;
+  #button-interact.secondary-action {
+    width: 55px;
+    height: 55px;
   }
-  .bottom-icon-buttons {
-    bottom: calc(10px + env(safe-area-inset-bottom));
-    gap: 15px;
-  }
-  .icon-button {
-    width: 50px;
-    height: 50px;
-  }
-  .icon-button svg {
-    width: 22px;
-    height: 22px;
-  }
-
   .joystick-indicator {
     width: 80px;
     height: 80px;

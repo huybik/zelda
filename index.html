@@ -136,6 +136,34 @@
         </div>
       </div>
 
+      <!-- Icon Buttons (Inventory/Journal) - Moved outside mobile layer -->
+      <div class="top-right-icon-buttons">
+        <button id="button-inventory" class="mobile-button icon-button">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+          >
+            <path
+              d="M20 6h-4V4c0-1.1-.9-2-2-2h-4c-1.1 0-2 .9-2 2v2H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-8-2h4v2h-4V4zM4 19V8h16v11H4z"
+            />
+          </svg>
+          <!-- <span>Inv</span> -->
+        </button>
+        <button id="button-journal" class="mobile-button icon-button">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+          >
+            <path
+              d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4zm12 16H6V20h12v-2zm0-4H6v-2h12v2zm-3-4H6V8h9v4z"
+            />
+          </svg>
+          <!-- <span>Journal</span> -->
+        </button>
+      </div>
+
       <!-- Mobile Controls Layer -->
       <div id="mobile-controls-layer" class="hidden">
         <div id="joystick-zone-left">
@@ -152,8 +180,25 @@
           id="camera-arrow-right"
           class="camera-arrow arrow-right hidden"
         ></div>
-        <div id="right-action-buttons">
-          <button id="button-interact" class="mobile-button interact">
+
+        <!-- Action Button Cluster (Right Side) -->
+        <div id="action-button-cluster">
+          <button id="button-attack" class="mobile-button attack main-action">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <path
+                d="M14.12 4.47 12 2 9.88 4.47 7.05 4l.9 2.9L5.5 9.24l2.6.36 1.6 2.7L12 11l2.3 1.3.36-2.6 2.44-2.44-2.9-.9zM19.07 14.93l-1.41 1.41L15 13.76V22h-2v-8.24l-2.66 2.58-1.41-1.41L12 12.34l7.07 2.59z"
+              />
+            </svg>
+            <!-- <span>Attack</span> -->
+          </button>
+          <button
+            id="button-interact"
+            class="mobile-button interact secondary-action"
+          >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
@@ -166,47 +211,13 @@
                 d="M12 5c-3.86 0-7 3.14-7 7s3.14 7 7 7 7-3.14 7-7-3.14-7-7-7zm0 11.5c-2.48 0-4.5-2.02-4.5-4.5S9.52 7.5 12 7.5s4.5 2.02 4.5 4.5-2.02 4.5-4.5 4.5z"
               />
             </svg>
-            <span>Interact</span>
+            <!-- <span>Interact</span> -->
           </button>
-          <button id="button-attack" class="mobile-button attack">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-            >
-              <path
-                d="M14.12 4.47 12 2 9.88 4.47 7.05 4l.9 2.9L5.5 9.24l2.6.36 1.6 2.7L12 11l2.3 1.3.36-2.6 2.44-2.44-2.9-.9zM19.07 14.93l-1.41 1.41L15 13.76V22h-2v-8.24l-2.66 2.58-1.41-1.41L12 12.34l7.07 2.59z"
-              />
-            </svg>
-            <span>Attack</span>
-          </button>
+          <!-- Add Jump/Sprint buttons here if needed -->
+          <!-- <button id="button-jump" class="mobile-button jump utility-action">...</button> -->
+          <!-- <button id="button-sprint" class="mobile-button sprint utility-action">...</button> -->
         </div>
-        <div class="bottom-icon-buttons">
-          <button id="button-inventory" class="mobile-button icon-button">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-            >
-              <path
-                d="M20 6h-4V4c0-1.1-.9-2-2-2h-4c-1.1 0-2 .9-2 2v2H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-8-2h4v2h-4V4zM4 19V8h16v11H4z"
-              />
-            </svg>
-            <span>Inv</span>
-          </button>
-          <button id="button-journal" class="mobile-button icon-button">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-            >
-              <path
-                d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4zm12 16H6V20h12v-2zm0-4H6v-2h12v2zm-3-4H6V8h9v4z"
-              />
-            </svg>
-            <span>Journal</span>
-          </button>
-        </div>
+        <!-- Icon buttons moved outside -->
       </div>
       <!-- End Mobile Controls -->
     </div>
