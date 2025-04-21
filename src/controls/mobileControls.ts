@@ -26,6 +26,9 @@ export class MobileControls {
   private joystickIndicatorCircle: HTMLElement | null = null;
   private hasMovedJoystick: boolean = false;
 
+  // Added turn speed property
+  private turnSpeed = Math.PI / 12;
+
   constructor(game: Game, controls: Controls) {
     this.game = game;
     this.controls = controls;
@@ -172,27 +175,14 @@ export class MobileControls {
 
     const threshold = 0.01;
     if (this.moveVector.lengthSq() > threshold) {
-      const cameraForward = new Vector3();
-      this.game.camera?.getWorldDirection(cameraForward);
-      cameraForward.y = 0;
-      cameraForward.normalize();
-
-      // Corrected calculation for cameraRight
-      const cameraRight = new Vector3()
-        .crossVectors(cameraForward, new Vector3(0, 1, 0))
-        .normalize();
-
-      const velocity = new Vector3()
-        .addScaledVector(cameraForward, this.moveVector.y)
-        .addScaledVector(cameraRight, this.moveVector.x);
-
-      const direction = velocity.clone().normalize();
-      const targetRotation = Math.atan2(direction.x, direction.z);
+      // Rotation: Use moveVector.x to control turn speed
+      const rotationSpeed = this.turnSpeed * this.moveVector.x;
       if (this.controls.player && this.controls.player.mesh) {
-        this.controls.player.mesh.rotation.y = targetRotation;
+        this.controls.player.mesh.rotation.y -= rotationSpeed * deltaTime;
       }
 
-      const speed = Math.min(this.moveVector.length(), 1);
+      // Movement: Only move forward when moveVector.y > 0
+      const speed = this.moveVector.y;
       this.controls.moveState.forward = speed;
       this.controls.moveState.right = 0;
     } else {
