@@ -1,6 +1,11 @@
 /* File: /src/core/questManager.ts */
 import { Game } from "../main";
-import { Quest, QuestObjectiveType, QuestRewardType } from "../core/utils";
+import {
+  Quest,
+  QuestObjectiveType,
+  QuestRewardType,
+  InventoryItem,
+} from "../core/utils";
 import { Character } from "../entities/character";
 import { Animal } from "../entities/animals";
 import { Profession } from "./items";
@@ -95,9 +100,9 @@ export class QuestManager {
       // --- Feed the Farmer ---
       {
         id: "feed_the_farmer",
-        name: "Feed the Farmer",
+        name: "The Wolfs want the Farmer",
         description:
-          "Farmer Giles looks tasty... to a wolf. Lure him into the wilderness.",
+          "Farmer Giles looks tasty to the wolf. Lure him into the wilderness.",
         objectives: [
           {
             type: QuestObjectiveType.ENTITY_KILLED_BY,
@@ -136,10 +141,79 @@ export class QuestManager {
         rewardData: Profession.Blacksmith, // Profession to add
         hasBeenNotified: false,
       },
+      // --- Trade Mastery ---
+      {
+        id: "trade_mastery",
+        name: "Trade Mastery",
+        description:
+          "Convince the villagers to part with their resources... for free!",
+        objectives: [
+          {
+            type: QuestObjectiveType.RECEIVE_ITEM_TRADE,
+            description: "Receive Wood via Trade",
+            targetItemId: "wood",
+            requiredCount: 1, // Just need to receive it once
+            currentCount: 0,
+            isCompleted: false,
+          },
+          {
+            type: QuestObjectiveType.RECEIVE_ITEM_TRADE,
+            description: "Receive Stone via Trade",
+            targetItemId: "stone",
+            requiredCount: 1,
+            currentCount: 0,
+            isCompleted: false,
+          },
+          {
+            type: QuestObjectiveType.RECEIVE_ITEM_TRADE,
+            description: "Receive Herb via Trade",
+            targetItemId: "herb",
+            requiredCount: 1,
+            currentCount: 0,
+            isCompleted: false,
+          },
+        ],
+        isCompleted: false,
+        rewardType: QuestRewardType.ITEM_REWARD,
+        rewardData: { itemId: "coin", count: 10 }, // Reward 10 coins
+        hasBeenNotified: false,
+      },
     ];
 
     // Initialize current counts based on initial game state
     this.checkAllQuestsCompletion(true); // Initial check without notifications
+  }
+
+  /**
+   * Updates the progress of RECEIVE_ITEM_TRADE objectives.
+   * Called by TradingSystem upon successful trade where the player received the item for free/minimal cost.
+   * @param receivedItemId The ID of the item the player received.
+   */
+  updateReceiveItemTradeObjective(receivedItemId: string): void {
+    let questUpdated = false;
+    this.quests.forEach((quest) => {
+      if (quest.isCompleted) return;
+
+      quest.objectives.forEach((obj) => {
+        if (
+          !obj.isCompleted &&
+          obj.type === QuestObjectiveType.RECEIVE_ITEM_TRADE &&
+          obj.targetItemId === receivedItemId
+        ) {
+          obj.currentCount = 1; // Mark as received
+          obj.isCompleted = true;
+          questUpdated = true;
+          console.log(
+            `Quest '${quest.name}' objective updated: Received ${receivedItemId} via trade.`
+          );
+        }
+      });
+    });
+
+    // If any objective was updated, re-check overall quest completion
+    if (questUpdated) {
+      this.checkAllQuestsCompletion();
+    }
   }
 
   checkAllQuestsCompletion(initialCheck: boolean = false): void {
@@ -156,7 +230,7 @@ export class QuestManager {
       quest.objectives.forEach((obj) => {
         if (obj.isCompleted) return; // Skip already completed objectives
 
-        let currentProgress = 0;
+        let currentProgress = obj.currentCount; // Start with existing progress
         let objectiveNowComplete = false;
 
         switch (obj.type) {
@@ -233,13 +307,22 @@ export class QuestManager {
               currentProgress = 0;
             }
             break;
+
+          case QuestObjectiveType.RECEIVE_ITEM_TRADE:
+            // This type is now primarily updated by `updateReceiveItemTradeObjective`
+            // We just check its existing state here.
+            currentProgress = obj.currentCount;
+            break;
         }
 
         // Update current count and check completion
         obj.currentCount = currentProgress;
         if (obj.currentCount >= obj.requiredCount) {
+          if (!obj.isCompleted) {
+            // Only mark as newly complete if it wasn't already
+            objectiveNowComplete = true;
+          }
           obj.isCompleted = true;
-          objectiveNowComplete = true;
         } else {
           obj.isCompleted = false; // Ensure it's false if progress drops
           allObjectivesComplete = false; // If any objective is not complete, the quest is not

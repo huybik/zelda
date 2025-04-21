@@ -79,6 +79,7 @@ export enum QuestObjectiveType {
   ENTITY_STATE = "entity_state", // Entity X is in state Y (e.g., following)
   ENTITY_KILLED_BY = "entity_killed_by", // Entity X killed by entity type Y
   MULTI_STATE = "multi_state", // Multiple entities in a specific state (e.g., all villagers following)
+  RECEIVE_ITEM_TRADE = "receive_item_trade", // Player received item X via trade (for free/minimal cost)
 }
 
 export enum QuestRewardType {
@@ -86,12 +87,13 @@ export enum QuestRewardType {
   WEAPON_UPGRADE = "weapon_upgrade",
   ENABLE_MECHANIC = "enable_mechanic",
   ADD_PROFESSION = "add_profession",
+  ITEM_REWARD = "item_reward", // Grant specific item(s)
 }
 
 export interface QuestObjective {
   type: QuestObjectiveType;
   description: string; // e.g., "Gather Wood", "Kill Wolves", "Convince Villagers"
-  targetItemId?: string; // For ITEM_COUNT
+  targetItemId?: string; // For ITEM_COUNT, RECEIVE_ITEM_TRADE
   targetEntityType?: string; // For KILL_COUNT, ENTITY_KILLED_BY (killer type)
   targetEntityId?: string; // For ENTITY_STATE, ENTITY_KILLED_BY (victim)
   targetState?: string; // For ENTITY_STATE (e.g., "following")
@@ -114,7 +116,7 @@ export interface Quest {
   isCompleted: boolean; // Overall quest completion status
   rewardType: QuestRewardType;
   rewardOptions?: QuestRewardOption[]; // For choices like weapon selection
-  rewardData?: any; // For specific data like profession to add or mechanic to enable
+  rewardData?: any; // For specific data like profession, mechanic, or item reward details { itemId: 'coin', count: 10 }
   hasBeenNotified?: boolean; // Track if completion notification was shown
 }
 

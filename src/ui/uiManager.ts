@@ -24,6 +24,7 @@ export class UIManager {
   // Mobile Action Button Elements (for checking clicks)
   private mobileInteractButton: HTMLElement | null = null;
   private mobileAttackButton: HTMLElement | null = null;
+  private mobileSwitchButton: HTMLElement | null = null; // Added switch button
   private mobileJoystickZone: HTMLElement | null = null;
 
   // Banner State
@@ -73,6 +74,7 @@ export class UIManager {
     // Mobile Action Button Elements
     this.mobileInteractButton = document.getElementById("button-interact");
     this.mobileAttackButton = document.getElementById("button-attack");
+    this.mobileSwitchButton = document.getElementById("button-switch"); // Get switch button
     this.mobileJoystickZone = document.getElementById("joystick-zone-left");
 
     // Setup Icon Button Listeners (for both desktop and mobile)
@@ -143,19 +145,26 @@ export class UIManager {
 
     // Check against mobile controls (buttons and joystick zone)
     const isMobileButtonClick =
-      targetElement.closest("#button-interact, #button-attack") !== null;
+      targetElement.closest(
+        "#button-interact, #button-attack, #button-switch"
+      ) !== null; // Added switch button
     const isJoystickZoneClick =
       targetElement.closest("#joystick-zone-left") !== null;
 
     // Check if click is on the minimap
     const isMinimapClick = targetElement.closest("#minimap-canvas") !== null;
 
+    // Check if click is on chat suggestions
+    const isChatSuggestionClick =
+      targetElement.closest("#chat-suggestions-list") !== null;
+
     return (
       isPanelClick ||
       isIconButtonClick ||
       isMobileButtonClick ||
       isJoystickZoneClick ||
-      isMinimapClick
+      isMinimapClick ||
+      isChatSuggestionClick
     );
   }
 
@@ -398,6 +407,17 @@ export class UIManager {
         case "add_profession":
           description += `New Profession: ${quest.rewardData || "Unknown"}`;
           break;
+        case "item_reward":
+          const rewardItem = quest.rewardData as
+            | { itemId: string; count: number }
+            | undefined;
+          if (rewardItem) {
+            const itemDef = getItemDefinition(rewardItem.itemId);
+            description += `${rewardItem.count}x ${itemDef ? itemDef.name : rewardItem.itemId}`;
+          } else {
+            description += "Unknown Item";
+          }
+          break;
         default:
           description += "Claim your reward!";
       }
@@ -515,6 +535,47 @@ export class UIManager {
             { quest: quest.name, reward: `Profession: ${professionToAdd}` },
             player.mesh!.position
           );
+        }
+        break;
+
+      case "item_reward":
+        const rewardItem = quest.rewardData as
+          | { itemId: string; count: number }
+          | undefined;
+        if (rewardItem && player.inventory) {
+          const addResult = player.inventory.addItem(
+            rewardItem.itemId,
+            rewardItem.count
+          );
+          const itemDef = getItemDefinition(rewardItem.itemId);
+          const itemName = itemDef ? itemDef.name : rewardItem.itemId;
+          if (addResult.totalAdded > 0) {
+            this.game.notificationManager?.createItemAddedSprite(
+              rewardItem.itemId,
+              addResult.totalAdded,
+              player.mesh!.position
+            );
+            this.game.logEvent(
+              player,
+              "reward_received",
+              `Received reward: ${addResult.totalAdded}x ${itemName}`,
+              undefined,
+              {
+                quest: quest.name,
+                reward: `${addResult.totalAdded}x ${itemName}`,
+              },
+              player.mesh!.position
+            );
+          } else {
+            this.game.logEvent(
+              player,
+              "reward_fail",
+              `Failed to receive reward: ${rewardItem.count}x ${itemName} (Inventory Full?)`,
+              undefined,
+              { quest: quest.name, reward: `${rewardItem.count}x ${itemName}` },
+              player.mesh!.position
+            );
+          }
         }
         break;
     }

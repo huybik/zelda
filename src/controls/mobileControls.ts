@@ -8,6 +8,7 @@ import nipplejs, {
 import { Controls } from "./controls";
 import { Game } from "../main";
 import { Vector2 } from "three";
+import { Character } from "../entities/character"; // Import Character
 
 export class MobileControls {
   private game: Game;
@@ -23,6 +24,7 @@ export class MobileControls {
   private moveZoneElement: HTMLElement | null = null;
   private interactButton: HTMLElement | null = null;
   private attackButton: HTMLElement | null = null;
+  private switchButton: HTMLElement | null = null; // Added switch button element
   public attackHeld: boolean = false; // Public to be checked by Game loop
   private interactHeld: boolean = false;
 
@@ -262,10 +264,13 @@ export class MobileControls {
   private setupActionButtons(): void {
     this.interactButton = document.getElementById("button-interact");
     this.attackButton = document.getElementById("button-attack");
+    this.switchButton = document.getElementById("button-switch"); // Get switch button
     // Removed inventory/journal button setup
 
-    if (!this.interactButton || !this.attackButton) {
-      console.error("Mobile action buttons (Interact/Attack) not found!");
+    if (!this.interactButton || !this.attackButton || !this.switchButton) {
+      console.error(
+        "Mobile action buttons (Interact/Attack/Switch) not found!"
+      );
       return;
     }
 
@@ -312,6 +317,30 @@ export class MobileControls {
       { passive: false }
     );
 
+    // Switch Character Button Listeners
+    this.switchButton.addEventListener(
+      "touchstart",
+      (e) => {
+        e.preventDefault();
+        if (
+          this.game.interactionSystem?.isSwitchTargetAvailable &&
+          this.game.interactionSystem.currentTarget instanceof Character
+        ) {
+          this.game.switchControlTo(this.game.interactionSystem.currentTarget);
+        }
+        this.switchButton?.classList.add("active");
+      },
+      { passive: false }
+    );
+    this.switchButton.addEventListener(
+      "touchend",
+      (e) => {
+        e.preventDefault();
+        this.switchButton?.classList.remove("active");
+      },
+      { passive: false }
+    );
+
     // Removed Inventory/Journal Button Listeners
   }
 
@@ -346,6 +375,15 @@ export class MobileControls {
       //     this.controls.cameraController.handleMouseInput(0, pitchDelta);
       // }
       this.cameraRotationDelta.set(0, 0);
+    }
+
+    // Update switch button visibility
+    if (this.switchButton) {
+      if (this.game.interactionSystem?.isSwitchTargetAvailable) {
+        this.switchButton.classList.remove("hidden");
+      } else {
+        this.switchButton.classList.add("hidden");
+      }
     }
   }
 

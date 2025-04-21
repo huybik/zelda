@@ -245,7 +245,9 @@ canvas {
 #chat-container,
 #mobile-controls-layer > *, /* Buttons, joystick zones */
 .top-right-icon-buttons > *, /* Make icon buttons interactive */
-#mobile-controls-layer .mobile-button {
+#mobile-controls-layer .mobile-button,
+#chat-suggestions-list li {
+  /* Make suggestions clickable */
   pointer-events: auto; /* Allow interaction with these elements */
 }
 
@@ -770,6 +772,47 @@ li.quest-completed:hover {
   cursor: not-allowed;
 }
 
+/* Chat Suggestions */
+#chat-suggestions-container {
+  position: absolute;
+  bottom: calc(100% + 5px); /* Position above the chat input */
+  left: 0;
+  width: 100%;
+  background-color: rgba(50, 50, 50, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 5px;
+  box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.3);
+  z-index: 26; /* Above chat input */
+  transition:
+    opacity 0.15s ease-out,
+    visibility 0.15s ease-out;
+}
+
+#chat-suggestions-container.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+#chat-suggestions-list {
+  list-style: none;
+  padding: 5px 0;
+  margin: 0;
+  max-height: 100px; /* Limit height if many suggestions */
+  overflow-y: auto;
+}
+
+#chat-suggestions-list li {
+  padding: 6px 12px;
+  color: #eee;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+#chat-suggestions-list li:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
 /* --- Utility --- */
 .hidden {
   display: none !important; /* Use display none for reliable hiding */
@@ -992,6 +1035,14 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   height: 60px;
   top: 10px; /* Position above attack */
   right: 10px; /* Position to the right */
+  z-index: 19;
+}
+
+#button-switch.utility-action {
+  width: 55px; /* Smaller utility button */
+  height: 55px;
+  top: 10px; /* Position above attack */
+  left: 10px; /* Position to the left */
   z-index: 19;
 }
 
@@ -1231,6 +1282,12 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   #button-interact.secondary-action {
     width: 55px;
     height: 55px;
+  }
+  #button-switch.utility-action {
+    width: 50px;
+    height: 50px;
+    top: 5px; /* Adjust position */
+    left: 5px;
   }
   .joystick-indicator {
     width: 80px;

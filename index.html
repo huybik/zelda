@@ -117,6 +117,13 @@
 
       <!-- Chat Interface -->
       <div id="chat-container" class="hidden">
+        <div id="chat-suggestions-container" class="hidden">
+          <ul id="chat-suggestions-list">
+            <li data-command="/trade">/trade</li>
+            <li data-command="/request">/request</li>
+            <!-- Add more suggestions if needed -->
+          </ul>
+        </div>
         <input type="text" id="chat-input" placeholder="Type your message..." />
       </div>
 
@@ -212,6 +219,21 @@
               />
             </svg>
             <!-- <span>Interact</span> -->
+          </button>
+          <button
+            id="button-switch"
+            class="mobile-button switch utility-action hidden"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <path
+                d="M6.99 11 3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z"
+              />
+            </svg>
+            <!-- <span>Switch</span> -->
           </button>
           <!-- Add Jump/Sprint buttons here if needed -->
           <!-- <button id="button-jump" class="mobile-button jump utility-action">...</button> -->

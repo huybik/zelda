@@ -39,12 +39,19 @@ export class InteractionSystem {
   game: Game;
   chatContainer: HTMLElement | null;
   chatInput: HTMLInputElement | null;
+  chatSuggestionsContainer: HTMLElement | null; // Added suggestions container
+  chatSuggestionsList: HTMLElement | null; // Added suggestions list
   isChatOpen: boolean = false;
   chatTarget: Character | null = null;
   boundSendMessage: (() => Promise<void>) | null = null;
   boundHandleChatKeyDown: ((e: KeyboardEvent) => void) | null = null;
   boundCloseChat: (() => void) | null = null;
+  boundHandleChatInput: (() => void) | null = null; // Added input handler
+  boundHandleChatFocus: (() => void) | null = null; // Added focus handler
+  boundHandleChatBlur: (() => void) | null = null; // Added blur handler
+  boundHandleSuggestionClick: ((e: MouseEvent) => void) | null = null; // Added suggestion click handler
   droppedItemManager: DroppedItemManager; // Add reference
+  public isSwitchTargetAvailable: boolean = false; // Flag for mobile switch button
 
   private cameraDirection = new Vector3();
   private objectDirection = new Vector3();
@@ -74,6 +81,28 @@ export class InteractionSystem {
       document.getElementById("interaction-prompt");
     this.chatContainer = document.getElementById("chat-container");
     this.chatInput = document.getElementById("chat-input") as HTMLInputElement;
+    this.chatSuggestionsContainer = document.getElementById(
+      "chat-suggestions-container"
+    );
+    this.chatSuggestionsList = document.getElementById("chat-suggestions-list");
+
+    // Bind chat handlers
+    this.boundHandleChatInput = this.handleChatInput.bind(this);
+    this.boundHandleChatFocus = this.handleChatFocus.bind(this);
+    this.boundHandleChatBlur = this.handleChatBlur.bind(this);
+    this.boundHandleSuggestionClick = this.handleSuggestionClick.bind(this);
+
+    if (this.chatInput) {
+      this.chatInput.addEventListener("input", this.boundHandleChatInput);
+      this.chatInput.addEventListener("focus", this.boundHandleChatFocus);
+      this.chatInput.addEventListener("blur", this.boundHandleChatBlur);
+    }
+    if (this.chatSuggestionsList) {
+      this.chatSuggestionsList.addEventListener(
+        "mousedown",
+        this.boundHandleSuggestionClick
+      ); // Use mousedown to prevent blur
+    }
   }
 
   update(deltaTime: number): void {
@@ -97,6 +126,7 @@ export class InteractionSystem {
     let newTargetMesh: Object3D | null = null;
     let newTargetType: "character" | "item" | "none" = "none";
     let promptText: string | null = null;
+    let canSwitchToTarget = false;
 
     // Prioritize Character interaction
     if (characterTargetInfo) {
@@ -108,6 +138,12 @@ export class InteractionSystem {
         (this.game.mobileControls?.isActive()
           ? "Tap Interact"
           : "Press E to talk");
+      // Check if switching is enabled and target is valid
+      canSwitchToTarget =
+        this.game.characterSwitchingEnabled &&
+        newTarget instanceof Character &&
+        newTarget !== this.player &&
+        !newTarget.isDead;
     } else if (itemTargetData) {
       // If no character target, check for item target
       newTarget = itemTargetData; // Store the data object
@@ -135,6 +171,9 @@ export class InteractionSystem {
         this.hidePrompt();
       }
     }
+
+    // Update switch target availability flag
+    this.isSwitchTargetAvailable = canSwitchToTarget;
 
     // Check for 'E' key press (interact)
     if (this.controls.moveState.interact && this.currentTarget) {
@@ -309,6 +348,71 @@ export class InteractionSystem {
     this.promptTimeout = null;
   }
 
+  // --- Chat Interface Logic ---
+
+  handleChatInput(): void {
+    if (this.chatInput && this.chatInput.value.trim() !== "") {
+      this.hideChatSuggestions();
+    } else {
+      this.showChatSuggestions();
+    }
+  }
+
+  handleChatFocus(): void {
+    if (this.chatInput && this.chatInput.value.trim() === "") {
+      this.showChatSuggestions();
+    }
+  }
+
+  handleChatBlur(): void {
+    // Delay hiding slightly to allow clicks on suggestions
+    setTimeout(() => {
+      // Check if focus is still within the chat area (input or suggestions)
+      if (
+        document.activeElement !== this.chatInput &&
+        !this.chatSuggestionsContainer?.contains(document.activeElement)
+      ) {
+        this.hideChatSuggestions();
+      }
+    }, 150);
+  }
+
+  handleSuggestionClick(event: MouseEvent): void {
+    event.preventDefault(); // Prevent default behavior that might affect focus
+    const target = event.target as HTMLElement;
+    if (target.tagName === "LI" && this.chatInput) {
+      const command = target.dataset.command;
+      if (command) {
+        const currentValue = this.chatInput.value;
+        const newValue = command + " " + currentValue;
+        this.chatInput.value = newValue;
+
+        // Refocus and set cursor position using requestAnimationFrame
+        requestAnimationFrame(() => {
+          this.chatInput!.focus(); // Ensure focus is set
+          if (document.activeElement !== this.chatInput) {
+            this.chatInput!.focus(); // Re-focus if necessary
+          }
+          this.chatInput!.selectionStart = this.chatInput!.selectionEnd =
+            newValue.length;
+          this.hideChatSuggestions(); // Hide suggestions after focus and cursor are set
+        });
+      }
+    }
+  }
+
+  showChatSuggestions(): void {
+    if (this.chatSuggestionsContainer && this.isChatOpen) {
+      this.chatSuggestionsContainer.classList.remove("hidden");
+    }
+  }
+
+  hideChatSuggestions(): void {
+    if (this.chatSuggestionsContainer) {
+      this.chatSuggestionsContainer.classList.add("hidden");
+    }
+  }
+
   async openChatInterface(target: Character): Promise<void> {
     if (this.chatInput) {
       this.chatInput.disabled = false;
@@ -328,6 +432,7 @@ export class InteractionSystem {
     this.isChatOpen = true;
     this.chatTarget = target;
     this.chatContainer.classList.remove("hidden");
+    this.handleChatInput(); // Show/hide suggestions based on initial (empty) value
 
     if (this.chatTarget && this.chatTarget.aiController) {
       this.chatTarget.aiController.aiState = "idle";
@@ -358,6 +463,7 @@ export class InteractionSystem {
 
         this.chatInput.value = "";
         this.chatInput.disabled = true;
+        this.hideChatSuggestions(); // Hide suggestions when sending
 
         const prompt = generateChatPrompt(
           targetAtSendStart,
@@ -454,6 +560,7 @@ export class InteractionSystem {
     this.isChatOpen = false;
     this.chatTarget = null;
     this.chatContainer.classList.add("hidden");
+    this.hideChatSuggestions(); // Hide suggestions on close
     this.chatInput.disabled = false;
     this.chatInput.blur();
 

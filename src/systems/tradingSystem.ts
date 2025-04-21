@@ -305,6 +305,22 @@ export class TradingSystem {
       target.mesh?.position
     );
 
+    // --- Quest Update ---
+    // Check if the player received a resource for free/minimal cost
+    const playerGaveValue = validReceiveItems.reduce(
+      (sum, item) => sum + (item.id === "coin" ? item.count : 9999), // Assign high value to non-coin items
+      0
+    );
+
+    if (playerGaveValue <= 1) {
+      // Check if player received wood, stone, or herb
+      validGiveItems.forEach((item) => {
+        if (["wood", "stone", "herb"].includes(item.id)) {
+          this.game.questManager.updateReceiveItemTradeObjective(item.id);
+        }
+      });
+    }
+
     return true;
   }
 
