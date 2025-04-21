@@ -81,6 +81,10 @@ export class InteractionSystem {
       document.getElementById("interaction-prompt");
     this.chatContainer = document.getElementById("chat-container");
     this.chatInput = document.getElementById("chat-input") as HTMLInputElement;
+    if (this.chatInput) {
+      this.chatInput.addEventListener("input", this.handleChatInput.bind(this)); // Existing
+      this.chatInput.addEventListener("blur", this.handleChatBlur.bind(this)); // New
+    }
     this.chatSuggestionsContainer = document.getElementById(
       "chat-suggestions-container"
     );
@@ -375,6 +379,13 @@ export class InteractionSystem {
         this.hideChatSuggestions();
       }
     }, 150);
+    if (
+      this.chatInput &&
+      this.chatInput.value.trim() !== "" &&
+      this.boundSendMessage
+    ) {
+      this.boundSendMessage(); // Send the message if input is not empty
+    }
   }
 
   handleSuggestionClick(event: MouseEvent): void {
@@ -433,15 +444,15 @@ export class InteractionSystem {
     this.chatTarget = target;
     this.chatContainer.classList.remove("hidden");
     this.handleChatInput(); // Show/hide suggestions based on initial (empty) value
-
+    if (this.chatInput) {
+      setTimeout(() => {
+        this.chatInput?.focus(); // Focus the input field
+      }, 100); // 100ms delay ensures the element is ready
+    }
     if (this.chatTarget && this.chatTarget.aiController) {
       this.chatTarget.aiController.aiState = "idle";
       this.chatTarget.aiController.persistentAction = null;
     }
-
-    requestAnimationFrame(() => {
-      this.chatInput?.focus();
-    });
 
     if (!this.boundSendMessage) {
       this.boundSendMessage = async () => {
