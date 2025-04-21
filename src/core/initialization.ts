@@ -104,6 +104,7 @@ export const initializeGame = {
     );
     player.userData.isPlayer = true;
     player.userData.isInteractable = true;
+    player.id = player.name;
     player.userData.isNPC = false;
     if (player.aiController) player.aiController = null;
 
