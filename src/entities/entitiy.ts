@@ -97,8 +97,7 @@ export abstract class Entity {
     // Allow for NPCs and Animals, but not the player
     if (this.userData.isPlayer || !this.mesh) return;
 
-    const isMobile = this.game?.mobileControls?.isActive() ?? false;
-    const baseScale = isMobile ? 0.9 : 0.3; // Larger base scale for mobile
+    const baseScale = 0.8; // Use mobile scale always
 
     if (!this.nameCanvas) {
       this.nameCanvas = document.createElement("canvas");
@@ -117,7 +116,7 @@ export abstract class Entity {
       this.nameSprite.position.set(0, displayHeight, 0);
       this.mesh!.add(this.nameSprite);
     } else {
-      // Update scale if mobile status changed (e.g., window resize detection)
+      // Update scale if needed (though it should be consistent now)
       const aspectRatio = this.nameCanvas.width / this.nameCanvas.height;
       this.nameSprite.scale.set(aspectRatio * baseScale, baseScale, 1);
     }

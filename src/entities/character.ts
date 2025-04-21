@@ -324,8 +324,7 @@ export class Character extends Entity {
     // Only init for NPCs with AIController, not animals
     if (!(this.aiController instanceof AIController) || !this.mesh) return;
 
-    const isMobile = this.game?.mobileControls?.isActive() ?? false;
-    const baseScale = isMobile ? 3 : 0.6; // Larger base scale for mobile
+    const baseScale = 2.5; // Use mobile scale always
 
     // Initialize rayCaster here if not already done (e.g., by Character)
     if (!this.rayCaster) {
@@ -347,11 +346,11 @@ export class Character extends Entity {
       const aspectRatio = this.intentCanvas.width / this.intentCanvas.height;
       this.intentSprite.scale.set(aspectRatio * baseScale, baseScale, 1); // Apply base scale
 
-      const baseHeight = isMobile ? 2 : 0.6;
+      const baseHeight = 1.7; // Use mobile height always
       this.intentSprite.position.set(0, CHARACTER_HEIGHT + baseHeight, 0);
       this.mesh!.add(this.intentSprite);
     } else {
-      // Update scale if mobile status changed
+      // Update scale if needed (though it should be consistent now)
       const aspectRatio = this.intentCanvas.width / this.intentCanvas.height;
       this.intentSprite.scale.set(aspectRatio * baseScale, baseScale, 1);
     }

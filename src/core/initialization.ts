@@ -1,4 +1,4 @@
-/* File: src/core/initialization.ts */
+/* File: /src/core/initialization.ts */
 import * as THREE from "three";
 import {
   Scene,
@@ -134,12 +134,10 @@ export const initializeGame = {
     if (!game.activeCharacter || !game.camera || !game.controls)
       throw new Error("Cannot init camera/controls: Core components missing.");
 
-    const isMobileActive = game.mobileControls?.isActive() ?? false;
     const thirdPersonCamera = new ThirdPersonCamera(
       game.camera,
       game.activeCharacter.mesh!,
-      isMobileActive,
-      game
+      game // Pass game instance
     );
     game.controls.cameraController = thirdPersonCamera; // Link camera to controls
     return thirdPersonCamera;
