@@ -17,6 +17,10 @@ export class UIManager {
   private bannerDeclineButton: HTMLButtonElement | null = null;
   private bannerRewardButtons: HTMLButtonElement[] = [];
 
+  // Icon Button Elements
+  private inventoryButton: HTMLElement | null = null;
+  private journalButton: HTMLElement | null = null;
+
   // Banner State
   public isBannerVisible: boolean = false;
   public currentBannerType: "quest" | "trade" | "none" = "none";
@@ -38,8 +42,9 @@ export class UIManager {
     this.game = game;
   }
 
-  /** Initializes the UIManager by getting references to banner elements. */
+  /** Initializes the UIManager by getting references to UI elements and setting up listeners. */
   init(): void {
+    // Banner Elements
     this.bannerElement = document.getElementById("quest-detail-banner");
     this.bannerTitle = document.getElementById("quest-banner-title");
     this.bannerDesc = document.getElementById("quest-banner-description");
@@ -55,6 +60,46 @@ export class UIManager {
     this.bannerDeclineButton = document.getElementById(
       "quest-banner-decline"
     ) as HTMLButtonElement;
+
+    // Icon Button Elements
+    this.inventoryButton = document.getElementById("button-inventory");
+    this.journalButton = document.getElementById("button-journal");
+
+    // Setup Icon Button Listeners (for both desktop and mobile)
+    this.setupIconButtons();
+  }
+
+  /** Sets up click listeners for the top-right icon buttons. */
+  private setupIconButtons(): void {
+    if (this.inventoryButton) {
+      this.inventoryButton.addEventListener("click", () => {
+        if (
+          this.game.interactionSystem?.isChatOpen ||
+          this.isBannerVisible // Check UIManager's banner state
+        )
+          return;
+        this.game.journalDisplay?.hide();
+        this.game.inventoryDisplay?.toggle();
+        // Pause state is handled within inventoryDisplay.toggle() -> show/hide
+      });
+    } else {
+      console.error("Inventory button not found!");
+    }
+
+    if (this.journalButton) {
+      this.journalButton.addEventListener("click", () => {
+        if (
+          this.game.interactionSystem?.isChatOpen ||
+          this.isBannerVisible // Check UIManager's banner state
+        )
+          return;
+        this.game.inventoryDisplay?.hide();
+        this.game.journalDisplay?.toggle();
+        // Pause state is handled within journalDisplay.toggle() -> show/hide
+      });
+    } else {
+      console.error("Journal button not found!");
+    }
   }
 
   /** Checks if any UI element that requires pausing is open. */
@@ -154,25 +199,20 @@ export class UIManager {
         this.bannerRewardButtons.push(button);
       });
     } else {
+      // Default to OK button for quests without specific rewards or simple info
       this.bannerButtonContainer.appendChild(this.bannerOkButton);
       this.bannerOkButton.classList.remove("hidden");
 
-      if (onOk) {
-        this.boundBannerOkClickHandler = () => {
-          onOk();
-          this.hideBanner();
-        };
-        this.bannerOkButton.addEventListener(
-          "click",
-          this.boundBannerOkClickHandler
-        );
-      } else {
-        this.boundBannerOkClickHandler = () => this.hideBanner();
-        this.bannerOkButton.addEventListener(
-          "click",
-          this.boundBannerOkClickHandler
-        );
-      }
+      const okHandler = onOk ? onOk : () => {}; // Use provided handler or empty function
+
+      this.boundBannerOkClickHandler = () => {
+        okHandler();
+        this.hideBanner();
+      };
+      this.bannerOkButton.addEventListener(
+        "click",
+        this.boundBannerOkClickHandler
+      );
     }
 
     this.bannerElement.classList.remove("hidden");
@@ -215,7 +255,7 @@ export class UIManager {
     this.boundRewardButtonHandlers.clear();
   }
 
-  /** Hides the quest/trade banner and unpauses the game. */
+  /** Hides the quest/trade banner and unpauses the game if appropriate. */
   hideBanner(): void {
     if (!this.bannerElement || !this.isBannerVisible) return;
 
@@ -228,7 +268,10 @@ export class UIManager {
     this.currentTradeGiveItems = [];
     this.currentTradeReceiveItems = [];
     this.currentQuestForReward = null;
-    this.game.setPauseState(false);
+    // Only unpause if no *other* UI element requires pause
+    if (!this.isUIPaused()) {
+      this.game.setPauseState(false);
+    }
   }
 
   /**
@@ -269,7 +312,7 @@ export class UIManager {
       description,
       "quest",
       quest,
-      () => this.handleRewardSelection(),
+      () => this.handleRewardSelection(), // Pass handler for OK button
       undefined,
       undefined,
       quest.isCompleted ? quest.rewardOptions : undefined

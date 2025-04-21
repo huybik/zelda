@@ -23,8 +23,9 @@ export class MobileControls {
   private moveZoneElement: HTMLElement | null = null;
   private interactButton: HTMLElement | null = null;
   private attackButton: HTMLElement | null = null;
-  private inventoryButton: HTMLElement | null = null;
-  private journalButton: HTMLElement | null = null;
+  // Removed inventory/journal button references as they are handled globally now
+  // private inventoryButton: HTMLElement | null = null;
+  // private journalButton: HTMLElement | null = null;
   public attackHeld: boolean = false; // Public to be checked by Game loop
   private interactHeld: boolean = false;
 
@@ -62,7 +63,7 @@ export class MobileControls {
     this.gameContainer = document.getElementById("game-container");
     this.moveZoneElement = document.getElementById("joystick-zone-left");
     this.setupMoveJoystick();
-    this.setupButtons();
+    this.setupActionButtons(); // Renamed from setupButtons
     this.setupTouchCameraControls();
     document
       .getElementById("mobile-controls-layer")
@@ -156,18 +157,27 @@ export class MobileControls {
     const touchY = touch.clientY;
     const moveZoneRect = this.moveZoneElement.getBoundingClientRect();
     if (this.isPointInsideRect(touchX, touchY, moveZoneRect)) return;
-    const buttons = [
-      this.interactButton,
-      this.attackButton,
-      this.inventoryButton,
-      this.journalButton,
-    ];
-    for (const button of buttons) {
+
+    // Check against action buttons within the mobile layer
+    const buttonsToCheck = [this.interactButton, this.attackButton];
+    for (const button of buttonsToCheck) {
       if (button) {
         const buttonRect = button.getBoundingClientRect();
         if (this.isPointInsideRect(touchX, touchY, buttonRect)) return;
       }
     }
+    // Also check against the globally handled icon buttons
+    const inventoryButton = document.getElementById("button-inventory");
+    const journalButton = document.getElementById("button-journal");
+    if (inventoryButton) {
+      const buttonRect = inventoryButton.getBoundingClientRect();
+      if (this.isPointInsideRect(touchX, touchY, buttonRect)) return;
+    }
+    if (journalButton) {
+      const buttonRect = journalButton.getBoundingClientRect();
+      if (this.isPointInsideRect(touchX, touchY, buttonRect)) return;
+    }
+
     event.preventDefault();
     this.isDraggingCamera = true; // Camera drag starts here
 
@@ -219,20 +229,18 @@ export class MobileControls {
     }
   }
 
-  private setupButtons(): void {
+  // Renamed from setupButtons to setupActionButtons
+  private setupActionButtons(): void {
     this.interactButton = document.getElementById("button-interact");
     this.attackButton = document.getElementById("button-attack");
-    this.inventoryButton = document.getElementById("button-inventory");
-    this.journalButton = document.getElementById("button-journal");
-    if (
-      !this.interactButton ||
-      !this.attackButton ||
-      !this.inventoryButton ||
-      !this.journalButton
-    ) {
-      console.error("Mobile action buttons not found in HTML!");
+    // Removed inventory/journal button setup
+
+    if (!this.interactButton || !this.attackButton) {
+      console.error("Mobile action buttons (Interact/Attack) not found!");
       return;
     }
+
+    // Interact Button Listeners
     this.interactButton.addEventListener(
       "touchstart",
       (e) => {
@@ -253,6 +261,8 @@ export class MobileControls {
       },
       { passive: false }
     );
+
+    // Attack Button Listeners
     this.attackButton.addEventListener(
       "touchstart",
       (e) => {
@@ -272,46 +282,8 @@ export class MobileControls {
       },
       { passive: false }
     );
-    this.inventoryButton.addEventListener(
-      "touchstart",
-      (e) => {
-        e.preventDefault();
-        this.inventoryButton?.classList.add("active");
-      },
-      { passive: false }
-    );
-    this.inventoryButton.addEventListener(
-      "touchend",
-      (e) => {
-        e.preventDefault();
-        this.inventoryButton?.classList.remove("active");
-        if (this.game.interactionSystem?.isChatOpen) return;
-        this.game.journalDisplay?.hide();
-        this.game.inventoryDisplay?.toggle();
-        this.game.setPauseState(this.game.inventoryDisplay?.isOpen ?? false);
-      },
-      { passive: false }
-    );
-    this.journalButton.addEventListener(
-      "touchstart",
-      (e) => {
-        e.preventDefault();
-        this.journalButton?.classList.add("active");
-      },
-      { passive: false }
-    );
-    this.journalButton.addEventListener(
-      "touchend",
-      (e) => {
-        e.preventDefault();
-        this.journalButton?.classList.remove("active");
-        if (this.game.interactionSystem?.isChatOpen) return;
-        this.game.inventoryDisplay?.hide();
-        this.game.journalDisplay?.toggle();
-        this.game.setPauseState(this.game.journalDisplay?.isOpen ?? false);
-      },
-      { passive: false }
-    );
+
+    // Removed Inventory/Journal Button Listeners
   }
 
   update(deltaTime: number): void {
