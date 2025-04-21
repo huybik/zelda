@@ -23,9 +23,6 @@ export class MobileControls {
   private moveZoneElement: HTMLElement | null = null;
   private interactButton: HTMLElement | null = null;
   private attackButton: HTMLElement | null = null;
-  // Removed inventory/journal button references as they are handled globally now
-  // private inventoryButton: HTMLElement | null = null;
-  // private journalButton: HTMLElement | null = null;
   public attackHeld: boolean = false; // Public to be checked by Game loop
   private interactHeld: boolean = false;
 
@@ -35,6 +32,12 @@ export class MobileControls {
   private cameraArrowRight: HTMLElement | null = null;
   private hasMovedJoystick: boolean = false;
   private hasDraggedCamera: boolean = false;
+
+  // Tap detection properties
+  private touchStartTime: number = 0;
+  private touchStartPosition = new Vector2(0, 0);
+  private readonly tapMaxDuration: number = 200; // milliseconds
+  private readonly tapMaxDistance: number = 10; // pixels
 
   private boundHandleCameraTouchStart: (event: TouchEvent) => void;
   private boundHandleCameraTouchMove: (event: TouchEvent) => void;
@@ -155,31 +158,27 @@ export class MobileControls {
     if (!touch) return;
     const touchX = touch.clientX;
     const touchY = touch.clientY;
+
+    // Check if touch starts inside any interactable UI element
+    const targetElement = event.target as HTMLElement;
+    if (this.game.uiManager?.isClickOnInteractableUI(targetElement)) {
+      return; // Don't start camera drag if touching UI
+    }
+
+    // Check if touch starts inside joystick zone
     const moveZoneRect = this.moveZoneElement.getBoundingClientRect();
     if (this.isPointInsideRect(touchX, touchY, moveZoneRect)) return;
 
-    // Check against action buttons within the mobile layer
-    const buttonsToCheck = [this.interactButton, this.attackButton];
-    for (const button of buttonsToCheck) {
-      if (button) {
-        const buttonRect = button.getBoundingClientRect();
-        if (this.isPointInsideRect(touchX, touchY, buttonRect)) return;
-      }
-    }
-    // Also check against the globally handled icon buttons
-    const inventoryButton = document.getElementById("button-inventory");
-    const journalButton = document.getElementById("button-journal");
-    if (inventoryButton) {
-      const buttonRect = inventoryButton.getBoundingClientRect();
-      if (this.isPointInsideRect(touchX, touchY, buttonRect)) return;
-    }
-    if (journalButton) {
-      const buttonRect = journalButton.getBoundingClientRect();
-      if (this.isPointInsideRect(touchX, touchY, buttonRect)) return;
-    }
-
+    // If touch is outside UI and joystick zone, start potential drag/tap
     event.preventDefault();
-    this.isDraggingCamera = true; // Camera drag starts here
+    this.isDraggingCamera = true; // Assume drag initially
+    this.currentTouchId = touch.identifier;
+    this.lastTouchPosition.set(touchX, touchY);
+    this.cameraRotationDelta.set(0, 0);
+
+    // Record tap start info
+    this.touchStartTime = performance.now();
+    this.touchStartPosition.set(touchX, touchY);
 
     // Hide arrows permanently once drag starts
     if (!this.hasDraggedCamera) {
@@ -187,10 +186,6 @@ export class MobileControls {
       this.cameraArrowRight?.classList.add("hidden");
       this.hasDraggedCamera = true;
     }
-
-    this.currentTouchId = touch.identifier;
-    this.lastTouchPosition.set(touchX, touchY);
-    this.cameraRotationDelta.set(0, 0);
   }
 
   private handleCameraTouchMove(event: TouchEvent): void {
@@ -215,17 +210,51 @@ export class MobileControls {
 
   private handleCameraTouchEnd(event: TouchEvent): void {
     if (!this.isDraggingCamera || this.currentTouchId === null) return;
-    let touchEnded = false;
+
+    let endedTouch: Touch | null = null;
     for (let i = 0; i < event.changedTouches.length; i++) {
       if (event.changedTouches[i].identifier === this.currentTouchId) {
-        touchEnded = true;
+        endedTouch = event.changedTouches[i];
         break;
       }
     }
-    if (touchEnded) {
+
+    if (endedTouch) {
       event.preventDefault();
       this.isDraggingCamera = false;
       this.currentTouchId = null;
+
+      // --- Tap Detection Logic ---
+      const touchEndTime = performance.now();
+      const touchDuration = touchEndTime - this.touchStartTime;
+      const touchEndX = endedTouch.clientX;
+      const touchEndY = endedTouch.clientY;
+      const distanceMoved = this.touchStartPosition.distanceTo(
+        new Vector2(touchEndX, touchEndY)
+      );
+
+      if (
+        touchDuration < this.tapMaxDuration &&
+        distanceMoved < this.tapMaxDistance
+      ) {
+        // It's a tap! Check if it was outside UI.
+        const targetElement = document.elementFromPoint(
+          touchEndX,
+          touchEndY
+        ) as HTMLElement | null;
+        if (
+          targetElement &&
+          !this.game.uiManager?.isClickOnInteractableUI(targetElement)
+        ) {
+          // Tap occurred outside interactable UI, close menus
+          this.game.uiManager?.closeOpenMenus();
+        }
+      }
+      // --- End Tap Detection Logic ---
+
+      // Reset tap tracking
+      this.touchStartTime = 0;
+      this.touchStartPosition.set(0, 0);
     }
   }
 

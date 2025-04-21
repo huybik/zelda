@@ -21,6 +21,11 @@ export class UIManager {
   private inventoryButton: HTMLElement | null = null;
   private journalButton: HTMLElement | null = null;
 
+  // Mobile Action Button Elements (for checking clicks)
+  private mobileInteractButton: HTMLElement | null = null;
+  private mobileAttackButton: HTMLElement | null = null;
+  private mobileJoystickZone: HTMLElement | null = null;
+
   // Banner State
   public isBannerVisible: boolean = false;
   public currentBannerType: "quest" | "trade" | "none" = "none";
@@ -64,6 +69,11 @@ export class UIManager {
     // Icon Button Elements
     this.inventoryButton = document.getElementById("button-inventory");
     this.journalButton = document.getElementById("button-journal");
+
+    // Mobile Action Button Elements
+    this.mobileInteractButton = document.getElementById("button-interact");
+    this.mobileAttackButton = document.getElementById("button-attack");
+    this.mobileJoystickZone = document.getElementById("joystick-zone-left");
 
     // Setup Icon Button Listeners (for both desktop and mobile)
     this.setupIconButtons();
@@ -113,6 +123,87 @@ export class UIManager {
   }
 
   /**
+   * Checks if a click/tap event target is part of the interactable UI.
+   * Includes panels, buttons, chat, etc.
+   * @param targetElement The HTMLElement that was clicked/tapped.
+   * @returns True if the click was on interactable UI, false otherwise.
+   */
+  isClickOnInteractableUI(targetElement: HTMLElement | null): boolean {
+    if (!targetElement) return false;
+
+    // Check against main panels and specific interactive elements
+    const isPanelClick =
+      targetElement.closest(
+        "#inventory-display, #journal-display, #chat-container, #quest-detail-banner"
+      ) !== null;
+
+    // Check against top-right icon buttons
+    const isIconButtonClick =
+      targetElement.closest("#button-inventory, #button-journal") !== null;
+
+    // Check against mobile controls (buttons and joystick zone)
+    const isMobileButtonClick =
+      targetElement.closest("#button-interact, #button-attack") !== null;
+    const isJoystickZoneClick =
+      targetElement.closest("#joystick-zone-left") !== null;
+
+    // Check if click is on the minimap
+    const isMinimapClick = targetElement.closest("#minimap-canvas") !== null;
+
+    return (
+      isPanelClick ||
+      isIconButtonClick ||
+      isMobileButtonClick ||
+      isJoystickZoneClick ||
+      isMinimapClick
+    );
+  }
+
+  /** Closes the topmost open UI element (Chat > Banner > Inventory/Journal). Returns true if something was closed. */
+  closeTopmostUI(): boolean {
+    if (this.game.interactionSystem?.isChatOpen) {
+      this.game.interactionSystem.closeChatInterface();
+      return true;
+    } else if (this.isBannerVisible) {
+      this.hideBanner();
+      return true;
+    } else if (this.game.inventoryDisplay?.isOpen) {
+      this.game.inventoryDisplay.hide();
+      return true;
+    } else if (this.game.journalDisplay?.isOpen) {
+      this.game.journalDisplay.hide();
+      return true;
+    } else if (this.game.controls?.isPointerLocked) {
+      // Only unlock pointer if no UI was closed
+      this.game.controls.unlockPointer();
+      return true; // Consider unlocking pointer as closing something
+    }
+    return false;
+  }
+
+  /** Closes all open menus (Inventory, Journal, Banner, Chat). Returns true if any menu was closed. */
+  closeOpenMenus(): boolean {
+    let closedSomething = false;
+    if (this.game.inventoryDisplay?.isOpen) {
+      this.game.inventoryDisplay.hide();
+      closedSomething = true;
+    }
+    if (this.game.journalDisplay?.isOpen) {
+      this.game.journalDisplay.hide();
+      closedSomething = true;
+    }
+    if (this.isBannerVisible) {
+      this.hideBanner();
+      closedSomething = true;
+    }
+    if (this.game.interactionSystem?.isChatOpen) {
+      this.game.interactionSystem.closeChatInterface();
+      closedSomething = true;
+    }
+    return closedSomething;
+  }
+
+  /**
    * Shows the quest/trade banner UI. Handles different button configurations.
    * @param title The title for the banner.
    * @param description The description text or HTML.
@@ -145,11 +236,16 @@ export class UIManager {
       return;
 
     this._removeBannerListeners();
-    this.bannerButtonContainer.innerHTML = "";
+    this.bannerButtonContainer.innerHTML = ""; // Clear previous buttons
     this.currentQuestForReward = quest;
     this.bannerTitle.textContent = title;
     this.bannerDesc.innerHTML = description;
     this.currentBannerType = type;
+
+    // Ensure buttons are hidden initially before adding the correct ones
+    this.bannerOkButton.classList.add("hidden");
+    this.bannerAcceptButton.classList.add("hidden");
+    this.bannerDeclineButton.classList.add("hidden");
 
     if (type === "trade") {
       this.bannerButtonContainer.appendChild(this.bannerAcceptButton);

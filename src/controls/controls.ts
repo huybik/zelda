@@ -75,6 +75,7 @@ export class Controls {
         false
       );
     } else {
+      // Only listen for Escape key on mobile for menu closing
       document.addEventListener("keydown", (e) => {
         if (e.code === "Escape") this.handleEscapeKey();
       });
@@ -171,24 +172,8 @@ export class Controls {
   }
 
   handleEscapeKey(): void {
-    // Prioritize closing UI elements over unlocking pointer
-    if (this.game?.interactionSystem?.isChatOpen) {
-      this.game.interactionSystem.closeChatInterface();
-    } else if (this.game?.inventoryDisplay?.isOpen) {
-      this.game.inventoryDisplay.hide();
-      // Don't unpause here, allow setPauseState in hide() to handle it
-    } else if (this.game?.journalDisplay?.isOpen) {
-      this.game.journalDisplay.hide();
-      // Don't unpause here, allow setPauseState in hide() to handle it
-    } else if (this.game?.isQuestBannerVisible) {
-      // Delegate banner closing to UIManager via Game
-      this.game.hideQuestBanner();
-      // Don't unpause here, allow setPauseState in hideBanner() to handle it
-    } else if (this.isPointerLocked) {
-      // Only unlock pointer if no UI elements were closed
-      this.unlockPointer();
-    }
-    // Game pause state is handled within the respective hide/close methods
+    // Delegate closing logic to UIManager
+    this.game?.uiManager?.closeTopmostUI();
   }
 
   onMouseDown(event: MouseEvent): void {
@@ -226,9 +211,7 @@ export class Controls {
 
     const targetElement = event.target as HTMLElement;
     const isClickOnUI =
-      targetElement.closest(
-        "#inventory-display, #journal-display, #chat-container, #minimap-canvas, #quest-detail-banner, #mobile-controls-layer"
-      ) !== null;
+      this.game?.uiManager?.isClickOnInteractableUI(targetElement);
 
     if (this.isPointerLocked) {
       // If pointer is locked, clicks should not interact with background UI or close menus
@@ -237,21 +220,7 @@ export class Controls {
 
     // If clicking outside interactable UI elements and a menu is open, close it
     if (!isClickOnUI) {
-      let closedSomething = false;
-      if (this.game?.inventoryDisplay?.isOpen) {
-        this.game.inventoryDisplay.hide();
-        closedSomething = true;
-      } else if (this.game?.journalDisplay?.isOpen) {
-        this.game.journalDisplay.hide();
-        closedSomething = true;
-      } else if (this.game?.interactionSystem?.isChatOpen) {
-        this.game.interactionSystem.closeChatInterface();
-        closedSomething = true;
-      } else if (this.game?.isQuestBannerVisible) {
-        this.game.hideQuestBanner();
-        closedSomething = true;
-      }
-
+      const closedSomething = this.game?.uiManager?.closeOpenMenus();
       // If we closed something, don't try to lock pointer immediately
       if (closedSomething) {
         return;
@@ -319,6 +288,9 @@ export class Controls {
         "pointerlockerror",
         this.boundOnPointerLockError
       );
+    } else {
+      // Remove the specific listener added for mobile
+      document.removeEventListener("keydown", this.handleEscapeKey);
     }
   }
 }
