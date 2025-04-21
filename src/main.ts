@@ -478,14 +478,14 @@ export class Game {
   }
 
   update(): void {
-    const currentTime = performance.now();
-    const elapsed = currentTime - this.lastUpdateTime;
-    if (elapsed >= this.targetFrameTime) {
-      this.profiler.start("Game.update");
-      runGameLoopStep(this, this.profiler);
-      this.profiler.end("Game.update");
-      this.lastUpdateTime = currentTime;
-    }
+    // const currentTime = performance.now();
+    // const elapsed = currentTime - this.lastUpdateTime;
+    // if (elapsed >= this.targetFrameTime) {
+    this.profiler.start("Game.update");
+    runGameLoopStep(this, this.profiler);
+    this.profiler.end("Game.update");
+    // this.lastUpdateTime = currentTime;
+    // }
   }
 
   checkRespawn(): void {
