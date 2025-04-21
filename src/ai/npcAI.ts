@@ -70,10 +70,6 @@ export class AIController {
       return moveState; // No actions if dead
     }
 
-    if (this.character.game) {
-      updateObservation(this, this.character.game.entities);
-    }
-
     if (this.isAffectedByEntities()) {
       this.decideNextAction();
       this.actionTimer = 5 + Math.random() * 5;
@@ -400,6 +396,10 @@ export class AIController {
         this.aiState = "dead"; // Ensure state consistency
       }
       return;
+    }
+
+    if (this.character.game) {
+      updateObservation(this, this.character.game.entities);
     }
 
     // Don't decide if already following or deciding

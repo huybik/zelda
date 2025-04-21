@@ -1,4 +1,4 @@
-/* File: src/core/profiler.ts */
+/* File: /src/core/profiler.ts */
 interface ProfileRecord {
   startTime: number;
   label: string;
@@ -138,6 +138,14 @@ export class Profiler {
 
   getReport(): string {
     if (!this.isEnabled) return "Profiler is disabled.";
+    if (this.rootChildren.size === 0) return "Profiler has no data yet.";
+
+    // Find the total time of the main loop (assuming it's a top-level entry)
+    // Use the first top-level entry as the basis if 'runGameLoopStep' isn't found
+    const mainLoopNode =
+      this.rootChildren.get("runGameLoopStep") ||
+      this.rootChildren.values().next().value;
+    const totalFrameTime = mainLoopNode ? mainLoopNode.totalTime : 1; // Avoid division by zero
 
     let report = "--- Profiler Report ---\n";
     report +=
@@ -146,8 +154,9 @@ export class Profiler {
       "Total (ms)".padStart(15) +
       "Self (ms)".padStart(15) +
       "Avg (ms)".padStart(15) +
+      "%".padStart(8) + // Added Percentage column
       "\n";
-    report += "-".repeat(100) + "\n";
+    report += "-".repeat(108) + "\n"; // Adjusted separator length
 
     const reportLines: string[] = [];
 
@@ -178,6 +187,8 @@ export class Profiler {
       const selfTime = Math.max(0, node.totalTime - childrenTotalTime);
       node.selfTime = selfTime; // Store calculated selfTime
       const avgTime = node.calls > 0 ? node.totalTime / node.calls : 0;
+      const percentage =
+        totalFrameTime > 0 ? (node.totalTime / totalFrameTime) * 100 : 0; // Calculate percentage
 
       // Format the line for the current node
       const indentedLabel = ("  ".repeat(depth) + label).padEnd(45);
@@ -185,10 +196,11 @@ export class Profiler {
       const paddedTotal = node.totalTime.toFixed(3).padStart(15);
       const paddedSelf = node.selfTime.toFixed(3).padStart(15); // Use calculated selfTime
       const paddedAvg = avgTime.toFixed(3).padStart(15);
+      const paddedPercentage = percentage.toFixed(1).padStart(7) + "%"; // Format percentage
 
       // Add the current node's line to the main report lines
       reportLines.push(
-        `${indentedLabel}${paddedCalls}${paddedTotal}${paddedSelf}${paddedAvg}`
+        `${indentedLabel}${paddedCalls}${paddedTotal}${paddedSelf}${paddedAvg}${paddedPercentage}`
       );
       // Add the collected child lines after the parent
       reportLines.push(...childReportLines);
@@ -221,16 +233,19 @@ export class Profiler {
       const selfTime = Math.max(0, node.totalTime - childrenTotalTime);
       node.selfTime = selfTime;
       const avgTime = node.calls > 0 ? node.totalTime / node.calls : 0;
+      const percentage =
+        totalFrameTime > 0 ? (node.totalTime / totalFrameTime) * 100 : 0; // Calculate percentage
 
       const indentedLabel = ("  ".repeat(depth) + label).padEnd(45);
       const paddedCalls = node.calls.toString().padStart(10);
       const paddedTotal = node.totalTime.toFixed(3).padStart(15);
       const paddedSelf = node.selfTime.toFixed(3).padStart(15);
       const paddedAvg = avgTime.toFixed(3).padStart(15);
+      const paddedPercentage = percentage.toFixed(1).padStart(7) + "%"; // Format percentage
 
       // Add current node line and its children lines to the collection for this branch
       collectedLines.push(
-        `${indentedLabel}${paddedCalls}${paddedTotal}${paddedSelf}${paddedAvg}`
+        `${indentedLabel}${paddedCalls}${paddedTotal}${paddedSelf}${paddedAvg}${paddedPercentage}`
       );
       collectedLines.push(...childReportLines);
 
