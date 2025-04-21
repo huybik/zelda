@@ -97,7 +97,7 @@ export abstract class Entity {
     // Allow for NPCs and Animals, but not the player
     if (this.userData.isPlayer || !this.mesh) return;
 
-    const baseScale = 0.8; // Use mobile scale always
+    const baseScale = 0.6; // Use mobile scale always
 
     if (!this.nameCanvas) {
       this.nameCanvas = document.createElement("canvas");
