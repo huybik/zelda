@@ -241,9 +241,8 @@ canvas {
 }
 
 /* Make specific UI elements interactive */
-.ui-panel,
+.menu-panel, /* Use the new common class */
 #chat-container,
-#quest-detail-banner,
 #mobile-controls-layer > *, /* Buttons, joystick zones */
 .top-right-icon-buttons > *, /* Make icon buttons interactive */
 #mobile-controls-layer .mobile-button {
@@ -361,35 +360,55 @@ canvas {
   border-radius: 50%; /* Ensure canvas is clipped */
 }
 
-/* --- Panels (Inventory & Journal) --- */
-.ui-panel {
+/* --- Common Menu Panel Style --- */
+.menu-panel {
   position: fixed;
-  background-color: rgba(235, 235, 235, 0.97);
-  border: 1px solid #aaa;
+  background-color: rgba(50, 70, 64, 0.95); /* Darker, slightly more opaque */
+  color: #eee; /* Light text */
+  border: 1px solid rgba(255, 255, 255, 0.15); /* Subtle light border */
   border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  padding: 20px; /* Consistent padding */
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5); /* Banner's shadow */
   z-index: 20;
   transition:
-    opacity 0.2s ease-in-out,
-    transform 0.2s ease-in-out,
-    visibility 0s 0s; /* Visibility transition happens immediately */
+    opacity 0.25s ease-in-out,
+    /* Slightly faster transition */ transform 0.25s ease-in-out,
+    visibility 0s 0s;
   opacity: 1;
+  transform-origin: center center; /* Ensure scaling originates from center */
   transform: scale(1);
   visibility: visible;
+  display: flex; /* Use flex for consistent internal layout */
+  flex-direction: column; /* Stack title, content, buttons vertically */
+  overflow: hidden; /* Prevent content spillover */
 }
 
-.ui-panel.hidden {
+.menu-panel.hidden {
   opacity: 0;
   transform: scale(0.95);
   pointer-events: none;
   visibility: hidden;
   transition:
-    opacity 0.2s ease-in-out,
-    transform 0.2s ease-in-out,
-    visibility 0s 0.2s; /* Delay visibility change until after transition */
+    opacity 0.25s ease-in-out,
+    transform 0.25s ease-in-out,
+    visibility 0s 0.25s; /* Delay visibility change until after transition */
 }
 
+/* Common header style */
+.menu-panel h2,
+.menu-panel h3 {
+  margin-top: 0;
+  text-align: center;
+  color: #fff; /* White header text */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  padding-bottom: 12px;
+  margin-bottom: 18px;
+  font-size: 1.3em;
+  user-select: none;
+  flex-shrink: 0; /* Prevent header from shrinking */
+}
+
+/* --- Specific Panel Positioning and Sizing --- */
 #inventory-display {
   bottom: 10%;
   left: 50%;
@@ -397,8 +416,7 @@ canvas {
   width: 85%;
   max-width: 700px;
   max-height: 60vh;
-  display: flex; /* Use flex for main panel structure */
-  flex-direction: column;
+  /* display: flex; flex-direction: column; are now in .menu-panel */
 }
 #inventory-display.hidden {
   transform: translateX(-50%) scale(0.95);
@@ -411,26 +429,26 @@ canvas {
   width: 80%;
   max-width: 650px;
   max-height: 75vh;
-  display: flex;
-  flex-direction: column;
+  /* display: flex; flex-direction: column; are now in .menu-panel */
 }
 #journal-display.hidden {
   transform: translate(-50%, -50%) scale(0.95);
 }
 
-.ui-panel h2 {
-  margin-top: 0;
-  text-align: center;
-  color: #444;
-  border-bottom: 1px solid #ccc;
-  padding-bottom: 12px;
-  margin-bottom: 18px;
-  font-size: 1.3em;
-  user-select: none;
-  flex-shrink: 0; /* Prevent header from shrinking */
+#quest-detail-banner {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(1);
+  width: 90%;
+  max-width: 500px;
+  text-align: center; /* Keep text centered for banner */
+  /* Other styles inherited from .menu-panel */
+}
+#quest-detail-banner.hidden {
+  transform: translate(-50%, -50%) scale(0.95);
 }
 
-/* Inventory Specific Layout */
+/* --- Inventory Specific Layout --- */
 .inventory-content {
   display: grid;
   grid-template-columns: 2fr 1fr; /* Adjust ratio: 2 parts slots, 1 part description */
@@ -449,30 +467,35 @@ canvas {
   gap: 10px;
   overflow-y: auto; /* Allow only slots area to scroll */
   padding: 5px;
-  border: 1px solid #ddd;
-  background-color: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1); /* Lighter border for dark theme */
+  background-color: rgba(0, 0, 0, 0.2); /* Darker background for slots area */
   border-radius: 4px;
-  /* Custom scrollbar */
+  /* Custom scrollbar for dark theme */
   scrollbar-width: thin;
-  scrollbar-color: #aaa #eee;
+  scrollbar-color: #666 #333; /* Darker scrollbar */
 }
 #inventory-slots::-webkit-scrollbar {
   width: 8px;
 }
 #inventory-slots::-webkit-scrollbar-track {
-  background: #eee;
+  background: #333; /* Dark track */
   border-radius: 4px;
 }
 #inventory-slots::-webkit-scrollbar-thumb {
-  background-color: #aaa;
+  background-color: #666; /* Slightly lighter thumb */
   border-radius: 4px;
-  border: 2px solid #eee;
+  border: 2px solid #333;
 }
 
 .inventory-slot {
   aspect-ratio: 1 / 1; /* Maintain square shape */
-  background-color: rgba(200, 200, 200, 0.9);
-  border: 1px solid #999;
+  background-color: rgba(
+    255,
+    255,
+    255,
+    0.1
+  ); /* Slightly lighter slot background */
+  border: 1px solid rgba(255, 255, 255, 0.2); /* Lighter border */
   border-radius: 5px;
   position: relative;
   cursor: pointer;
@@ -485,9 +508,9 @@ canvas {
   align-items: center;
 }
 .inventory-slot:hover {
-  background-color: rgba(180, 180, 180, 1);
+  background-color: rgba(255, 255, 255, 0.2);
   transform: scale(1.05);
-  border-color: #666;
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 .item-icon {
@@ -509,7 +532,7 @@ canvas {
   font-weight: bold;
   color: #f0f0f0;
   text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.9);
-  background-color: rgba(0, 0, 0, 0.3);
+  background-color: rgba(0, 0, 0, 0.5); /* Slightly darker count background */
   padding: 0 3px;
   border-radius: 2px;
   pointer-events: none; /* Don't interfere with slot clicks */
@@ -517,29 +540,29 @@ canvas {
 
 /* Item Description Panel */
 #item-description-panel {
-  background-color: rgba(220, 220, 220, 0.9);
-  border: 1px solid #bbb;
+  background-color: rgba(0, 0, 0, 0.15); /* Darker description background */
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 5px;
   padding: 15px;
   overflow-y: auto; /* Allow description to scroll */
   transition:
     opacity 0.2s ease-in-out,
     visibility 0s 0s;
-  /* Custom scrollbar */
+  /* Custom scrollbar for dark theme */
   scrollbar-width: thin;
-  scrollbar-color: #aaa #eee;
+  scrollbar-color: #666 #333;
 }
 #item-description-panel::-webkit-scrollbar {
   width: 6px;
 }
 #item-description-panel::-webkit-scrollbar-track {
-  background: #eee;
+  background: #333;
   border-radius: 3px;
 }
 #item-description-panel::-webkit-scrollbar-thumb {
-  background-color: #aaa;
+  background-color: #666;
   border-radius: 3px;
-  border: 1px solid #eee;
+  border: 1px solid #333;
 }
 
 #item-description-panel.hidden {
@@ -556,8 +579,8 @@ canvas {
   margin-bottom: 10px;
   font-size: 1.1em;
   font-weight: bold;
-  color: #333;
-  border-bottom: 1px solid #ccc;
+  color: #fff; /* White title */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
   padding-bottom: 5px;
 }
 
@@ -565,11 +588,11 @@ canvas {
   margin: 0;
   font-size: 0.95em;
   line-height: 1.4;
-  color: #444;
+  color: #ddd; /* Light grey text */
   white-space: pre-wrap; /* Preserve line breaks from description */
 }
 
-/* Journal Specific Layout */
+/* --- Journal Specific Layout --- */
 .journal-section {
   margin-bottom: 15px;
   flex-shrink: 0; /* Prevent sections from shrinking */
@@ -582,8 +605,8 @@ canvas {
   margin-top: 0;
   margin-bottom: 8px;
   font-size: 1.1em;
-  color: #555;
-  border-bottom: 1px dotted #ccc;
+  color: #ccc; /* Lighter section header */
+  border-bottom: 1px dotted rgba(255, 255, 255, 0.2);
   padding-bottom: 5px;
 }
 #quest-log,
@@ -593,13 +616,13 @@ canvas {
   margin: 0;
   max-height: 25vh; /* Limit height */
   overflow-y: auto;
-  border: 1px solid #ddd;
-  background-color: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: rgba(0, 0, 0, 0.2);
   border-radius: 4px;
   padding: 10px;
   /* Custom scrollbar */
   scrollbar-width: thin;
-  scrollbar-color: #aaa #eee;
+  scrollbar-color: #666 #333;
 }
 #quest-log::-webkit-scrollbar,
 #event-log::-webkit-scrollbar {
@@ -607,23 +630,24 @@ canvas {
 }
 #quest-log::-webkit-scrollbar-track,
 #event-log::-webkit-scrollbar-track {
-  background: #eee;
+  background: #333;
   border-radius: 4px;
 }
 #quest-log::-webkit-scrollbar-thumb,
 #event-log::-webkit-scrollbar-thumb {
-  background-color: #aaa;
+  background-color: #666;
   border-radius: 4px;
-  border: 2px solid #eee;
+  border: 2px solid #333;
 }
 
 #quest-log li,
 #event-log li {
   margin-bottom: 10px;
   padding-bottom: 10px;
-  border-bottom: 1px dashed #ddd;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
   font-size: 0.95em;
   line-height: 1.4;
+  color: #ddd; /* Light text for log entries */
 }
 #quest-log li:last-child,
 #event-log li:last-child {
@@ -634,29 +658,30 @@ canvas {
 /* Quest Log Specific */
 li.quest-item-container {
   margin-bottom: 15px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #ccc;
+  padding: 10px; /* Add padding inside container */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
   cursor: pointer; /* Make whole container clickable */
   transition: background-color 0.15s ease;
+  border-radius: 4px; /* Add slight rounding */
 }
 li.quest-item-container:hover {
-  background-color: rgba(0, 0, 0, 0.05); /* Subtle hover for container */
+  background-color: rgba(255, 255, 255, 0.08); /* Subtle hover for container */
 }
 li.quest-item-container:last-child {
   border-bottom: none;
   margin-bottom: 0;
-  padding-bottom: 0;
+  padding-bottom: 10px; /* Keep padding */
 }
 
 .quest-title {
   font-weight: bold;
-  /* cursor: pointer; */ /* Removed cursor from title */
   transition: color 0.15s ease;
   margin-bottom: 5px;
+  color: #fff; /* White quest title */
 }
 /* Change title color when container is hovered */
 li.quest-item-container:hover .quest-title {
-  color: #007bff;
+  color: #87ceeb; /* Light blue hover */
 }
 
 .quest-objectives-list {
@@ -667,7 +692,7 @@ li.quest-item-container:hover .quest-title {
 
 .quest-objective {
   font-size: 0.9em;
-  color: #444;
+  color: #bbb; /* Lighter grey for objectives */
   margin-bottom: 3px !important; /* Reduce spacing */
   padding-bottom: 0 !important; /* Remove padding */
   border-bottom: none !important; /* Remove border */
@@ -679,15 +704,15 @@ li.quest-item-container:hover .quest-title {
 }
 
 li.quest-completed .quest-title {
-  color: #555;
+  color: #999; /* Dim completed title */
   font-style: italic;
   cursor: default;
 }
 li.quest-completed:hover .quest-title {
-  color: #555; /* Keep completed title color on hover */
+  color: #999; /* Keep completed title color on hover */
 }
 li.quest-completed .quest-objective {
-  color: #888;
+  color: #666; /* Dim completed objectives */
 }
 li.quest-completed:hover {
   background-color: transparent; /* No hover effect for completed quests */
@@ -774,9 +799,8 @@ body.pointer-locked::after {
   display: block; /* Show crosshair only when pointer locked */
 }
 /* Hide crosshair if any panel is open or on mobile */
-body:has(.ui-panel:not(.hidden))::after,
+body:has(.menu-panel:not(.hidden))::after, /* Use new class */
 body:has(#chat-container:not(.hidden))::after,
-body:has(#quest-detail-banner:not(.hidden))::after,
 body:has(#mobile-controls-layer:not(.hidden))::after {
   display: none;
 }
@@ -792,47 +816,17 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
 
 /* Intent Display (Sprites handled in JS) */
 
-/* Quest/Trade Detail Banner */
-#quest-detail-banner {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 90%;
-  max-width: 500px;
-  background-color: rgba(50, 50, 70, 0.9); /* Slightly more opaque */
-  color: #eee;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-  text-align: center;
-  transition:
-    opacity 0.3s ease-out,
-    visibility 0s 0s;
-  border-radius: 8px; /* Match other panels */
-  padding: 25px; /* More padding */
-}
-
-#quest-detail-banner.hidden {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition:
-    opacity 0.3s ease-out,
-    visibility 0s 0.3s;
-}
-
+/* Quest/Trade Detail Banner Specifics (mostly inherited now) */
 #quest-detail-banner h3 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  font-size: 1.4em;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-  padding-bottom: 10px;
-  color: #fff;
+  /* Inherited from .menu-panel h2, h3 */
+  font-size: 1.4em; /* Keep banner title slightly larger */
 }
 
 #quest-detail-banner #quest-banner-description {
   margin-bottom: 25px;
   font-size: 1em;
   line-height: 1.5;
+  color: #ddd; /* Match panel text color */
 }
 
 /* Trade Item Styling */
@@ -851,6 +845,8 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   justify-content: center;
   gap: 15px; /* Space between buttons */
   flex-wrap: wrap; /* Allow buttons to wrap on smaller screens */
+  margin-top: 10px; /* Add some space above buttons */
+  flex-shrink: 0; /* Prevent button container shrinking */
 }
 
 #quest-banner-ok,
