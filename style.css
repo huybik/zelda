@@ -775,14 +775,14 @@ li.quest-completed:hover {
 /* Chat Suggestions */
 #chat-suggestions-container {
   position: absolute;
-  bottom: calc(100% + 5px); /* Position above the chat input */
+  bottom: calc(100% + 5px);
   left: 0;
-  width: 100%;
-  background-color: rgba(50, 50, 50, 0.9);
+  width: 30%;
+  background-color: rgba(50, 50, 50, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 5px;
   box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.3);
-  z-index: 26; /* Above chat input */
+  z-index: 26;
   transition:
     opacity 0.15s ease-out,
     visibility 0.15s ease-out;
@@ -1327,6 +1327,7 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
 .chat-input-wrapper {
   display: flex;
   align-items: center;
+  width: 100%;
 }
 #mic-button {
   margin-left: 5px;
@@ -1334,6 +1335,8 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   background-color: #f0f0f0;
   border: none;
   cursor: pointer;
+  width: 34px;
+  height: 35px;
 }
 #mic-button.recording {
   background-color: red;

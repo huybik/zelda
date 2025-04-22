@@ -1,4 +1,3 @@
-/* File: /src/entities/entity.ts */
 import {
   Scene,
   Vector3,
@@ -9,8 +8,8 @@ import {
   CanvasTexture,
   Sprite,
   SpriteMaterial,
-  Raycaster, // Import Raycaster
-  AnimationAction, // Added AnimationAction
+  Raycaster,
+  AnimationAction,
 } from "three";
 import {
   EntityUserData,
@@ -18,10 +17,9 @@ import {
   getNextEntityId,
   getTerrainHeight,
 } from "../core/utils";
-// Removed Raycaster import from here as it's imported above
 import { Game } from "../main";
 import type { AIController } from "../ai/npcAI";
-import type { AnimalAIController } from "../ai/animalAI"; // Import Animal AI
+import type { AnimalAIController } from "../ai/animalAI";
 import { CHARACTER_HEIGHT, CHARACTER_RADIUS } from "../core/constants";
 
 export abstract class Entity {
@@ -44,17 +42,16 @@ export abstract class Entity {
   nameContext: CanvasRenderingContext2D | null = null;
   nameTexture: CanvasTexture | null = null;
   nameSprite: Sprite | null = null;
-  // Use a union type for the AI controller
   aiController: AIController | AnimalAIController | null = null;
-  rayCaster: Raycaster | null = null; // Raycaster can be null initially
+  rayCaster: Raycaster | null = null;
   deathTimestamp: number | null = null;
-  homePosition: Vector3 | null = null; // Added home position for respawning
-  lastAttacker: Entity | null = null; // Track the last entity that attacked this one
+  homePosition: Vector3 | null = null;
+  lastAttacker: Entity | null = null;
+  lastAttackedTargetId: string | null = null; // Added to track last attacked target
 
-  // Action/Animation related properties (common to Character and Animal)
   isPerformingAction: boolean = false;
-  attackCooldown: number = 1.0; // Default cooldown
-  lastAttackTime: number = -1; // Initialize to allow first attack
+  attackCooldown: number = 1.0;
+  lastAttackTime: number = -1;
 
   constructor(scene: Scene, position: Vector3, name: string = "Entity") {
     this.id = `${name}_${getNextEntityId()}`;
@@ -62,7 +59,7 @@ export abstract class Entity {
     this.name = name;
     this.mesh = new Group();
     this.mesh.position.copy(position);
-    this.homePosition = position.clone(); // Initialize home position
+    this.homePosition = position.clone();
     this.velocity = new Vector3();
     this.boundingBox = new Box3();
     this.health = 100;
@@ -75,10 +72,10 @@ export abstract class Entity {
       isPlayer: false,
       isNPC: false,
       isCollidable: true,
-      isInteractable: false, // Default to false, set by subclasses
+      isInteractable: false,
       id: this.id,
-      height: CHARACTER_HEIGHT, // Default height
-      radius: CHARACTER_RADIUS, // Default radius
+      height: CHARACTER_HEIGHT,
+      radius: CHARACTER_RADIUS,
     };
     if (this.mesh) {
       this.mesh.userData = this.userData;
@@ -87,17 +84,15 @@ export abstract class Entity {
     }
   }
 
-  // Abstract methods or common implementations for subclasses
   abstract update(deltaTime: number, options?: UpdateOptions): void;
   abstract playAttackAnimation(): void;
   abstract getAttackDamage(): number;
   abstract getAttackRange(): number;
 
   initNameDisplay(): void {
-    // Allow for NPCs and Animals, but not the player
     if (this.userData.isPlayer || !this.mesh) return;
 
-    const baseScale = 0.6; // Use mobile scale always
+    const baseScale = 0.6;
 
     if (!this.nameCanvas) {
       this.nameCanvas = document.createElement("canvas");
@@ -110,13 +105,11 @@ export abstract class Entity {
       const material = new SpriteMaterial({ map: this.nameTexture });
       this.nameSprite = new Sprite(material);
       const aspectRatio = this.nameCanvas.width / this.nameCanvas.height;
-      this.nameSprite.scale.set(aspectRatio * baseScale, baseScale, 1); // Apply base scale
-      // Position above the entity based on its height
+      this.nameSprite.scale.set(aspectRatio * baseScale, baseScale, 1);
       const displayHeight = (this.userData.height ?? CHARACTER_HEIGHT) + 0.15;
       this.nameSprite.position.set(0, displayHeight, 0);
       this.mesh!.add(this.nameSprite);
     } else {
-      // Update scale if needed (though it should be consistent now)
       const aspectRatio = this.nameCanvas.width / this.nameCanvas.height;
       this.nameSprite.scale.set(aspectRatio * baseScale, baseScale, 1);
     }
@@ -126,16 +119,15 @@ export abstract class Entity {
   updateNameDisplay(name: string): void {
     if (!this.nameContext || !this.nameCanvas || !this.nameTexture) return;
 
-    // Determine the name to display (Type for animals, full name for others)
     const displayName = this.userData.isAnimal
-      ? (this.userData.animalType ?? this.name) // Use animalType if available
+      ? (this.userData.animalType ?? this.name)
       : name;
 
     const ctx = this.nameContext;
     const canvas = this.nameCanvas;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.font = "16px Arial";
-    ctx.fillStyle = this.userData.isAggressive ? "red" : "blue"; // Different color for animals?
+    ctx.fillStyle = this.userData.isAggressive ? "red" : "blue";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(String(displayName), canvas.width / 2, canvas.height / 2);
@@ -155,7 +147,6 @@ export abstract class Entity {
 
   updateBoundingBox(): void {
     if (!this.mesh) return;
-    // Use specific height/radius if available, otherwise fallback
     const height = this.userData.height ?? CHARACTER_HEIGHT;
     const radius = this.userData.radius ?? CHARACTER_RADIUS;
     const center = this.mesh.position
@@ -187,31 +178,20 @@ export abstract class Entity {
   ): void {
     if (this.isDead || amount <= 0) return;
     this.health = Math.max(0, this.health - amount);
-    this.lastAttacker = attacker; // Store the attacker
+    this.lastAttacker = attacker;
 
-    // Use provided hitPosition or estimate based on bounding box center
     const displayPosition =
       hitPosition ??
-      this.boundingBox.getCenter(new Vector3()).add(new Vector3(0, 0.2, 0)); // Slightly above center
+      this.boundingBox.getCenter(new Vector3()).add(new Vector3(0, 0.2, 0));
 
     if (this.game) {
       const message = `${this.name} took ${amount} damage${
         attacker ? ` from ${attacker.name}` : ""
       }.`;
-      this.game.logEvent(
-        this,
-        "take_damage",
-        message,
-        attacker || undefined,
-        { damage: amount },
-        this.mesh!.position
-      );
-      // Spawn damage number notification
       this.game.notificationManager?.createAttackNumberSprite(
         amount,
         displayPosition
       );
-      // Spawn particle effect
       this.game.spawnParticleEffect(displayPosition, "red");
     }
 
@@ -221,19 +201,18 @@ export abstract class Entity {
   die(attacker: Entity | null = null): void {
     if (this.isDead) return;
     this.isDead = true;
-    this.velocity.set(0, 0, 0); // Stop movement
+    this.velocity.set(0, 0, 0);
     this.health = 0;
-    this.userData.isCollidable = false; // Make non-collidable
-    this.userData.isInteractable = false; // Make non-interactable
-    this.deathTimestamp = performance.now(); // Record time of death
-    this.mesh!.visible = false; // Hide mesh immediately on death
-    this.lastAttacker = attacker; // Store attacker info
+    this.userData.isCollidable = false;
+    this.userData.isInteractable = false;
+    this.deathTimestamp = performance.now();
+    this.mesh!.visible = false;
+    this.lastAttacker = attacker;
 
-    // Stop AI updates
     if (this.aiController) {
       this.aiController.aiState = "dead";
     }
-    this.removeDisplays(); // Remove name/intent displays on death
+    this.removeDisplays();
   }
 
   destroy(): void {
