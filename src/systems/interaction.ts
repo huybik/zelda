@@ -1,3 +1,4 @@
+// systems/interaction.ts
 import {
   PerspectiveCamera,
   Object3D,

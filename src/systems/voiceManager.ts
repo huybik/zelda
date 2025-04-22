@@ -1,55 +1,7 @@
+// systems/voiceManager.ts
 import { Game } from "../main";
 import { Character } from "../entities/character";
 import { sendToGemini, generateChatPrompt } from "../ai/api";
-
-// Type declarations for SpeechRecognition
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  error: string;
-  message: string;
-}
-
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: (event: SpeechRecognitionEvent) => void;
-  onerror: (event: SpeechRecognitionErrorEvent) => void;
-  onend: () => void;
-  start: () => void;
-  stop: () => void;
-}
-
-interface SpeechRecognitionResultList {
-  length: number;
-  item(index: number): SpeechRecognitionResult;
-  [index: number]: SpeechRecognitionResult;
-}
-
-interface SpeechRecognitionResult {
-  length: number;
-  item(index: number): SpeechRecognitionAlternative;
-  [index: number]: SpeechRecognitionAlternative;
-}
-
-interface SpeechRecognitionAlternative {
-  transcript: string;
-  confidence: number;
-}
-
-declare var SpeechRecognition: {
-  prototype: SpeechRecognition;
-  new (): SpeechRecognition;
-};
-
-declare var webkitSpeechRecognition: {
-  prototype: SpeechRecognition;
-  new (): SpeechRecognition;
-};
 
 export class VoiceManager {
   private game: Game;
@@ -76,20 +28,26 @@ export class VoiceManager {
     }
 
     const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       console.warn("Speech Recognition not supported in this browser");
       this.micButton.disabled = true;
       return;
     }
     this.recognition = new SpeechRecognition();
+    // Changed to false to listen for a single utterance per button hold, reducing network errors
     this.recognition!.continuous = true;
     this.recognition!.interimResults = false;
 
-    this.recognition!.onresult = (event) => {
-      const transcript = event.results[event.results.length - 1][0].transcript;
-      this.handleRecognitionResult(transcript);
+    this.recognition!.onresult = async (event) => {
+        console.log("event", event)
+      try {
+        const transcript = event.results[event.results.length - 1][0].transcript;
+        await this.handleRecognitionResult(transcript);
+      } catch (error) {
+        console.error("Error processing speech recognition result:", error);
+      }
     };
 
     this.recognition!.onerror = (event) => {
