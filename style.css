@@ -1323,3 +1323,19 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   right: -1px;
   border-top-left-radius: 12px;
 }
+
+.chat-input-wrapper {
+  display: flex;
+  align-items: center;
+}
+#mic-button {
+  margin-left: 5px;
+  padding: 5px;
+  background-color: #f0f0f0;
+  border: none;
+  cursor: pointer;
+}
+#mic-button.recording {
+  background-color: red;
+  color: white;
+}

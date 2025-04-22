@@ -29,6 +29,7 @@ import { InventoryDisplay } from "./ui/inventory";
 import { JournalDisplay } from "./ui/journal";
 import { Minimap } from "./ui/minimap";
 import { NotificationManager } from "./ui/notificationManager";
+import { VoiceManager } from "./systems/voiceManager.ts";
 import {
   Inventory,
   getTerrainHeight,
@@ -122,6 +123,7 @@ export class Game {
   > | null = null;
   private isCoreGameInitialized: boolean = false;
   public profiler: Profiler; // Add profiler instance
+  public voiceManager: VoiceManager | null = null;
 
   constructor() {
     this.questManager = new QuestManager(this);

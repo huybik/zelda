@@ -1,5 +1,3 @@
-/* File: /src/systems/interaction.ts */
-// File: /src/systems/interaction.ts
 import {
   PerspectiveCamera,
   Object3D,
@@ -18,40 +16,40 @@ import { Controls } from "../controls/controls";
 import { Game } from "../main";
 import { sendToGemini, generateChatPrompt } from "../ai/api";
 import { INTERACTION_DISTANCE, AIM_TOLERANCE } from "../core/constants";
-import { DroppedItemManager, DroppedItemData } from "./droppedItemManager"; // Import DroppedItemManager and Data
-import { getItemDefinition } from "../core/items"; // Import for item names
+import { DroppedItemManager, DroppedItemData } from "./droppedItemManager";
+import { getItemDefinition } from "../core/items";
 
 export class InteractionSystem {
   player: Character;
   camera: PerspectiveCamera;
-  interactableEntities: Array<any>; // Includes Characters, Animals, Resources
+  interactableEntities: Array<any>;
   controls: Controls;
   inventory: Inventory;
   eventLog: EventLog;
   raycaster: Raycaster;
-  interactionDistance: number = INTERACTION_DISTANCE; // For 'E' key interactions (chat, pickup)
+  interactionDistance: number = INTERACTION_DISTANCE;
   aimTolerance: number = AIM_TOLERANCE;
-  currentTarget: any | null = null; // Can be Character, Animal, Resource Object3D, DroppedItemData
-  currentTargetMesh: Object3D | null = null; // Mesh for Characters/Resources
-  currentTargetType: "character" | "item" | "none" = "none"; // Track target type
+  currentTarget: any | null = null;
+  currentTargetMesh: Object3D | null = null;
+  currentTargetType: "character" | "item" | "none" = "none";
   interactionPromptElement: HTMLElement | null;
   promptTimeout: ReturnType<typeof setTimeout> | null = null;
   game: Game;
   chatContainer: HTMLElement | null;
   chatInput: HTMLInputElement | null;
-  chatSuggestionsContainer: HTMLElement | null; // Added suggestions container
-  chatSuggestionsList: HTMLElement | null; // Added suggestions list
+  chatSuggestionsContainer: HTMLElement | null;
+  chatSuggestionsList: HTMLElement | null;
   isChatOpen: boolean = false;
   chatTarget: Character | null = null;
   boundSendMessage: (() => Promise<void>) | null = null;
   boundHandleChatKeyDown: ((e: KeyboardEvent) => void) | null = null;
   boundCloseChat: (() => void) | null = null;
-  boundHandleChatInput: (() => void) | null = null; // Added input handler
-  boundHandleChatFocus: (() => void) | null = null; // Added focus handler
-  boundHandleChatBlur: (() => void) | null = null; // Added blur handler
-  boundHandleSuggestionClick: ((e: MouseEvent) => void) | null = null; // Added suggestion click handler
-  droppedItemManager: DroppedItemManager; // Add reference
-  public isSwitchTargetAvailable: boolean = false; // Flag for mobile switch button
+  boundHandleChatInput: (() => void) | null = null;
+  boundHandleChatFocus: (() => void) | null = null;
+  boundHandleChatBlur: (() => void) | null = null;
+  boundHandleSuggestionClick: ((e: MouseEvent) => void) | null = null;
+  droppedItemManager: DroppedItemManager;
+  public isSwitchTargetAvailable: boolean = false;
 
   private cameraDirection = new Vector3();
   private objectDirection = new Vector3();
@@ -66,7 +64,7 @@ export class InteractionSystem {
     inventory: Inventory,
     eventLog: EventLog,
     game: Game,
-    droppedItemManager: DroppedItemManager // Inject DroppedItemManager
+    droppedItemManager: DroppedItemManager
   ) {
     this.player = player;
     this.camera = camera;
@@ -75,22 +73,21 @@ export class InteractionSystem {
     this.inventory = inventory;
     this.eventLog = eventLog;
     this.game = game;
-    this.droppedItemManager = droppedItemManager; // Store reference
+    this.droppedItemManager = droppedItemManager;
     this.raycaster = new Raycaster();
     this.interactionPromptElement =
       document.getElementById("interaction-prompt");
     this.chatContainer = document.getElementById("chat-container");
     this.chatInput = document.getElementById("chat-input") as HTMLInputElement;
     if (this.chatInput) {
-      this.chatInput.addEventListener("input", this.handleChatInput.bind(this)); // Existing
-      this.chatInput.addEventListener("blur", this.handleChatBlur.bind(this)); // New
+      this.chatInput.addEventListener("input", this.handleChatInput.bind(this));
+      this.chatInput.addEventListener("blur", this.handleChatBlur.bind(this));
     }
     this.chatSuggestionsContainer = document.getElementById(
       "chat-suggestions-container"
     );
     this.chatSuggestionsList = document.getElementById("chat-suggestions-list");
 
-    // Bind chat handlers
     this.boundHandleChatInput = this.handleChatInput.bind(this);
     this.boundHandleChatFocus = this.handleChatFocus.bind(this);
     this.boundHandleChatBlur = this.handleChatBlur.bind(this);
@@ -105,7 +102,7 @@ export class InteractionSystem {
       this.chatSuggestionsList.addEventListener(
         "mousedown",
         this.boundHandleSuggestionClick
-      ); // Use mousedown to prevent blur
+      );
     }
   }
 
@@ -117,13 +114,10 @@ export class InteractionSystem {
       return;
     }
 
-    // 1. Find Character Target (Highest Priority)
     const characterTargetInfo = this.findInteractableCharacterTarget();
-
-    // 2. Find Dropped Item Target (Lower Priority)
     const itemTargetData = this.droppedItemManager.findClosestItemToPlayer(
       this.player.mesh!.position,
-      this.interactionDistance * this.interactionDistance // Use squared distance
+      this.interactionDistance * this.interactionDistance
     );
 
     let newTarget: any | null = null;
@@ -132,7 +126,6 @@ export class InteractionSystem {
     let promptText: string | null = null;
     let canSwitchToTarget = false;
 
-    // Prioritize Character interaction
     if (characterTargetInfo) {
       newTarget = characterTargetInfo.instance;
       newTargetMesh = characterTargetInfo.mesh;
@@ -142,16 +135,14 @@ export class InteractionSystem {
         (this.game.mobileControls?.isActive()
           ? "Tap Interact"
           : "Press E to talk");
-      // Check if switching is enabled and target is valid
       canSwitchToTarget =
         this.game.characterSwitchingEnabled &&
         newTarget instanceof Character &&
         newTarget !== this.player &&
         !newTarget.isDead;
     } else if (itemTargetData) {
-      // If no character target, check for item target
-      newTarget = itemTargetData; // Store the data object
-      newTargetMesh = null; // No specific mesh for item target logic here
+      newTarget = itemTargetData;
+      newTargetMesh = null;
       newTargetType = "item";
       const itemDef = getItemDefinition(itemTargetData.itemId);
       const itemName = itemDef ? itemDef.name : itemTargetData.itemId;
@@ -160,7 +151,6 @@ export class InteractionSystem {
         : `Press E to pick up ${itemName}`;
     }
 
-    // Update current target and prompt if changed
     if (
       newTarget !== this.currentTarget ||
       newTargetType !== this.currentTargetType
@@ -176,31 +166,20 @@ export class InteractionSystem {
       }
     }
 
-    // Update switch target availability flag
     this.isSwitchTargetAvailable = canSwitchToTarget;
 
-    // Check for 'E' key press (interact)
     if (this.controls.moveState.interact && this.currentTarget) {
       this.tryInteract(this.currentTarget, this.currentTargetType);
-      // Reset interact state immediately after trying
       this.controls.moveState.interact = false;
     }
-
-    // Attack logic is handled by Character.update based on moveState.attack
   }
 
-  /**
-   * Finds the nearest interactable Character within interaction distance.
-   * Uses proximity check instead of raycasting. Angle check is removed.
-   * @returns TargetInfo object for the closest character, or null.
-   */
   findInteractableCharacterTarget(): TargetInfo | null {
     const playerPosition = this.player.mesh!.position;
     let closestDistSq = this.interactionDistance * this.interactionDistance;
     let closestCharacter: Character | null = null;
 
     for (const entity of this.interactableEntities) {
-      // Check if it's a Character, not the player, and alive
       if (
         !(entity instanceof Character) ||
         entity === this.player ||
@@ -214,9 +193,7 @@ export class InteractionSystem {
       const targetPosition = entity.mesh.getWorldPosition(new Vector3());
       const distSq = playerPosition.distanceToSquared(targetPosition);
 
-      // Check if within range
       if (distSq < closestDistSq) {
-        // No angle check needed for interaction
         closestDistSq = distSq;
         closestCharacter = entity;
       }
@@ -228,15 +205,13 @@ export class InteractionSystem {
       return {
         mesh: mesh,
         instance: closestCharacter,
-        point: position.clone(), // Use object position as interaction point
+        point: position.clone(),
         distance: Math.sqrt(closestDistSq),
       };
     }
 
     return null;
   }
-
-  // Removed findNearbyCharacter as the logic is now consolidated in findInteractableCharacterTarget
 
   tryInteract(target: any, targetType: "character" | "item" | "none"): void {
     if (targetType === "character") {
@@ -253,7 +228,6 @@ export class InteractionSystem {
         this.hidePrompt();
         return;
       }
-      // Make player look at target before initiating interaction
       this.player.lookAt(target.mesh!.position);
       const result = target.interact(this.player);
       if (result) this.handleInteractionResult(result, target);
@@ -264,14 +238,10 @@ export class InteractionSystem {
         this.player
       );
       if (success) {
-        // Item collected, clear target and prompt
         this.currentTarget = null;
         this.currentTargetMesh = null;
         this.currentTargetType = "none";
         this.hidePrompt();
-      } else {
-        // Collection failed (e.g., inventory full), keep prompt visible
-        // The collectItem method handles the "Inventory Full" notification
       }
     }
   }
@@ -306,13 +276,13 @@ export class InteractionSystem {
       case "chat":
         if (targetInstance instanceof Character) {
           this.openChatInterface(targetInstance);
-          promptDuration = null; // Chat interface handles display
+          promptDuration = null;
         } else {
           promptText = "Cannot chat with this.";
         }
         break;
       case "item_retrieved":
-        promptDuration = null; // No prompt needed for simple pickup
+        promptDuration = null;
         break;
       case "error":
         if (result.message) promptText = result.message;
@@ -328,14 +298,11 @@ export class InteractionSystem {
     this.interactionPromptElement.textContent = text;
     this.interactionPromptElement.style.display = "block";
 
-    // Clear any existing timeout
     clearTimeout(this.promptTimeout ?? undefined);
     this.promptTimeout = null;
 
-    // Set new timeout if duration is provided
     if (duration && duration > 0) {
       this.promptTimeout = setTimeout(() => {
-        // Only hide if the text hasn't changed (prevents hiding a new prompt)
         if (this.interactionPromptElement?.textContent === text) {
           this.hidePrompt();
         }
@@ -347,12 +314,9 @@ export class InteractionSystem {
     if (!this.interactionPromptElement) return;
     this.interactionPromptElement.style.display = "none";
     this.interactionPromptElement.textContent = "";
-    // It's okay to clear timeout here, as hiding means the timed prompt is done or irrelevant
     clearTimeout(this.promptTimeout ?? undefined);
     this.promptTimeout = null;
   }
-
-  // --- Chat Interface Logic ---
 
   handleChatInput(): void {
     if (this.chatInput && this.chatInput.value.trim() !== "") {
@@ -369,9 +333,7 @@ export class InteractionSystem {
   }
 
   handleChatBlur(): void {
-    // Delay hiding slightly to allow clicks on suggestions
     setTimeout(() => {
-      // Check if focus is still within the chat area (input or suggestions)
       if (
         document.activeElement !== this.chatInput &&
         !this.chatSuggestionsContainer?.contains(document.activeElement)
@@ -384,12 +346,12 @@ export class InteractionSystem {
       this.chatInput.value.trim() !== "" &&
       this.boundSendMessage
     ) {
-      this.boundSendMessage(); // Send the message if input is not empty
+      this.boundSendMessage();
     }
   }
 
   handleSuggestionClick(event: MouseEvent): void {
-    event.preventDefault(); // Prevent default behavior that might affect focus
+    event.preventDefault();
     const target = event.target as HTMLElement;
     if (target.tagName === "LI" && this.chatInput) {
       const command = target.dataset.command;
@@ -398,15 +360,14 @@ export class InteractionSystem {
         const newValue = command + " " + currentValue;
         this.chatInput.value = newValue;
 
-        // Refocus and set cursor position using requestAnimationFrame
         requestAnimationFrame(() => {
-          this.chatInput!.focus(); // Ensure focus is set
+          this.chatInput!.focus();
           if (document.activeElement !== this.chatInput) {
-            this.chatInput!.focus(); // Re-focus if necessary
+            this.chatInput!.focus();
           }
           this.chatInput!.selectionStart = this.chatInput!.selectionEnd =
             newValue.length;
-          this.hideChatSuggestions(); // Hide suggestions after focus and cursor are set
+          this.hideChatSuggestions();
         });
       }
     }
@@ -443,11 +404,11 @@ export class InteractionSystem {
     this.isChatOpen = true;
     this.chatTarget = target;
     this.chatContainer.classList.remove("hidden");
-    this.handleChatInput(); // Show/hide suggestions based on initial (empty) value
+    this.handleChatInput();
     if (this.chatInput) {
       setTimeout(() => {
-        this.chatInput?.focus(); // Focus the input field
-      }, 100); // 100ms delay ensures the element is ready
+        this.chatInput?.focus();
+      }, 100);
     }
     if (this.chatTarget && this.chatTarget.aiController) {
       this.chatTarget.aiController.aiState = "idle";
@@ -459,87 +420,7 @@ export class InteractionSystem {
         if (!this.chatTarget || !this.chatInput) return;
         const message = this.chatInput.value.trim();
         if (!message) return;
-
-        const targetAtSendStart = this.chatTarget;
-
-        this.player.updateIntentDisplay(message);
-        this.game.logEvent(
-          this.player,
-          "chat",
-          `${this.player.name} said "${message}" to ${targetAtSendStart.name}.`,
-          targetAtSendStart,
-          { message: message },
-          this.player.mesh!.position
-        );
-
-        this.chatInput.value = "";
-        this.chatInput.disabled = true;
-        this.hideChatSuggestions(); // Hide suggestions when sending
-
-        const prompt = generateChatPrompt(
-          targetAtSendStart,
-          this.player,
-          message
-        );
-        try {
-          const responseJson = await sendToGemini(prompt);
-
-          let npcMessage = "Hmm....";
-          if (responseJson) {
-            // console.log(this.chatTarget.id, responseJson);
-            try {
-              const parsedText = JSON.parse(responseJson);
-              if (
-                parsedText &&
-                typeof parsedText === "object" &&
-                parsedText.response
-              ) {
-                npcMessage = parsedText.response.trim() || "Hmm....";
-              } else {
-                npcMessage = responseJson.trim() || "Hmm....";
-              }
-            } catch (parseError) {
-              npcMessage = responseJson.trim() || "Hmm....";
-              console.log(
-                "Chat response was not JSON, treating as string:",
-                responseJson
-              );
-            }
-          }
-
-          if (this.isChatOpen && this.chatTarget === targetAtSendStart) {
-            targetAtSendStart.updateIntentDisplay(npcMessage);
-            targetAtSendStart.game?.logEvent(
-              targetAtSendStart,
-              "chat",
-              `${targetAtSendStart.name} said "${npcMessage}" to ${this.player.name}.`,
-              this.player,
-              { message: npcMessage },
-              targetAtSendStart.mesh!.position
-            );
-            this.game.questManager.checkAllQuestsCompletion();
-          } else {
-            console.log("Chat closed or target changed before NPC response.");
-          }
-        } catch (error) {
-          console.error("Error during chat API call:", error);
-          if (this.isChatOpen && this.chatTarget === targetAtSendStart) {
-            targetAtSendStart.updateIntentDisplay(
-              "I... don't know what to say."
-            );
-            this.game.logEvent(
-              targetAtSendStart,
-              "chat_error",
-              `${targetAtSendStart.name} failed to respond to ${this.player.name}.`,
-              this.player,
-              { error: (error as Error).message },
-              targetAtSendStart.mesh!.position
-            );
-          }
-        } finally {
-          targetAtSendStart.aiController?.scheduleNextActionDecision();
-          this.closeChatInterface();
-        }
+        await this.processChatMessage(message, this.chatTarget);
       };
     }
 
@@ -571,7 +452,7 @@ export class InteractionSystem {
     this.isChatOpen = false;
     this.chatTarget = null;
     this.chatContainer.classList.add("hidden");
-    this.hideChatSuggestions(); // Hide suggestions on close
+    this.hideChatSuggestions();
     this.chatInput.disabled = false;
     this.chatInput.blur();
 
@@ -587,5 +468,78 @@ export class InteractionSystem {
     requestAnimationFrame(() => {
       this.game.renderer?.domElement.focus();
     });
+  }
+
+  private async processChatMessage(
+    message: string,
+    target: Character
+  ): Promise<void> {
+    if (!target || !message.trim()) return;
+
+    const targetAtSendStart = target;
+
+    this.player.updateIntentDisplay(message);
+    this.game.logEvent(
+      this.player,
+      "chat",
+      `${this.player.name} said "${message}" to ${targetAtSendStart.name}.`,
+      targetAtSendStart,
+      { message: message },
+      this.player.mesh!.position
+    );
+
+    this.chatInput!.value = "";
+    this.chatInput!.disabled = true;
+    this.hideChatSuggestions();
+
+    const prompt = generateChatPrompt(targetAtSendStart, this.player, message);
+    try {
+      const responseJson = await sendToGemini(prompt);
+      let npcMessage = "Hmm....";
+      if (responseJson) {
+        try {
+          const parsedText = JSON.parse(responseJson);
+          npcMessage =
+            parsedText.response?.trim() || responseJson.trim() || "Hmm....";
+        } catch (parseError) {
+          npcMessage = responseJson.trim() || "Hmm....";
+          console.log(
+            "Chat response was not JSON, treating as string:",
+            responseJson
+          );
+        }
+      }
+      if (this.isChatOpen && this.chatTarget === targetAtSendStart) {
+        targetAtSendStart.updateIntentDisplay(npcMessage);
+        this.game.logEvent(
+          targetAtSendStart,
+          "chat",
+          `${targetAtSendStart.name} said "${npcMessage}" to ${this.player.name}.`,
+          this.player,
+          { message: npcMessage },
+          targetAtSendStart.mesh!.position
+        );
+        this.game.questManager.checkAllQuestsCompletion();
+        this.game.voiceManager?.speak(npcMessage);
+      } else {
+        console.log("Chat closed or target changed before NPC response.");
+      }
+    } catch (error) {
+      console.error("Error during chat API call:", error);
+      if (this.isChatOpen && this.chatTarget === targetAtSendStart) {
+        targetAtSendStart.updateIntentDisplay("I... don't know what to say.");
+        this.game.logEvent(
+          targetAtSendStart,
+          "chat_error",
+          `${targetAtSendStart.name} failed to respond to ${this.player.name}.`,
+          this.player,
+          { error: (error as Error).message },
+          targetAtSendStart.mesh!.position
+        );
+      }
+    } finally {
+      targetAtSendStart.aiController?.scheduleNextActionDecision();
+      this.closeChatInterface();
+    }
   }
 }

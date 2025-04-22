@@ -1,4 +1,3 @@
-/* File: /src/core/initialization.ts */
 import * as THREE from "three";
 import {
   Scene,
@@ -35,6 +34,7 @@ import { TradingSystem } from "../systems/tradingSystem";
 import { CombatSystem } from "../systems/combatSystem";
 import { DroppedItemManager } from "../systems/droppedItemManager";
 import { UIManager } from "../ui/uiManager";
+import { VoiceManager } from "../systems/voiceManager";
 
 export const initializeGame = {
   initRenderer(): WebGLRenderer {
@@ -119,7 +119,7 @@ export const initializeGame = {
       throw new Error("Cannot init controls: Core components missing.");
     return new Controls(
       game.activeCharacter,
-      null, // Camera controller passed later
+      null,
       game.renderer.domElement,
       game
     );
@@ -138,9 +138,9 @@ export const initializeGame = {
     const thirdPersonCamera = new ThirdPersonCamera(
       game.camera,
       game.activeCharacter.mesh!,
-      game // Pass game instance
+      game
     );
-    game.controls.cameraController = thirdPersonCamera; // Link camera to controls
+    game.controls.cameraController = thirdPersonCamera;
     return thirdPersonCamera;
   },
 
@@ -188,6 +188,8 @@ export const initializeGame = {
       game.droppedItemManager
     );
     game.tradingSystem = new TradingSystem(game);
+    game.voiceManager = new VoiceManager(game);
+    game.voiceManager.init();
   },
 
   initUI(game: Game): void {
@@ -210,8 +212,8 @@ export const initializeGame = {
       game.camera,
       document.getElementById("ui-container")!
     );
-    game.uiManager = new UIManager(game); // Initialize UIManager
-    game.uiManager.init(); // Call UIManager's init to get elements
+    game.uiManager = new UIManager(game);
+    game.uiManager.init();
   },
 
   setupUIControls(game: Game): void {
@@ -220,7 +222,7 @@ export const initializeGame = {
       !game.inventoryDisplay ||
       !game.journalDisplay ||
       !game.interactionSystem ||
-      !game.uiManager // Check for uiManager
+      !game.uiManager
     )
       return;
 
@@ -236,7 +238,6 @@ export const initializeGame = {
         return;
       game.inventoryDisplay!.hide();
       game.journalDisplay!.toggle();
-      // Pause state handled by journalDisplay
     });
     game.controls.addKeyDownListener("KeyC", () => {
       if (game.isPaused || !game.characterSwitchingEnabled) return;
@@ -248,7 +249,6 @@ export const initializeGame = {
       }
     });
 
-    // Profiler Controls
     game.controls.addKeyDownListener("KeyP", () => {
       if (game.profiler) {
         console.log(game.profiler.getReport());
@@ -260,7 +260,6 @@ export const initializeGame = {
       }
     });
     game.controls.addKeyDownListener("BracketLeft", () => {
-      // [ key
       if (game.profiler) {
         game.profiler.toggle();
       }
