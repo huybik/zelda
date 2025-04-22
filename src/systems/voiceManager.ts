@@ -98,7 +98,7 @@ export class VoiceManager {
       return;
     const target = this.game.interactionSystem.chatTarget;
     if (target) {
-      this.processChatMessage(transcript, target);
+      // TODO: add message to chat input
     }
   }
 
@@ -113,87 +113,5 @@ export class VoiceManager {
     this.synthesis.speak(utterance);
   }
 
-  private async processChatMessage(
-    message: string,
-    target: Character
-  ): Promise<void> {
-    if (!target || !message.trim()) return;
-
-    const targetAtSendStart = target;
-
-    this.game.activeCharacter?.updateIntentDisplay(message);
-    this.game.logEvent(
-      this.game.activeCharacter!,
-      "chat",
-      `${this.game.activeCharacter?.name} said "${message}" to ${targetAtSendStart.name}.`,
-      targetAtSendStart,
-      { message: message },
-      this.game.activeCharacter?.mesh!.position
-    );
-
-    const prompt = generateChatPrompt(
-      targetAtSendStart,
-      this.game.activeCharacter!,
-      message
-    );
-    try {
-      const responseJson = await sendToGemini(prompt);
-
-      let npcMessage = "Hmm....";
-      if (responseJson) {
-        try {
-          const parsedText = JSON.parse(responseJson);
-          npcMessage =
-            parsedText.response?.trim() || responseJson.trim() || "Hmm....";
-          console.log(
-            `NPC Message to ${this.game.activeCharacter?.name}:`,
-            npcMessage
-          );
-        } catch (parseError) {
-          npcMessage = responseJson.trim() || "Hmm....";
-          console.log(
-            "Chat response was not JSON, treating as string:",
-            responseJson
-          );
-        }
-      }
-      if (
-        this.game.interactionSystem?.isChatOpen &&
-        this.game.interactionSystem.chatTarget === targetAtSendStart
-      ) {
-        targetAtSendStart.updateIntentDisplay(npcMessage);
-        this.game.logEvent(
-          targetAtSendStart,
-          "chat",
-          `${targetAtSendStart.name} said "${npcMessage}" to ${this.game.activeCharacter?.name}.`,
-          this.game.activeCharacter!,
-          { message: npcMessage },
-          targetAtSendStart.mesh!.position
-        );
-        this.game.questManager.checkAllQuestsCompletion();
-        this.speak(npcMessage);
-      } else {
-        console.log("Chat closed or target changed before NPC response.");
-      }
-    } catch (error) {
-      console.error("Error during chat API call:", error);
-      if (
-        this.game.interactionSystem?.isChatOpen &&
-        this.game.interactionSystem.chatTarget === targetAtSendStart
-      ) {
-        targetAtSendStart.updateIntentDisplay("I... don't know what to say.");
-        this.game.logEvent(
-          targetAtSendStart,
-          "chat_error",
-          `${targetAtSendStart.name} failed to respond to ${this.game.activeCharacter?.name}.`,
-          this.game.activeCharacter!,
-          { error: (error as Error).message },
-          targetAtSendStart.mesh!.position
-        );
-      }
-    } finally {
-      targetAtSendStart.aiController?.scheduleNextActionDecision();
-      this.game.interactionSystem?.closeChatInterface();
-    }
-  }
+  
 }

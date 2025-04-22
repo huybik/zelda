@@ -754,6 +754,12 @@ li.quest-completed:hover {
     visibility 0s 0.2s;
 }
 
+.chat-input-wrapper {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
 #chat-input {
   flex-grow: 1;
   padding: 10px 12px;
@@ -770,6 +776,41 @@ li.quest-completed:hover {
 #chat-input:disabled {
   background-color: #ddd;
   cursor: not-allowed;
+}
+
+#mic-button {
+  margin-left: 8px; /* Space between input and button */
+  padding: 8px;
+  background-color: #555;
+  color: white;
+  border: 1px solid #777;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 16px; /* Adjust icon size */
+  line-height: 1; /* Ensure icon is centered vertically */
+  transition: background-color 0.2s ease;
+  flex-shrink: 0; /* Prevent button from shrinking */
+}
+
+#mic-button:hover {
+  background-color: #666;
+}
+
+#mic-button.recording {
+  background-color: #e63946; /* Red when recording */
+  animation: pulse-red 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-red {
+  0% {
+    box-shadow: 0 0 0 0 rgba(230, 57, 70, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(230, 57, 70, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(230, 57, 70, 0);
+  }
 }
 
 /* Chat Suggestions */
@@ -1322,23 +1363,4 @@ body:has(#mobile-controls-layer:not(.hidden))::after {
   bottom: -1px;
   right: -1px;
   border-top-left-radius: 12px;
-}
-
-.chat-input-wrapper {
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-#mic-button {
-  margin-left: 5px;
-  padding: 5px;
-  background-color: #f0f0f0;
-  border: none;
-  cursor: pointer;
-  width: 34px;
-  height: 35px;
-}
-#mic-button.recording {
-  background-color: red;
-  color: white;
 }
